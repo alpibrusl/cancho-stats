@@ -175,7 +175,7 @@ argument of the last `exp`). Ranges are of the *inputs*, sampled as in 7.1.
   met without it or the bound is corrected in place).
 * **Underflow.** Every bound carries an absolute allowance of `2e-323` (four units of the smallest subnormal): `|y - f| <= B(f) |f| + 2e-323`. It matters only below the smallest normal double
   (`2.2250738585072014e-308`), where a result has fewer bits; above it the allowance is below the bound by a factor of at least `1e10`. A true value that is zero answers zero exactly, and a true
-  value below `2.5e-324` answers 0 (not NaN, not a refusal: the correct answer rounded to the representable). *Corrected in place:* the first version of this bullet waived the relative bound below the
+  value below `2.5e-324` answers 0 (not NaN, not a refusal: the correct answer rounded to the representable). *Corrected in place:* this bullet waived the relative bound below the
   smallest normal and allowed only four units; the first sweep that reached `1e-309` showed a relative error of `1.8e-13` there (36 units), inside `B(f)`, so the rule is the relative bound plus the allowance.
 * **Edges.** `P(a, 0) = 0`, `Q(a, 0) = 1`; `x = +inf` gives `P = 1`, `Q = 0` (a finite `a`); `I_0 = 0`, `I_1 = 1`; `qnorm(0.5) = 0` exactly and `qnorm(p) = -qnorm(1-p)` bit for bit for `p` in `[1/2, 1)`;
   `erf(0) = 0`, `erf(+-inf) = +-1`; NaN in any argument is a refusal `stats.domain-nan`; a parameter that must be positive and is not is `stats.domain-param`; a probability outside `(0, 1)` is `stats.domain-prob`
@@ -280,4 +280,115 @@ the survivors **each explained in the file** (an equivalent mutant: e.g. a chang
 
 ## 8. Results
 
-*(filled in only from what the scripts printed; empty until they run)*
+Every number below was printed by a script of this repository. **Machines.** Mac: Apple M4 Max, 16 cores, 64 GB, macOS 26.2, compiler `a4572ea3b506` (aarch64-apple-darwin), Python 3.14.5, mpmath 1.4.1,
+numpy 2.5.4, scipy 1.18.1; the machine was shared with other work (load average 50 to 80 while the sweeps ran), so no time is reported. gram: Linux x86-64 (Ubuntu 26.04.1, kernel 7.0.0-38, Intel
+i7-1260P), a clean clone under `~/Workspace/xplat-ml`, `taskset -c 0-6` for every command, compiler `a4572ea3b506` built there. The Raspberry Pi was not used (only if the maintainer says so).
+
+### 8.1 Pins and repository gates
+
+* `scripts/check_pins.sh`: 37 dependencies (9 contract stores, 5 cancho-table stores, 23 cancho-ml stores), none copied. `scripts/mutants_pins.py`: **22 killed of 22**, each by the id it is for; both controls pass.
+* `scripts/check_workflow.py --mutants`: **23 mutants, 0 survived** (named images `ubuntu-24.04`, `ubuntu-24.04-arm`, `macos-26`; every action pinned by a 40-hex SHA with a version comment; read-only
+  permissions). The workflow itself has **not run on GitHub**: this branch is a draft and the numeric stores are not fetchable there (2.3), so its build steps report themselves skipped.
+* `scripts/consume.py --mutants`: a scratch package outside the tree with all 37 blocks installs, builds and prints the expected values (the first output of SplitMix64 from seed 0 `e220a8397b1dcdaf`,
+  `derive(derive(42, 1), 0)` = `d8005cdd08a0d146`, `pow10`, a bit-exact round trip, `3.0^2 = 9.0` through `ml.fsq`, `facc.width() = 73`, ...; sha256 of the output `a8476e10...731f`); 3 mutants (a block removed, a wrong value, one byte of a
+  store changed, which `cancho install` refuses) **all killed**.
+* `cancho fmt --check lib tools` passes; no file is over 2,000 lines (`scripts/check_docs.sh`).
+
+### 8.2 The accumulator decision (`scripts/measure_acc.py`, 600 vectors in each of 10 families, lengths 1 to 1000, seed 1)
+
+Exact sums by `fractions.Fraction`, rounded once, against: **A** two-product into `facc` (`lib/special/xprod.cho` and cancho-table's `facc`), **B** `ml.fsq` (4196-bit units of 2^-2148, 176 limbs of 26 bits), **C** the plain double sum.
+
+| family | A: sum x^2 exact | A: sum x*y exact (worst relative error) | B: sum x^2 exact | C: sum x^2 / sum x*y exact |
+|---|---|---|---|---|
+| uniform [0,1) | 600 | 600 | 600 | 334 / 343 |
+| wide exponent, all finite | 173 (426 beyond the largest double, flagged) | 248 (**inf**: a nonzero sum answered 0) | 174 (426 flagged) | 598 / 373 |
+| small 2^[-1074, -480] | 582 (worst 1.7e-8) | 579 (worst **2.2e-3**) | 600 | 488 / 537 |
+| inside rule R, 2^[-485, 500] | 600 | 600 | 600 | 493 / 549 |
+| cancellation (x, -x, 1e-30) | 600 | 600 | 600 | 334 / 336 |
+| (also uniform-moderate, constant column, subnormals only, large 2^[400,510], edges of R) | all exact except the flagged overflows | all exact | all exact except the flagged overflows | 305 to 600 |
+
+* **B is exact for every finite double** (squares), in every family; where the exact sum is beyond the largest double the status of `ml.fsq` says so. **A is exact inside rule R and silently wrong outside it**
+  (no status): that is the case for a refusal outside R. **C is inexact in 40 to 50% of the vectors** of the ordinary families, up to 1.8e-13 relative on the cancellation family.
+* **The boundary of A**, by cancellation (the pair `(x, p)` times `(y, -1)` sums to the rounding error of `x*y`, so a lost low part cannot hide under the final rounding): with `s` the sum of the binary exponents
+  of the two factors, A reproduces the exactly rounded result for every sampled `s` in `[-997, 1003]` (60 pairs at each `s`, three shapes of `ex - ey`), and fails below and above; the Dekker split overflows from
+  `|x| >= 2^997`. Rule R (`x` zero or `2^-485 <= |x| < 2^501`, so `s` in `[-970, 1000]`) lies inside the measured region with 27 binary orders of margin below and 3 above; the theory gives `-970` (the lowest bit of
+  the error term must stay at or above `2^-1074`), the measurement is more permissive, and the rule keeps the theory's value.
+* **The rule [choice, from these measurements].** (1) `sum(x^2)`, and any sum of squares of differences: `ml.fsq` through `add_square(acc, bits, 0)`, exact for all finite doubles, **at least 4196 bits plus the
+  headroom of the row count** (its 4576-bit accumulator takes 2^36 rows without a carry); a sum beyond the largest double is `stats.sum-overflow`. (2) `sum(x*y)`: A with rule R, a value outside R is refused
+  (`stats.range-product`, the repair is a power-of-two rescale of the column); 2304 bits suffice there. (3) One rounding, at the end, of the exact sum; no term and no partial sum is rounded. **[open]** the
+  numerator `n sum(xy) - sum(x) sum(y)` is a product of two exact sums, up to about 4700 bits: S1 and S2 need a big-integer multiply (`std.bignum` is in the compiler's library, **[read]** its name only, not examined),
+  and `sum(xy) = (sum (x+y)^2 - sum (x-y)^2) / 4` through two `ml.fsq` accumulators would remove rule R if `ml.fsq` published a subtraction of two accumulators (a request to cancho-ml, not made here).
+
+### 8.3 The special functions (`scripts/gate_special.py --n-scale 0.1`, seed 1)
+
+Cases per range as listed (the ranges named `big` use 200: the high-precision reference is slow there), every case judged by `|y - f| <= B(f) |f| + 2e-323` against `mpmath` at 60 digits (the reference at 100 digits and more).
+**Columns:** cases, `B0`, cases outside the bound, the largest ratio of the error to the bound (1 would be on the bound). The fast run (600 cases per range, `--fast`) also has 0 outside.
+
+| range | cases | B0 | outside | largest error / bound |
+|---|---|---|---|---|
+| lgamma | 2000 | 1e-14 (abs, x max(1,|f|)) | 0 | 0.673 |
+| lgamma1p | 2000 | 1e-15 | 0 | 0.6 |
+| erf | 2000 | 2e-13 | 0 | 0.00402 |
+| erfc | 2000 | 2e-13 | 0 | 0.0222 |
+| gamma_p mid | 2000 | 2e-13 | 0 | 0.938 |
+| gamma_q mid | 2000 | 2e-13 | 0 | 0.796 |
+| gamma_p big | 200 | 5e-12 | 0 | 0.00603 |
+| gamma_q big | 200 | 5e-12 | 0 | 0.00358 |
+| gamma_p tiny | 2000 | 2e-12 | 0 | 0.000193 |
+| gamma_q tiny | 2000 | 2e-12 | 0 | 0.00199 |
+| beta_lo small | 2000 | 5e-13 | 0 | 0.2 |
+| beta_up small | 2000 | 5e-13 | 0 | 0.174 |
+| beta_lo large | 200 | 1e-11 | 0 | 0.0442 |
+| beta_up large | 200 | 1e-11 | 0 | 0.00919 |
+| norm_cdf | 2000 | 2e-13 | 0 | 0.0907 |
+| norm_sf | 2000 | 2e-13 | 0 | 0.12 |
+| qnorm | 2000 | 1e-15 + 1e-13 |x| | 0 | 0.0608 |
+| t_cdf | 2000 | 1e-12 | 0 | 0.197 |
+| t_sf | 2000 | 1e-12 | 0 | 0.182 |
+| chi2_cdf mid | 2000 | 2e-13 | 0 | 0.286 |
+| chi2_sf mid | 2000 | 2e-13 | 0 | 0.331 |
+| chi2_cdf big | 200 | 5e-12 | 0 | 0.0167 |
+| chi2_sf big | 200 | 5e-12 | 0 | 0.0074 |
+| f_cdf | 2000 | 1e-12 | 0 | 0.381 |
+| f_sf | 2000 | 1e-12 | 0 | 0.251 |
+| binom_cdf | 2000 | 5e-12 | 0 | 0.0264 |
+| binom_sf | 2000 | 5e-12 | 0 | 0.0487 |
+
+0 of 49,000 cases outside. The ratios close to 1 are `gamma_p mid` (0.94) and `gamma_q mid` (0.80), `lgamma` (0.67, absolute error near the roots at 1 and 2) and `lgamma1p` (0.60): those bounds are tight, not slack.
+The sweep has modes for moderate deviations at large `a` (10% to 70%), where Loader's form is not in its series window; a mutant that drops the quotient correction is killed only by them.
+
+* **Independence (G3, `scripts/gate_independence.py --fast`).** Over the same cases, **no point where the `mpmath` reference is the isolated one**; the largest disagreement between `scipy.special` and the reference
+  is 2e-11 or less in 23 of 27 ranges and larger in four, where `scipy` is the outlier: `gamma_p big` (2.1e-2, 18 points above 1e-10), `chi2_cdf big` (2.1e-9, 1 point), `binom_cdf` (3.2e-9, 24 points) and
+  `binom_sf` (3.0e-9, 26 points). Those are `scipy`'s errors measured here at these inputs, not claims about `scipy` elsewhere.
+* **Refinements the sweeps forced (kept as measured facts).** The continued fraction of the incomplete beta in double precision is ill-conditioned for large `a` near its switch point: its error did not shrink
+  with the iterations (1e-10 at `a = 5e5`, bound 1e-11), so it runs in double-double (`lib/special/dd.cho`); `x` and `1 - y` are made consistent exactly (a 1e-16 inconsistency was 1e-9 of `y` at `nu = 1e8`);
+  `x ln(x/np)` in Loader's form needs the quotient corrected (2e-13 at `a = 2000`); a sign error in the `lgamma1p` series was found by the gate.
+
+### 8.4 Domain, edges and fuzz (`scripts/gate_domain.py`)
+
+`--fuzz 20000` on gram: **676,003 cases answered, no trap, no hang**; all 51 expected refusals of the table `EXPECT` are exactly the stated tag; the largest `|cdf + sf - 1|` over 23,973 pairs with both tails at
+least 1e-10 is **1.47e-14** (Mac, 9,660 pairs: 1.15e-14); the quantile is monotone on 40,000 sorted probabilities. Tags reached: `stats.domain-nan`, `-param`, `-prob`, `-range`. **`stats.noconverge` is not reached by
+any case** (it was, once, by an input that is now handled: 3.3); the mutant with the cap set to 1 is killed, so the path is wired.
+
+### 8.5 Platforms and threads (`scripts/xplat_fp.py`)
+
+48 lines (`special` 27 sweeps of 3,000 cases (300 for `big` ranges), `edge` 18, `acc` 3), written on the Mac into `docs/xplat_fp.txt`. **Equal to the golden on macOS arm64 and on Linux x86-64 (gram)**, and on each,
+`special-check FN --threads T` for T in 1, 2, 3, 4, 7, 8, 16 prints the bytes of the sequential run in every sweep (gram: 2 min 29 s for the whole check with 7 cores for 16 threads, one run). This shows equal bytes for these
+sweeps on these two platforms; it shows nothing about other inputs or platforms. With a generator that called a platform `libm` the two machines produced different *inputs* (Python's `math.log` and `exp`
+differ in the last bit between them); the generator is now exact (`frexp`, `ldexp`, integer arithmetic). `--mutants` kills 6 of 6 faults of the check.
+
+### 8.6 Mutants of the special functions (`scripts/mutants_special.py`, 85 mutants, fast gates)
+
+**74 killed, 11 survived and each is explained in the file** (tolerance-equivalent: the mutation moves every result by less than the bound of every range, or it is an equivalent change; the explanation is
+next to the name). 7 are the controls of G2 (`control-*`): a Stirling coefficient `1/12.001`, the series of `lgamma1p` cut at 4 terms, the Lentz tolerances loosened, `Q = 1 - P` for small `a`, the beta switch at
+`x = 1/2`, and no Newton steps: all killed. 0 invalid. The mutants cover every public function and the helpers they stand on (the file lists them by name); a first run left a hole (the correction of Loader's quotient survived): the sweep gained a mode and that mutant is killed now.
+
+### 8.7 Not done, and risks
+
+* The CI workflow has not run. The numeric stores of cancho-ml are pinned by a `file://` URL of the maintainer's clone (cancho-ml#46 is unmerged and its branch not pushed): any other machine fails `cancho install`
+  for them (gram used `GIT_CONFIG_*` to redirect that URL to a clone of the same commit, not a change of its git configuration). The pin moves when #46 is merged.
+* The sweeps ran at 2,000 cases per range (200 for `big`), not the 20,000 of 7.1; the 600-case fast run and the 2,000-case run both pass. 4,000 points per function for G3 were not reached (the fast cases, 200 to 600 per range, were).
+* Accuracy is bounded only in the ranges of 3.2; beyond them to the refusal limits the functions answer without a bound. The bounds are measured on seeded samples, not proved.
+* The exact numerator of variance and covariance (a big-integer product), the `stats.sum-overflow` and `stats.range-product` refusals and the row limit are rules of 8.2, not code.
+* Threads: the functions are pure, so the thread test shows what it shows (block copies and ordered write-back); the accumulators are sequential.
+* The 11 explained survivors are judgments: a reviewer may prefer a sweep that kills them.

@@ -8,7 +8,7 @@ D1  the edges (0, 1, 2^-1074, 2^-1022, the largest double, +-inf, NaN payloads, 
 D2  fuzz: N random 64-bit patterns per argument position per function, uniform over the BIT PATTERNS (so exponents are uniform: huge, tiny, subnormal, inf and NaN all appear). Every answer must
     satisfy the contract of its function: code 0 means a finite value in the range of the function; code != 0 means a NaN value and a tag of special.rules; cdf and sf of a pair are in [0,1] and
     cdf + sf is within 1e-12 of 1 where both are at least 1e-10 (each is promised to 5e-13 relative, so a tighter criterion would not follow from the bounds); the quantile is monotone on a random sorted set of probabilities.
-D1b the table EXPECT of this file: the exact refusal tag (or an answer) of 52 edges, one or more per function.
+D1b the table EXPECT of this file: the exact refusal tag (or an answer) of 51 edges, one or more per function.
 D3  every tag of special.rules is reached by at least one case of D1 or D2, and no other tag is printed. (stats.noconverge is the one tag the inputs of D1 and D2 do not reach: see the report; the
     mutant that lowers the iteration cap shows the path is wired.)
 Exit 0: all hold. Exit 1: a violation (the first few are printed). Exit 2: the harness failed.
