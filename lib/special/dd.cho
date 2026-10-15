@@ -1,0 +1,45 @@
+edition 5;
+
+module special.dd;
+
+import special.xprod;
+
+// Double-double arithmetic: a value is an unevaluated sum hi + lo of two doubles with |lo| <= ulp(hi) / 2, about 106 bits (relative error near 1e-32). Only what the continued
+// fraction of the incomplete beta function needs (docs/numerics.md section 3.1): sum, product, quotient. There is no fused multiply-add in the language; the products are Dekker's
+// (special.xprod), so every operand must be below 2^996 in size and the callers keep them far below. All of it is IEEE binary64 arithmetic in a fixed order, the same bytes on every platform.
+
+pub fn two_sum(a: float, b: float) -> [] (float, float) {
+    let s = a + b;
+    let v = s - a;
+    return (s, (a - (s - v)) + (b - v));
+}
+
+// a + b for |a| >= |b| (or a == 0)
+fn quick_two_sum(a: float, b: float) -> [] (float, float) {
+    let s = a + b;
+    return (s, b - (s - a));
+}
+
+pub fn add(ah: float, al: float, bh: float, bl: float) -> [] (float, float) {
+    let (s1, s2) = two_sum(ah, bh);
+    let (t1, t2) = two_sum(al, bl);
+    let (u1, u2) = quick_two_sum(s1, s2 + t1);
+    return quick_two_sum(u1, u2 + t2);
+}
+
+pub fn mul(ah: float, al: float, bh: float, bl: float) -> [] (float, float) {
+    let (p, e) = xprod.two_product(ah, bh);
+    return quick_two_sum(p, e + (ah * bl + al * bh));
+}
+
+pub fn div(ah: float, al: float, bh: float, bl: float) -> [] (float, float) {
+    let q1 = ah / bh;
+    let (p1h, p1l) = mul(bh, bl, q1, 0.0);
+    let (r1h, r1l) = add(ah, al, 0.0 - p1h, 0.0 - p1l);
+    let q2 = r1h / bh;
+    let (p2h, p2l) = mul(bh, bl, q2, 0.0);
+    let (r2h, r2l) = add(r1h, r1l, 0.0 - p2h, 0.0 - p2l);
+    let q3 = r2h / bh;
+    let (sh, sl) = quick_two_sum(q1, q2);
+    return add(sh, sl, q3, 0.0);
+}

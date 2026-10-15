@@ -1,6 +1,6 @@
 edition 5;
 
-module acc.xprod;
+module special.xprod;
 
 import std.math;
 

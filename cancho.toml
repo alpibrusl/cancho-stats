@@ -202,9 +202,9 @@ sources = ["lib/special", "tools/special-check"]
 std = true
 out = "build/special-check"
 
-# S0: the exact-accumulation candidates of docs/numerics.md section 5 (facc, ml.fsq and acc.xprod on vectors from standard input).
+# S0: the exact-accumulation candidates of docs/numerics.md section 5 (facc, ml.fsq and special.xprod on vectors from standard input).
 [[bin]]
 name = "acc-check"
-sources = ["lib/acc", "tools/acc-check"]
+sources = ["lib/special", "tools/acc-check"]
 std = true
 out = "build/acc-check"

@@ -3,6 +3,7 @@ edition 5;
 module special.lgam;
 
 import std.math;
+import special.xprod;
 
 // ln Gamma and the pieces the incomplete functions need (docs/numerics.md section 3.1): Stirling's correction, `lgamma`, `lgamma1p` (accurate for small arguments),
 // Loader's `stirlerr` and `bd0` (the saddle-point form of a Poisson or binomial density, free of the cancellation `x ln x - x` has for large x).
@@ -90,11 +91,25 @@ pub fn stirlerr(n: float) -> [] float {
     return (1.0 / 12.0 - (1.0 / 360.0 - (1.0 / 1260.0 - (1.0 / 1680.0 - 1.0 / 1188.0 / nn) / nn) / nn) / nn) / n;
 }
 
-// bd0(x, np) = x ln(x / np) + np - x, x, np > 0 (Loader 2000): by the series in (x - np) / (x + np) when the two are within 10%
-pub fn bd0(x: float, np: float) -> [] float {
-    let d = x - np;
-    if math.fabs(d) < 0.1 * (x + np) {
-        let v0 = d / (x + np);
+// ln(x / np) for x, np > 0 with the rounding of the quotient corrected: r = fl(x / np), x - r np = e exactly (a two-product), ln(x / np) = ln r + e / x to first order
+// (the second-order term is below 1e-32); beyond a ratio of 1e280 the plain difference of logarithms is used. Without the correction the error of x ln(x / np) is about x eps, which is 2e-13 at x = 2000.
+pub fn log_ratio(x: float, np: float) -> [] float {
+    let r = x / np;
+    if r > 1.0e280 || r < 1.0e-280 || x > 1.0e290 || np > 1.0e290 {
+        // far outside the range of the correction (the split of the two-product needs |value| < 2^996): the term is then so large that the density underflows to 0 anyway
+        return math.log(x) - math.log(np);
+    }
+    let (p, pe) = xprod.two_product(r, np);
+    let e = (x - p) - pe;
+    return math.log(r) + e / x;
+}
+
+// bd0(x, np) = x ln(x / np) + np - x, x, np > 0 (Loader 2000), with np given as the unevaluated sum nph + npl (the exact product n p of two doubles is such a pair):
+// by the series in (x - np) / (x + np) when the two are within 10%
+pub fn bd0_dd(x: float, nph: float, npl: float) -> [] float {
+    let d = (x - nph) - npl;
+    if math.fabs(d) < 0.1 * (x + nph) {
+        let v0 = d / (x + nph + npl);
         var s = d * v0;
         if math.fabs(s) < 2.2250738585072014e-308 {
             return s;
@@ -113,5 +128,9 @@ pub fn bd0(x: float, np: float) -> [] float {
         }
         return s;
     }
-    return x * math.log(x / np) + np - x;
+    return x * (log_ratio(x, nph) - npl / nph) + (nph - x) + npl;
+}
+
+pub fn bd0(x: float, np: float) -> [] float {
+    return bd0_dd(x, np, 0.0);
 }

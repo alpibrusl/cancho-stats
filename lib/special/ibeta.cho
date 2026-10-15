@@ -4,15 +4,24 @@ module special.ibeta;
 
 import std.math;
 import special.lgam;
+import special.dd;
+import special.xprod;
 import special.rules;
 
 // The regularised incomplete beta function I_x(a, b) and its complement (docs/numerics.md section 3.1), answered as the pair (lower, upper), each computed directly where the
-// other would lose it. The input is the pair (x, y) with x + y = 1 up to the rounding of each, so a caller that has x and 1 - x to full relative accuracy (the t and F
-// distributions) does not round 1 - x. Lentz's continued fraction on the side where it converges, x < (a + 1) / (a + b + 2), otherwise the swapped arguments. The prefactor
+// other would lose it. The input is the pair (x, y) with x + y = 1 up to the rounding of each: the smaller of the two is taken as exact and the other is replaced by 1 - it as an exact
+// double-double, so that x + y = 1 holds exactly inside (the fraction is ill-conditioned in x near its switch point: a 1e-16 inconsistency between x and 1 - y is 1e-9 of y there). Lentz's continued fraction on the side where it converges, x < (a + 1) / (a + b + 2), otherwise the swapped arguments. The prefactor
 // x^a y^b / B(a, b) is Loader's binomial form for a, b >= 10 and a direct exponential below, with `betaln` by Stirling differences when one argument is large.
 
 fn nan() -> [] float {
     return 0.0 / 0.0;
+}
+
+fn maxab(a: float, b: float) -> [] float {
+    if b > a {
+        return b;
+    }
+    return a;
 }
 
 fn cap(a: float, b: float) -> [] int {
@@ -34,25 +43,13 @@ fn betaln(p: float, q: float) -> [] float {
     return lgam.lgamma_pos(p) + br;
 }
 
-// ln x and ln y, each accurate whichever of the two is near 1
-fn ln_xy(x: float, y: float) -> [] (float, float) {
-    var lx = 0.0;
-    var ly = 0.0;
-    if x <= 0.5 {
-        lx = math.log(x);
-        ly = math.log1p(0.0 - x);
-    } else {
-        lx = math.log1p(0.0 - y);
-        ly = math.log(y);
-    }
-    return (lx, ly);
-}
-
-// x^a y^b / B(a, b)
-fn front(a: float, b: float, x: float, y: float) -> [] float {
+// x^a y^b / B(a, b) with x = xh + xl and y = yh + yl (one of the two lows is zero: that one is the exact input)
+fn front(a: float, b: float, xh: float, xl: float, yh: float, yl: float) -> [] float {
     if a >= 10.0 && b >= 10.0 {
         let n = a + b;
-        return math.exp(lgam.stirlerr(n) - lgam.stirlerr(a) - lgam.stirlerr(b) - lgam.bd0(a, n * x) - lgam.bd0(b, n * y)) * sqrt(a * b / (6.283185307179586 * n));
+        let (pxh, pxe) = xprod.two_product(n, xh);
+        let (pyh, pye) = xprod.two_product(n, yh);
+        return math.exp(lgam.stirlerr(n) - lgam.stirlerr(a) - lgam.stirlerr(b) - lgam.bd0_dd(a, pxh, pxe + n * xl) - lgam.bd0_dd(b, pyh, pye + n * yl)) * sqrt(a * b / (6.283185307179586 * n));
     }
     var p = a;
     var q = b;
@@ -60,54 +57,102 @@ fn front(a: float, b: float, x: float, y: float) -> [] float {
         p = b;
         q = a;
     }
-    let (lx, ly) = ln_xy(x, y);
+    var lx = 0.0;
+    var ly = 0.0;
+    if xh <= 0.5 {
+        lx = math.log(xh);
+        ly = math.log1p(0.0 - xh);
+    } else {
+        lx = math.log1p(0.0 - yh);
+        ly = math.log(yh);
+    }
     return math.exp(a * lx + b * ly - betaln(p, q));
 }
 
-// the continued fraction of I_x(a, b) (Numerical Recipes' betacf, modified Lentz); NaN when the cap is reached
-fn cf(a: float, b: float, x: float, y: float) -> [] float {
-    let tiny = 1.0e-300;
-    let qab = a + b;
-    let qap = a + 1.0;
-    let qam = a - 1.0;
-    var c = 1.0;
-    // 1 - (a + b) x / (a + 1) = (a y + 1 - b x) / (a + 1) with y = 1 - x known to full accuracy: the direct form cancels to 1/(1 - x) digits near the switch point
-    var d = (a * y + 1.0 - b * x) / qap;
-    if math.fabs(d) < tiny {
-        d = tiny;
+fn tiny_guard(h: float, l: float) -> [] (float, float) {
+    if math.fabs(h) < 1.0e-250 {
+        return (1.0e-250, 0.0);
     }
-    d = 1.0 / d;
-    var h = d;
+    return (h, l);
+}
+
+// one step of Lentz's method for the term aa: d = 1 + aa d ; c = 1 + aa / c ; d = 1 / d. Answers (d, c) as (dh, dl, ch, cl).
+fn lentz_step(aah: float, aal: float, dh: float, dl: float, ch: float, cl: float) -> [] (float, float, float, float) {
+    let (t1h, t1l) = dd.mul(aah, aal, dh, dl);
+    let (d1h, d1l) = dd.add(1.0, 0.0, t1h, t1l);
+    let (d2h, d2l) = tiny_guard(d1h, d1l);
+    let (t2h, t2l) = dd.div(aah, aal, ch, cl);
+    let (c1h, c1l) = dd.add(1.0, 0.0, t2h, t2l);
+    let (c2h, c2l) = tiny_guard(c1h, c1l);
+    let (d3h, d3l) = dd.div(1.0, 0.0, d2h, d2l);
+    return (d3h, d3l, c2h, c2l);
+}
+
+// the continued fraction of I_x(a, b) (Numerical Recipes' betacf, modified Lentz), every quantity in double-double: in double precision the recurrence for large a near the
+// switch point cancels (d = 1 + aa d with aa d close to -1) and its error does not shrink with the iterations (about 1e-11 at a = 5e5, measured in section 8.1); in double-double the
+// same cancellation costs 1e-16 of a 1e-32 quantity. NaN when the cap is reached.
+fn cf(a: float, b: float, xh: float, xl: float, yh: float, yl: float) -> [] float {
+    let (qaph, qapl) = dd.two_sum(a, 1.0);
+    let (qabh, qabl) = dd.two_sum(a, b);
+    // d = (a y + 1 - b x) / (a + 1), the numerator from y = 1 - x known to full accuracy (the direct form cancels to 1/(1 - x) digits near the switch point)
+    let (ayh, ayl) = dd.mul(a, 0.0, yh, yl);
+    let (bxh, bxl) = dd.mul(b, 0.0, xh, xl);
+    let (n1h, n1l) = dd.add(ayh, ayl, 1.0, 0.0);
+    let (nh, nl) = dd.add(n1h, n1l, 0.0 - bxh, 0.0 - bxl);
+    let (q1h, q1l) = dd.div(nh, nl, qaph, qapl);
+    let (q2h, q2l) = tiny_guard(q1h, q1l);
+    let (r1h, r1l) = dd.div(1.0, 0.0, q2h, q2l);
+    var dh = r1h;
+    var dl = r1l;
+    var ch = 1.0;
+    var cl = 0.0;
+    var hh = r1h;
+    var hl = r1l;
     var m = 1;
+    var calm = 0;
     let cp = cap(a, b);
     while m <= cp {
         let fm = float_of(m);
         let m2 = 2.0 * fm;
-        var aa = fm * (b - fm) * x / ((qam + m2) * (a + m2));
-        d = 1.0 + aa * d;
-        if math.fabs(d) < tiny {
-            d = tiny;
+        // aa = m (b - m) x / ((a - 1 + 2m) (a + 2m))
+        let (bmh, bml) = dd.two_sum(b, 0.0 - fm);
+        let (n2h, n2l) = dd.mul(fm, 0.0, bmh, bml);
+        let (n3h, n3l) = dd.mul(n2h, n2l, xh, xl);
+        let (e1h, e1l) = dd.two_sum(a, m2 - 1.0);
+        let (e2h, e2l) = dd.two_sum(a, m2);
+        let (eh, el) = dd.mul(e1h, e1l, e2h, e2l);
+        let (aah, aal) = dd.div(n3h, n3l, eh, el);
+        let (sd1h, sd1l, sc1h, sc1l) = lentz_step(aah, aal, dh, dl, ch, cl);
+        let (u1h, u1l) = dd.mul(sd1h, sd1l, sc1h, sc1l);
+        let (hm1h, hm1l) = dd.mul(hh, hl, u1h, u1l);
+        // aa = -(a + m) (a + b + m) x / ((a + 2m) (a + 1 + 2m))
+        let (f1h, f1l) = dd.two_sum(a, fm);
+        let (f2h, f2l) = dd.add(qabh, qabl, fm, 0.0);
+        let (g1h, g1l) = dd.mul(f1h, f1l, f2h, f2l);
+        let (g2h, g2l) = dd.mul(g1h, g1l, xh, xl);
+        let (k1h, k1l) = dd.two_sum(a, m2);
+        let (k2h, k2l) = dd.two_sum(a, m2 + 1.0);
+        let (kh, kl) = dd.mul(k1h, k1l, k2h, k2l);
+        let (bbh, bbl) = dd.div(g2h, g2l, kh, kl);
+        let (sd2h, sd2l, sc2h, sc2l) = lentz_step(0.0 - bbh, 0.0 - bbl, sd1h, sd1l, sc1h, sc1l);
+        let (delh, dell) = dd.mul(sd2h, sd2l, sc2h, sc2l);
+        let (hm2h, hm2l) = dd.mul(hm1h, hm1l, delh, dell);
+        dh = sd2h;
+        dl = sd2l;
+        ch = sc2h;
+        cl = sc2l;
+        hh = hm2h;
+        hl = hm2l;
+        if is_nan(hh) {
+            return nan();
         }
-        c = 1.0 + aa / c;
-        if math.fabs(c) < tiny {
-            c = tiny;
-        }
-        d = 1.0 / d;
-        h = h * d * c;
-        aa = 0.0 - (a + fm) * (qab + fm) * x / ((a + m2) * (qap + m2));
-        d = 1.0 + aa * d;
-        if math.fabs(d) < tiny {
-            d = tiny;
-        }
-        c = 1.0 + aa / c;
-        if math.fabs(c) < tiny {
-            c = tiny;
-        }
-        d = 1.0 / d;
-        let del = d * c;
-        h = h * del;
-        if math.fabs(del - 1.0) < 2.5e-16 {
-            return h;
+        if math.fabs((delh - 1.0) + dell) < 2.5e-16 {
+            calm = calm + 1;
+            if calm >= 2 {
+                return hh + hl;
+            }
+        } else {
+            calm = 0;
         }
         m = m + 1;
     }
@@ -115,12 +160,12 @@ fn cf(a: float, b: float, x: float, y: float) -> [] float {
 }
 
 // I_x(a, b) by the fraction (the caller chose the side), NaN if it does not converge
-fn side(a: float, b: float, x: float, y: float) -> [] float {
-    let h = cf(a, b, x, y);
+fn side(a: float, b: float, xh: float, xl: float, yh: float, yl: float) -> [] float {
+    let h = cf(a, b, xh, xl, yh, yl);
     if is_nan(h) {
         return h;
     }
-    return front(a, b, x, y) * h / a;
+    return front(a, b, xh, xl, yh, yl) * h / a;
 }
 
 fn clamp01(v: float) -> [] float {
@@ -150,28 +195,42 @@ pub fn beta_xy(a: float, b: float, x: float, y: float) -> [] (float, float, int)
     if y == 0.0 {
         return (1.0, 0.0, 0);
     }
+    // the smaller of x and y is the exact input; the other is 1 - it, exactly, as a double-double
+    var xh = x;
+    var xl = 0.0;
+    var yh = y;
+    var yl = 0.0;
+    if x <= 0.5 {
+        let (h1, l1) = dd.two_sum(1.0, 0.0 - x);
+        yh = h1;
+        yl = l1;
+    } else {
+        let (h2, l2) = dd.two_sum(1.0, 0.0 - y);
+        xh = h2;
+        xl = l2;
+    }
     var lo = 0.0;
     var up = 0.0;
-    if x < (a + 1.0) / (a + b + 2.0) {
-        lo = side(a, b, x, y);
+    if xh < (a + 1.0) / (a + b + 2.0) {
+        lo = side(a, b, xh, xl, yh, yl);
         if is_nan(lo) {
             return (nan(), nan(), rules.noconverge());
         }
         up = 1.0 - lo;
-        if up < 0.001 {
-            let u2 = side(b, a, y, x);
+        if up < 0.3 && up * sqrt(maxab(a, b)) < 1.0 {
+            let u2 = side(b, a, yh, yl, xh, xl);
             if !is_nan(u2) {
                 up = u2;
             }
         }
     } else {
-        up = side(b, a, y, x);
+        up = side(b, a, yh, yl, xh, xl);
         if is_nan(up) {
             return (nan(), nan(), rules.noconverge());
         }
         lo = 1.0 - up;
-        if lo < 0.001 {
-            let l2 = side(a, b, x, y);
+        if lo < 0.3 && lo * sqrt(maxab(a, b)) < 1.0 {
+            let l2 = side(a, b, xh, xl, yh, yl);
             if !is_nan(l2) {
                 lo = l2;
             }
@@ -180,7 +239,7 @@ pub fn beta_xy(a: float, b: float, x: float, y: float) -> [] (float, float, int)
     return (clamp01(lo), clamp01(up), 0);
 }
 
-// (lower, upper, code) at x in [0, 1]; 1 - x is rounded for x < 1/2 (it is exact above)
+// (lower, upper, code) at x in [0, 1]; x is exact, 1 - x is carried as an exact double-double
 pub fn beta_ix(a: float, b: float, x: float) -> [] (float, float, int) {
     if is_nan(x) {
         return (nan(), nan(), rules.domain_nan());

@@ -107,7 +107,11 @@ def gamma_pq(a, x):
 
 
 def beta_ix(a, b, x):
-    """(I_x(a, b), 1 - I_x(a, b)) at exactly a, b, x (0 < x < 1), both directly accurate."""
+    """(I_x(a, b), 1 - I_x(a, b)) at exactly a, b, x (0 < x < 1), both directly accurate.
+
+    The cheaper of the two series (by the turning point of the term ratio and its decay rate) gives one tail directly; the other is 1 minus it. When that other is so small that
+    the subtraction leaves fewer than 40 correct digits, the same cheap series is rerun at a larger working precision (never the expensive one: for x near 1 and a of 1e7 it
+    does not converge in 5e6 terms)."""
     a = mpf(a)
     b = mpf(b)
     x = mpf(x)
@@ -117,52 +121,46 @@ def beta_ix(a, b, x):
         return mpf(1), mpf(0)
     # 1 - x must keep its digits when x is tiny (a double down to 5e-324)
     boost = int(-mp.log10(x)) + 10 if x < mpf(10) ** -3 else 0
-    with mp.workdps(_dps_for(a, b) + boost):
-        a = mpf(a)
-        b = mpf(b)
-        x = mpf(x)
+    base = _dps_for(a, b) + boost
+    for extra in (0, 150, 400, 1200, 3500):
+        with mp.workdps(base + extra):
+            aa = mpf(a)
+            bb = mpf(b)
+            xx = mpf(x)
+            yy = 1 - xx
 
-        def side(aa, bb, xx, yy):
-            # front * 2F1(aa+bb, 1; aa+1; xx) / aa, with xx < (aa+1)/(aa+bb+2)
-            logfront = aa * mp.log(xx) + bb * mp.log(yy) - (_lg(aa) + _lg(bb) - _lg(aa + bb)) - mp.log(aa)
-            s = mpf(1)
-            t = mpf(1)
-            n = 0
-            eps = mpf(10) ** (-(mp.dps + 5))
-            while True:
-                t = t * xx * (aa + bb + n) / (aa + 1 + n)
-                n += 1
-                s += t
-                if t < eps * s:
-                    break
-                if n > 5_000_000:
-                    raise RuntimeError("beta series did not converge")
-            return mp.exp(logfront) * s
+            def side(a1, b1, x1, y1):
+                # front * 2F1(a1+b1, 1; a1+1; x1) / a1, with x1 below the switch point of the fraction when it is the cheap side
+                logfront = a1 * mp.log(x1) + b1 * mp.log(y1) - (_lg(a1) + _lg(b1) - _lg(a1 + b1)) - mp.log(a1)
+                sm = mpf(1)
+                t = mpf(1)
+                n = 0
+                eps = mpf(10) ** (-(mp.dps + 5))
+                while True:
+                    t = t * x1 * (a1 + b1 + n) / (a1 + 1 + n)
+                    n += 1
+                    sm += t
+                    if t < eps * sm:
+                        break
+                    if n > 3_000_000:
+                        raise RuntimeError("beta series did not converge")
+                return mp.exp(logfront) * sm
 
-        y = 1 - x
-        small = mpf(10) ** -20
+            def cost(a1, b1, x1):
+                turn = max(mpf(0), (x1 * (a1 + b1) - a1 - 1) / (1 - x1))
+                return turn + (mp.dps * 2.4) / (-mp.log(x1))
 
-        def cost(aa, bb, xx):
-            # terms of 2F1(aa+bb, 1; aa+1; xx): the turning point of the ratio plus the decay to 1e-100 at the rate ln(1/xx)
-            turn = max(mpf(0), (xx * (aa + bb) - aa - 1) / (1 - xx))
-            return turn + 240 / (-mp.log(xx))
-
-        if cost(a, b, x) <= cost(b, a, y):
-            lo = side(a, b, x, y)
-            hi = 1 - lo
-            if hi < small:
-                hi = side(b, a, y, x)
-        else:
-            hi = side(b, a, y, x)
-            lo = 1 - hi
-            if lo < small:
-                lo = side(a, b, x, y)
-        return +lo, +hi
-
-
-def lgamma(x):
-    with mp.workdps(_dps_for(x) + 20):
-        return +mp.loggamma(mpf(x))
+            if cost(aa, bb, xx) <= cost(bb, aa, yy):
+                lo = side(aa, bb, xx, yy)
+                hi = 1 - lo
+                direct, other = lo, hi
+            else:
+                hi = side(bb, aa, yy, xx)
+                lo = 1 - hi
+                direct, other = hi, lo
+            if other == 0 or other > mpf(10) ** -(mp.dps - 45):
+                return +lo, +hi
+    raise RuntimeError("beta complement below the precision tried")
 
 
 def lgamma1p(a):

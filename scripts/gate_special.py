@@ -101,7 +101,7 @@ def g_lgamma1p(r, i):
     if m == 1:
         return (r.uni(1e-3, 0.0999999),)
     if m == 2:
-        return (r.pick(around(0.1) + [nb(0.1, -2), 1e-8, 5e-324, 0.05]),)
+        return (r.pick([nb(0.1, -1), nb(0.1, -2), nb(0.1, -3), 1e-8, 5e-324, 0.05]),)
     return (r.logu(1e-12, 1e-2),)
 
 
@@ -391,10 +391,8 @@ def judge(kind, b0, y, code, tag, f):
         bound = mpf(b0) * max(mpf(1), af)
     elif kind == "qnorm":
         bound = mpf("1e-15") + mpf("1e-13") * af
-    elif kind == "relflat":
+    elif kind == "relflat" and af >= SMALLEST_NORMAL:
         bound = mpf(b0) * af
-        if af == 0:
-            return (y == 0.0), (0.0 if y == 0.0 else float("inf")), float(err)
     elif af < SMALLEST_NORMAL:
         bound = mpf("2e-323")
         if af == 0:

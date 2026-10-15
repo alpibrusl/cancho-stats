@@ -18,7 +18,7 @@ import ml.fbits;
 import ml.fsq;
 import facc;
 import flt;
-import acc.xprod;
+import special.xprod;
 
 fn hexval(c: int) -> [] int {
     if c >= '0' && c <= '9' {
