@@ -48,7 +48,7 @@ MUTANTS = [
     ("lgamma1p-euler-constant-truncated", LG, "0.0 - 0.5772156649015329 * a", "0.0 - 0.577215664901 * a", "lgamma1p"),
     ("lgamma1p-log1p-term-sign", LG, "(a - math.log1p(a)) + s", "(math.log1p(a) - a) + s", "lgamma1p"),
     ("lgamma1p-alternating-sign-dropped", LG, "sign = 0.0 - sign;", "sign = sign;", "lgamma1p"),
-    ("lgamma1p-series-cut-short", LG, "    while k < 18 {\n        s = s + sign", "    while k < 5 {\n        s = s + sign", "lgamma1p"),
+    ("control-lgamma1p-series-cut-short", LG, "    while k < 18 {\n        s = s + sign", "    while k < 5 {\n        s = s + sign", "lgamma1p"),
     # stirlerr, bd0, log_ratio
     ("stirlerr-series-coefficient", LG, "(1.0 / 12.0 - (1.0 / 360.0 -", "(1.0 / 12.0 - (1.0 / 361.0 -", "gamma_p,gamma_q,beta_lo,beta_up"),
     ("stirlerr-switch-too-low", LG, "if n <= 15.0 {", "if n <= 5.0 {", "gamma_p,gamma_q,chi2_cdf"),
@@ -70,7 +70,7 @@ MUTANTS = [
     ("norm-series-argument", DI, "    let s = w * w / 2.0;\n    let pr = exp_neg_sq(w, 0.5)", "    let s = w * w / 2.1;\n    let pr = exp_neg_sq(w, 0.5)", "norm_cdf,norm_sf"),
     # quantile
     ("control-no-newton-steps", DI, "    while i < 3 {\n        let lphi", "    while i < 0 {\n        let lphi", R_Q),
-    ("qnorm-acklam-constant-and-no-steps", DI, "-3.969683028665376e+01 * r", "-3.96e+01 * r", R_Q),
+    ("qnorm-acklam-central-constant", DI, "-3.969683028665376e+01 * r", "-3.96e+01 * r", R_Q),
     ("qnorm-tail-switch", DI, "    if p < 0.02425 {", "    if p < 0.0 {", R_Q),
     ("qnorm-upper-half-sign", DI, "        return (0.0 - qnorm_lower(1.0 - p), 0);", "        return (qnorm_lower(1.0 - p), 0);", R_Q),
     ("qnorm-newton-sign", DI, "        x = x - f / fp;", "        x = x + f / fp;", R_Q),
@@ -79,12 +79,12 @@ MUTANTS = [
     # incomplete gamma
     ("gamma-loader-switch-too-high", IG, "    if a >= 15.0 {\n        return math.exp(0.0 - lgam.stirlerr(a)", "    if a >= 1.0e6 {\n        return math.exp(0.0 - lgam.stirlerr(a)", "gamma_p,gamma_q"),
     ("gamma-series-tolerance", IG, "if term < sum * 1.0e-17 {", "if term < sum * 1.0e-5 {", R_GAM),
-    ("gamma-cf-tolerance", IG, "if math.fabs(del - 1.0) < 2.5e-16 {", "if math.fabs(del - 1.0) < 2.5e-6 {", R_GAM),
+    ("control-gamma-cf-tolerance", IG, "if math.fabs(del - 1.0) < 2.5e-16 {", "if math.fabs(del - 1.0) < 2.5e-6 {", R_GAM),
     ("gamma-cf-term-sign", IG, "let an = 0.0 - fi * (fi - a);", "let an = fi * (fi - a);", R_GAM),
-    ("gamma-cf-start-form", IG, "var b = (x - a) + 1.0;", "var b = x + 1.0 - a + 0.0 * x;", "gamma_p,gamma_q"),
+    ("gamma-cf-start-form", IG, "var b = x - a + 1.0;", "var b = x + 1.0 - a + 0.0 * x;", "gamma_p,gamma_q"),
     ("gamma-switch-point", IG, "    if a >= 0.1 && x < a + 1.0 {", "    if a >= 0.1 && x < 2.0 * a + 1.0 {", "gamma_p,gamma_q"),
     ("gamma-small-a-path-disabled", IG, "    if a < 0.1 && x < 1.0 {", "    if a < 0.0 && x < 1.0 {", "gamma_p,gamma_q"),
-    ("gamma-small-a-expm1", IG, "clamp01(0.0 - math.expm1(l) - el * a * sum)", "clamp01(1.0 - el - el * a * sum)", "gamma_q"),
+    ("control-q-as-one-minus-p", IG, "clamp01(0.0 - math.expm1(l) - el * a * sum)", "clamp01(1.0 - el - el * a * sum)", "gamma_q"),
     ("gamma-upper-from-prefactor-missing-a", IG, "let q = clamp01(pr * a * h);", "let q = clamp01(pr * h);", R_GAM),
     ("gamma-p-from-q", IG, "return (clamp01(1.0 - q), q, 0);", "return (q, q, 0);", "gamma_p"),
     ("gamma-prefactor-underflow-branch", IG, "        return (1.0, 0.0, 0);\n    }\n    if a >= 0.1 && x < a + 1.0 {", "        return (0.0, 1.0, 0);\n    }\n    if a >= 0.1 && x < a + 1.0 {", "gamma_p,gamma_q"),
@@ -94,17 +94,18 @@ MUTANTS = [
     ("beta-betaln-switch", IB, "    if q < 10.0 {\n        return lgam.lgamma_pos(p)", "    if q < 1.0 {\n        return lgam.lgamma_pos(p)", "beta_lo,beta_up,t_cdf"),
     ("beta-betaln-bracket-sign", IB, "- p * math.log(s) + p +", "+ p * math.log(s) + p +", "beta_lo,beta_up,t_cdf"),
     ("beta-front-log-branches-swapped", IB, "        lx = math.log(xh);\n        ly = math.log1p(0.0 - xh);", "        lx = math.log1p(0.0 - xh);\n        ly = math.log(xh);", "beta_lo,beta_up"),
-    ("beta-cf-tolerance", IB, "if math.fabs((delh - 1.0) + dell) < 2.5e-16 {", "if math.fabs((delh - 1.0) + dell) < 2.5e-6 {", R_BETA),
+    ("control-beta-cf-tolerance", IB, "if math.fabs(delh - 1.0 + dell) < 2.5e-16 {", "if math.fabs(delh - 1.0 + dell) < 2.5e-6 {", R_BETA),
     ("beta-cf-first-term-uses-x", IB, "let (ayh, ayl) = dd.mul(a, 0.0, yh, yl);", "let (ayh, ayl) = dd.mul(a, 0.0, xh, xl);", R_BETA),
     ("beta-cf-even-term", IB, "let (e1h, e1l) = dd.two_sum(a, m2 - 1.0);", "let (e1h, e1l) = dd.two_sum(a, m2);", R_BETA),
     ("beta-cf-odd-term-sign", IB, "lentz_step(0.0 - bbh, 0.0 - bbl, sd1h, sd1l, sc1h, sc1l);", "lentz_step(bbh, bbl, sd1h, sd1l, sc1h, sc1l);", R_BETA),
     ("beta-lentz-one-dropped", IB, "let (d1h, d1l) = dd.add(1.0, 0.0, t1h, t1l);", "let (d1h, d1l) = dd.add(0.0, 0.0, t1h, t1l);", R_BETA),
-    ("beta-switch-point", IB, "    if xh < (a + 1.0) / (a + b + 2.0) {", "    if xh < 0.5 {", R_BETA),
+    ("control-beta-switch-point", IB, "    if xh < (a + 1.0) / (a + b + 2.0) {", "    if xh < 0.5 {", R_BETA),
     ("beta-complement-recompute-off", IB, "        if up < 0.3 && up * sqrt(maxab(a, b)) < 1.0 {", "        if up < 0.0 {", "beta_lo,beta_up,binom_cdf,binom_sf"),
     ("beta-lower-from-upper-dropped", IB, "        lo = 1.0 - up;\n        if lo < 0.3", "        lo = up;\n        if lo < 0.3", "beta_lo,beta_up"),
     ("beta-cap-one", IB, "    return 2000 + truncate(100.0 * sqrt(m));", "    return 1;", "beta_lo,beta_up"),
     ("beta-loader-switch", IB, "    if a >= 10.0 && b >= 10.0 {\n        let n = a + b;", "    if a >= 10.0 || b >= 10.0 {\n        let n = a + b;", "beta_lo,beta_up"),
     ("beta-exact-complement-dropped", IB, "        let (h1, l1) = dd.two_sum(1.0, 0.0 - x);\n        yh = h1;\n        yl = l1;", "        yh = 1.0 - x;", "t_cdf,t_sf,beta_lo,beta_up"),
+    ("beta-exact-complement-x-dropped", IB, "        let (h2, l2) = dd.two_sum(1.0, 0.0 - y);\n        xh = h2;\n        xl = l2;", "        xh = 1.0 - y;", "t_cdf,t_sf,beta_lo,beta_up"),
     # double-double and the two-product
     ("dd-add-low-parts-dropped", DD, "    let (t1, t2) = two_sum(al, bl);\n    let (u1, u2) = quick_two_sum(s1, s2 + t1);\n    return quick_two_sum(u1, u2 + t2);", "    let (u1, u2) = quick_two_sum(s1, s2);\n    return (u1, u2);", "beta_lo,beta_up,t_cdf"),
     ("dd-mul-cross-terms-dropped", DD, "    return quick_two_sum(p, e + (ah * bl + al * bh));", "    return quick_two_sum(p, e);", "beta_lo,beta_up,t_cdf"),
@@ -134,7 +135,19 @@ MUTANTS = [
 ]
 
 # a survivor that no input can kill: the mutation changes no result. Name -> reason.
-EXPLAINED = {}
+EXPLAINED = {
+    "lgamma-delta-drops-a-term": "tolerance-equivalent: the dropped term 1/(156 z^13) is below 6.4e-16 for z >= 10, the bound is 1e-14 max(1, |f|) with |f| >= 12.8",
+    "stirlerr-switch-too-low": "tolerance-equivalent: the series is used from n = 5; its truncation error there (about 2e-14 in the exponent at n = 10, larger at 5 only where Loader's form is not used) stays below the 2e-13 bound of every range",
+    "bd0-series-switch-window": "equivalent: the series in (x - np)/(x + np) converges for every ratio and is exact on the wider window; only the speed changes",
+    "bd0-exact-np-low-part-dropped": "tolerance-equivalent: the low part of n p moves the exponent by (np - x) eps, at most 7e-13 for x within 12 standard deviations at n = 1e6, below the 1e-11 bound of that range",
+    "qnorm-acklam-central-constant": "equivalent by refinement: a start error of 1e-3 is repaired by the three Newton steps (the control with no steps is control-no-newton-steps, killed)",
+    "gamma-cf-start-form": "tolerance-equivalent: the unreformulated x + 1 - a costs eps x / |b|, at most 3e-14 for x within 12 sqrt(a) of a, below the 5e-12 bound",
+    "beta-loader-switch": "equivalent: Loader's form is valid for every positive a and b; the two prefactors agree to rounding",
+    "dd-div-correction-dropped": "tolerance-equivalent: the third quotient digit is below 2^-106 relative; the result is rounded to a double",
+    "xprod-split-constant": "tolerance-equivalent on the sweeps: the product pair stays exact to well below 1e-15 for the operand sizes of the sweeps; the exactness claim is measured on acc-check (section 5), not here",
+    "threads-partition": "equivalent: the blocks overlap, so some cases are computed twice and written with the same bytes; the output is identical",
+    "beta-exact-complement-dropped": "tolerance-equivalent for x <= 1/2 (the complement 1 - x is at least 1/2 there, its rounding changes the fraction by 1e-16 relative); the branch that matters, x > 1/2, is the next mutant",
+}
 
 
 def problems():

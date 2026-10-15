@@ -146,7 +146,7 @@ fn cf(a: float, b: float, xh: float, xl: float, yh: float, yl: float) -> [] floa
         if is_nan(hh) {
             return nan();
         }
-        if math.fabs((delh - 1.0) + dell) < 2.5e-16 {
+        if math.fabs(delh - 1.0 + dell) < 2.5e-16 {
             calm = calm + 1;
             if calm >= 2 {
                 return hh + hl;

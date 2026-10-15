@@ -100,14 +100,14 @@ pub fn log_ratio(x: float, np: float) -> [] float {
         return math.log(x) - math.log(np);
     }
     let (p, pe) = xprod.two_product(r, np);
-    let e = (x - p) - pe;
+    let e = x - p - pe;
     return math.log(r) + e / x;
 }
 
 // bd0(x, np) = x ln(x / np) + np - x, x, np > 0 (Loader 2000), with np given as the unevaluated sum nph + npl (the exact product n p of two doubles is such a pair):
 // by the series in (x - np) / (x + np) when the two are within 10%
 pub fn bd0_dd(x: float, nph: float, npl: float) -> [] float {
-    let d = (x - nph) - npl;
+    let d = x - nph - npl;
     if math.fabs(d) < 0.1 * (x + nph) {
         let v0 = d / (x + nph + npl);
         var s = d * v0;

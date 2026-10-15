@@ -385,7 +385,7 @@ fn binom_both(k: float, n: float, p: float) -> [] (float, float, int) {
     if n > 1.0e8 {
         return (nan(), nan(), rules.domain_range());
     }
-    if !is_whole(n) || (k > -1.0e15 && k < 1.0e15 && !is_whole(k)) {
+    if !is_whole(n) || k > -1.0e15 && k < 1.0e15 && !is_whole(k) {
         return (nan(), nan(), rules.domain_param());
     }
     if k < 0.0 {

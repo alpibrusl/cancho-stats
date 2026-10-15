@@ -49,7 +49,7 @@ pub fn series(a: float, x: float) -> [] float {
 // Q(a, x) = pre(a, x) * a * cf_h(a, x).
 pub fn cf_h(a: float, x: float) -> [] float {
     let tiny = 1.0e-300;
-    var b = (x - a) + 1.0;
+    var b = x - a + 1.0;
     var c = 1.0 / tiny;
     var d = 1.0 / b;
     var h = d;

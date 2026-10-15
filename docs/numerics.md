@@ -107,7 +107,7 @@ Each is a failure with its own message, exit 1:
 | PN8 | `build/deps`, if present, lacks an installed module of the list |
 | PN9 | `CHECK_REMOTE=1`: the rev does not have the store on GitHub (skipped, not failed, offline or for the `file://` repository) |
 
-`scripts/mutants_pins.sh` shows each id able to fail: one mutant per row (a block removed, an unlisted block added, a block duplicated, a `rev` of 39 digits, a `rev` that
+`scripts/mutants_pins.py` shows each id able to fail: one mutant per row (a block removed, an unlisted block added, a block duplicated, a `rev` of 39 digits, a `rev` that
 differs in one block, a `git` pointing elsewhere, a `path` of another module, a module declared in `lib/`, `build/deps` missing a module, the document's `rev` line changed),
 each run on a copy, each must exit 1 with the message of its id. The unmutated copy is the control and must exit 0.
 
@@ -230,7 +230,7 @@ The gate G4 (7.1) fails if any vector inside the rule's range is not the exactly
 ## 6. Determinism
 
 **What is compared:** the *bytes printed* by the driver: for each function and each sweep, one line per case of the form `<case id> <hex bits of the result> <code>`, hashed. `scripts/xplat_fp.py` prints the
-**fingerprint**: one tab-separated line per (function, sweep) `name  count  sha256-of-the-lines`, plus the accumulator experiments' results as exact hex bits, in the style of cancho-ml's `scripts/xplat_check.py` **[read]**.
+**fingerprint**: one tab-separated line per (function, sweep) `name  count  sha256-of-the-lines`, plus the accumulator experiments' results as exact hex bits, in the style of cancho-ml's `xplat_check.py` (its `scripts` directory) **[read]**.
 The **golden** is `docs/xplat_fp.txt`, written on the maintainer's Mac (arm64) and read back on every other platform; the check is *equal to the golden*, so equal to each other.
 
 **Platforms:** macOS arm64 (this Mac); gram, Linux x86-64 (`ssh gram`, a clean clone under `~/Workspace/xplat-ml`, **`taskset -c 0-6` only**: one core there is busy with someone else's work); the
@@ -276,7 +276,7 @@ the survivors **each explained in the file** (an equivalent mutant: e.g. a chang
 | G7 | `.github/workflows/ci.yml`, modeled on `alpibrusl/cancho-ml`'s: named runner images (never `-latest`), actions pinned by full commit SHA, `permissions: contents: read`; `scripts/check_workflow.py` and its mutants | any `uses:` without a 40-hex SHA, any `-latest`, any permission other than read |
 | G8 | the fingerprint of section 6: equal to the golden on this Mac and on gram; `T = 1..16` equal | a differing line |
 | G9 | `scripts/consume.py`: a scratch package (outside the repository) with every block of `cancho.toml`, `cancho install`, and a program that imports and calls one function of each family (the numeric stores, `facc`, `flt`, `reader`, the contract package) and prints known values | an install, build or value failure; mutants: a block removed, a store byte changed |
-| G10 | no file over 2,000 lines; docs have no changelog narration (`scripts/check_docs.sh`: the sentences of the document are in the present tense, no "was added", no dates in prose other than the status line) | a file at 2,001 lines |
+| G10 | no file over 2,000 lines; docs have no changelog narration (`scripts/check_docs.sh`: the sentences of the document are in the present tense, no `was added`, no dates in prose other than the status line) | a file at 2,001 lines |
 
 ## 8. Results
 

@@ -11,7 +11,7 @@ import special.xprod;
 pub fn two_sum(a: float, b: float) -> [] (float, float) {
     let s = a + b;
     let v = s - a;
-    return (s, (a - (s - v)) + (b - v));
+    return (s, a - (s - v) + (b - v));
 }
 
 // a + b for |a| >= |b| (or a == 0)

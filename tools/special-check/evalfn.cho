@@ -101,8 +101,8 @@ pub fn hexval(c: int) -> [] int {
 
 // the double whose bits are `bits`, every pattern: infinities and NaNs included (ml.fbits.decode answers NaN for both)
 pub fn decode(bits: int) -> [] float {
-    if (bits >> 52 & 2047) == 2047 {
-        if (bits & 4503599627370495) == 0 {
+    if bits >> 52 & 2047 == 2047 {
+        if bits & 4503599627370495 == 0 {
             if bits < 0 {
                 return -1.0 / 0.0;
             }
@@ -175,4 +175,3 @@ pub fn eval(f: int, x: float, y: float, z: float) -> [] (float, int) {
     }
     return dist.binom_sf(x, y, z);
 }
-
