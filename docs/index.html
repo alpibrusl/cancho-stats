@@ -4,186 +4,285 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>cancho-stats: statistics whose last digit you can check</title>
-<meta name="description" content="A command line that describes data and draws inferences from it, written in cancho: exact sums rounded once, the same bytes on every platform and at any thread count, and distribution functions with an error bound that was written first and measured.">
+<meta name="description" content="A command line for statistics, written in cancho: sums are exact and rounded once, the same bytes come out on every platform and at any thread count, and every p-value function has an error bound that was written first and then measured.">
 <meta property="og:title" content="cancho-stats: statistics whose last digit you can check">
-<meta property="og:description" content="Exact sums rounded once, identical bytes on five machines, p-values with a stated and measured error bound, refusals that name their rule.">
+<meta property="og:description" content="Exact sums. Identical bytes on five machines. An error bound written before the code.">
 <meta name="color-scheme" content="light dark">
 <style>
 :root {
   --bg: #fbfcfd; --fg: #14181a; --muted: #55606a; --line: #dfe5e7; --surface: #ffffff; --soft: #eff4f4;
-  --accent: #1f5fa6; --accent-fg: #ffffff; --good: #0f7b5f; --warn: #92400e; --warn-bg: #fdf6e7; --warn-line: #e0b765; --bad: #b42d27;
+  --accent: #1f5fa6; --accent-fg: #ffffff; --good: #0f7b5f; --bad: #b42d27; --warn: #92400e;
+  --term-bg: #0f1519; --term-fg: #d6e2e6; --term-dim: #7d8f96; --term-good: #5fd3a6; --term-bad: #ff8a80; --term-acc: #8ec0ff;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #0b0f14; --fg: #e7ebec; --muted: #9aa8ae; --line: #212a2d; --surface: #131a1c; --soft: #172022;
-    --accent: #7fb2ff; --accent-fg: #07162c; --good: #4fd1a5; --warn: #f3c77a; --warn-bg: #1d1a12; --warn-line: #8a6a2a; --bad: #ff7b73; }
+    --accent: #7fb2ff; --accent-fg: #07162c; --good: #4fd1a5; --bad: #ff7b73; --warn: #f3c77a; --term-bg: #0a1013; }
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; scroll-padding-top: 4rem; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 1rem/1.6 var(--font); }
 a { color: var(--accent); text-underline-offset: .15em; }
-.wrap { width: 100%; max-width: 68rem; margin: 0 auto; padding: 0 16px; }
+.wrap { width: 100%; max-width: 64rem; margin: 0 auto; padding: 0 16px; }
 header.top { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
 header.top .wrap { display: flex; align-items: center; gap: 1.5rem; height: 3.4rem; }
-.brand { display: inline-flex; align-items: center; gap: .5rem; font: 700 1rem var(--mono); color: var(--fg); text-decoration: none; letter-spacing: -.01em; }
+.brand { font: 700 1rem var(--mono); color: var(--fg); text-decoration: none; }
 nav { display: flex; gap: 1.2rem; margin-left: auto; }
 nav a { color: var(--muted); text-decoration: none; font-size: .93rem; }
 nav a:hover { color: var(--fg); }
 @media (max-width: 40rem) { nav a.opt { display: none; } }
-.hero { padding: 3.5rem 0 2.5rem; border-bottom: 1px solid var(--line); }
-.hero h1 { font-size: clamp(1.6rem, 4vw, 2.6rem); line-height: 1.15; margin: 0 0 1rem; letter-spacing: -.02em; }
-.hero .sub { font-size: 1.1rem; color: var(--muted); max-width: 44rem; margin: 0; }
-.pill { display: inline-block; font: 600 .78rem var(--mono); color: var(--warn); border: 1px solid var(--warn-line); background: var(--warn-bg); padding: .2rem .6rem; border-radius: 99px; margin-bottom: 1rem; }
-main { padding: 2rem 0 4rem; }
-section { margin: 2.5rem 0; }
-h2 { font-size: 1.35rem; margin: 0 0 .8rem; letter-spacing: -.01em; }
-h3 { font-size: 1.05rem; margin: 1.6rem 0 .5rem; }
-p { margin: .6rem 0; max-width: 46rem; }
-ul { max-width: 44rem; padding-left: 1.2rem; }
-li { margin: .3rem 0; }
-pre { background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: .9rem 1rem; overflow-x: auto; font: .88rem/1.5 var(--mono); margin: 1rem 0; }
-code { font: .9em var(--mono); background: var(--soft); border-radius: 4px; padding: .08em .3em; }
-pre code { background: none; padding: 0; }
-table { border-collapse: collapse; width: 100%; max-width: 46rem; margin: 1rem 0; font-size: .93rem; }
-th, td { border: 1px solid var(--line); padding: .5rem .7rem; text-align: left; vertical-align: top; }
-th { background: var(--soft); font-weight: 600; }
-.note { border: 1px solid var(--warn-line); background: var(--warn-bg); border-radius: 8px; padding: .8rem 1rem; margin: 1rem 0; max-width: 46rem; }
-.note b { color: var(--warn); }
-.ok { color: var(--good); font-weight: 600; }
-table.wide { max-width: 100%; }
-footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2rem; color: var(--muted); font-size: .9rem; }
+.hero { padding: 3.5rem 0 2rem; text-align: center; }
+.hero h1 { font-size: clamp(2rem, 6vw, 3.4rem); line-height: 1.1; margin: 0 auto 1rem; letter-spacing: -.03em; max-width: 18ch; }
+.hero .sub { font-size: 1.2rem; color: var(--muted); max-width: 36rem; margin: 0 auto 1.6rem; }
+.cta { display: flex; gap: .8rem; justify-content: center; flex-wrap: wrap; }
+.btn { display: inline-block; padding: .65rem 1.2rem; border-radius: 8px; font-weight: 600; text-decoration: none; border: 1px solid var(--line); color: var(--fg); background: var(--surface); }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+section { margin: 0; padding: 3rem 0; }
+section.alt { background: var(--soft); }
+h2 { font-size: clamp(1.4rem, 3vw, 1.9rem); margin: 0 0 .6rem; letter-spacing: -.02em; text-align: center; }
+.lead { text-align: center; color: var(--muted); max-width: 38rem; margin: 0 auto 2rem; }
+.term { background: var(--term-bg); color: var(--term-fg); border-radius: 12px; border: 1px solid var(--line); max-width: 46rem; margin: 0 auto; box-shadow: 0 10px 30px rgba(0,0,0,.18); overflow: hidden; }
+.term .bar { display: flex; align-items: center; gap: .4rem; padding: .55rem .8rem; border-bottom: 1px solid #1f2a30; font: .78rem var(--mono); color: var(--term-dim); }
+.term .bar i { width: .7rem; height: .7rem; border-radius: 50%; background: #2c3a41; display: inline-block; }
+.term .bar button { margin-left: auto; font: .78rem var(--mono); color: var(--term-fg); background: #1b262c; border: 1px solid #2c3a41; border-radius: 6px; padding: .2rem .6rem; cursor: pointer; }
+.term pre { margin: 0; padding: 1rem 1.1rem; min-height: 17.5rem; overflow-x: auto; font: .85rem/1.55 var(--mono); white-space: pre; }
+.term .g { color: var(--term-good); } .term .b { color: var(--term-bad); } .term .d { color: var(--term-dim); } .term .a { color: var(--term-acc); }
+.caption { text-align: center; color: var(--muted); font-size: .88rem; max-width: 46rem; margin: .8rem auto 0; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 1rem; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 1.2rem; }
+.card h3 { margin: 0 0 .4rem; font-size: 1.05rem; }
+.card p { margin: 0; color: var(--muted); font-size: .95rem; }
+.card .ic { font-size: 1.5rem; margin-bottom: .4rem; }
+.diagram { max-width: 52rem; margin: 0 auto; }
+.diagram svg { width: 100%; height: auto; display: block; }
+.diagram .box { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+.diagram .boxa { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+.diagram .ok { fill: var(--surface); stroke: var(--good); stroke-width: 2; }
+.diagram .no { fill: var(--surface); stroke: var(--bad); stroke-width: 2; }
+.diagram text { fill: var(--fg); font: 600 15px var(--font); }
+.diagram .sm { font: 13px var(--font); fill: var(--muted); font-weight: 400; }
+.diagram .arrow { stroke: var(--muted); stroke-width: 1.8; fill: none; marker-end: url(#ah); }
+.diagram .arrow.bad { stroke: var(--bad); stroke-dasharray: 5 4; }
+.nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 1rem; text-align: center; }
+.num b { display: block; font-size: 2.3rem; letter-spacing: -.03em; color: var(--accent); }
+.num span { color: var(--muted); font-size: .92rem; }
+.fine { max-width: 46rem; margin: 1.5rem auto 0; color: var(--muted); font-size: .88rem; text-align: center; }
+pre.code { background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: .9rem 1rem; overflow-x: auto; font: .85rem/1.5 var(--mono); max-width: 46rem; margin: 0 auto 1rem; }
+code { font: .9em var(--mono); }
+.steps { max-width: 46rem; margin: 0 auto; padding-left: 1.2rem; }
+.steps li { margin: .4rem 0; }
+footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2rem; color: var(--muted); font-size: .9rem; text-align: center; }
 </style>
 </head>
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href=".">cancho-stats</a>
   <nav>
-    <a href="#why">Why</a>
-    <a href="#numbers">The numbers</a>
-    <a href="#sums">Exact sums</a>
-    <a href="#bytes">Same bytes</a>
-    <a href="#run">Run it</a>
-    <a href="#roadmap">Roadmap</a>
-    <a class="opt" href="https://github.com/alpibrusl/cancho-stats">GitHub</a>
+    <a href="#how">How it works</a><a class="opt" href="#sums">Exact sums</a><a class="opt" href="#numbers">Results</a><a href="#try">Try it</a>
+    <a class="opt" href="https://github.com/alpibrusl/cancho-stats/blob/main/docs/numerics.md">Numerics</a><a href="https://github.com/alpibrusl/cancho-stats">GitHub</a>
   </nav>
 </div></header>
 
-<div class="hero"><div class="wrap">
-  <span class="pill">milestone S0 built and gated; no verb yet</span>
-  <h1>Statistics whose last digit you can check</h1>
-  <p class="sub">A command line, in the shape of <a href="https://github.com/alpibrusl/cancho-table">cancho-table</a> and <a href="https://github.com/alpibrusl/cancho-ml">cancho-ml</a>, that describes data and draws inferences from it: summaries, correlations, tests, intervals, resampling, regression with standard errors. A mean, a variance and a p-value are each printed as one correctly rounded number, with an error bound that was written before the code and measured after it.</p>
-</div></div>
+<div class="wrap hero">
+  <h1>Statistics whose last digit you can check.</h1>
+  <p class="sub">cancho-stats is a command line for describing data and drawing inferences from it. Its sums are exact, its answers are the same bytes everywhere, and its error bounds were written before the code.</p>
+  <div class="cta"><a class="btn primary" href="#try">Try it</a><a class="btn" href="#how">See how it works</a></div>
+</div>
 
-<main class="wrap">
+<div class="wrap" style="padding-bottom:2.5rem">
+  <div class="term" role="img" aria-label="Replay of a real run of the gates: the pins check, the edge and fuzz gate, the exact accumulation, the accuracy sweeps, and the cross-platform fingerprint">
+    <div class="bar"><i></i><i></i><i></i> a real run, replayed <button id="replay" type="button">&#8635; replay</button></div>
+    <pre id="screen"></pre>
+  </div>
+  <p class="caption">A real run of the S0 gates on a Mac (Apple M4 Max; the middle of the accuracy log is elided: 27 ranges, 600 cases each, 200 for the slowest). It is a replay of the log, not a live session. There is no <code>stats</code> command yet: this is the library under it.</p>
+</div>
 
-<section id="why">
-<h2>Why</h2>
-<p>A statistics tool answers with numbers people paste into reports. Most of them are sums of floating-point terms, so the last digits depend on the order of the rows, the number of threads and the platform's maths library. Here:</p>
-<ul>
-  <li><b>Where a sum decides the result, it is exact</b> and rounded once, at the end. The row order cannot change a bit.</li>
-  <li><b>The same input, seed and arguments give the same bytes</b> at 1 to 16 threads and on every platform the CI workflow covers.</li>
-  <li><b>Every refusal is data:</b> a rule tag <code>stats.&lt;name&gt;</code>, an exit code, a repair where one is safe. No input reaches a trap.</li>
-  <li><b>No claim about another library</b> that was not measured here, with the machine and the case count next to it.</li>
-</ul>
-<p>The design is <a href="https://github.com/alpibrusl/cancho-stats/blob/main/docs/design.md">docs/design.md</a>. What S0 settled, with the measurements, is <a href="https://github.com/alpibrusl/cancho-stats/blob/main/docs/numerics.md">docs/numerics.md</a>.</p>
-</section>
+<section class="alt" id="why"><div class="wrap">
+  <h2>Trust the digits, not the library</h2>
+  <p class="lead">A p-value is pasted into a report. Here its last digit has a stated error and a measurement behind it.</p>
+  <div class="cards">
+    <div class="card"><div class="ic">&#9878;</div><h3>Exact where a sum decides</h3><p>Sums, squares and products are accumulated exactly and rounded once, at the end. The order of the rows cannot change a bit.</p></div>
+    <div class="card"><div class="ic">&#128207;</div><h3>A bound written first</h3><p>Every function has a relative error bound committed before its code, and a high-precision reference that tries to break it. When it broke, the bound was corrected in the open.</p></div>
+    <div class="card"><div class="ic">&#128257;</div><h3>Same bytes everywhere</h3><p>One committed fingerprint, equal on five machines and at 1 to 16 threads. No platform maths library is in any result.</p></div>
+    <div class="card"><div class="ic">&#128683;</div><h3>Refusals are data</h3><p>An input that cannot be answered gets a named rule, never a trap, a hang or a made-up number.</p></div>
+  </div>
+</div></section>
 
-<section id="numbers">
-<h2>The distribution functions</h2>
-<p>The p-values rest on <code>lgamma</code>, <code>erf</code>, the regularised incomplete gamma and beta functions and the normal quantile, written in cancho from <code>std.math</code>'s own <code>exp</code> and <code>log</code> (no platform <code>libm</code>). From them: normal, Student t, chi-square, F and binomial, each with a survival function that is computed from its own tail, never as <code>1 - cdf</code>. Real outputs of the built driver:</p>
-<table>
-<tr><th>call</th><th>result</th></tr>
-<tr><td><code>norm_sf(1.96)</code></td><td><code>0.024997895148220414</code></td></tr>
-<tr><td><code>qnorm(0.975)</code></td><td><code>1.959963984540055</code></td></tr>
-<tr><td><code>t_sf(2.228138851986274, df 10)</code></td><td><code>0.024999999999999984</code></td></tr>
-<tr><td><code>chi2_sf(3.841458820694124, df 1)</code></td><td><code>0.050000000000000176</code></td></tr>
-<tr><td><code>f_sf(4.964602743730711, 1, 10)</code></td><td><code>0.04999999999999997</code></td></tr>
-<tr><td><code>norm_sf(8)</code> (a tail that <code>1 - cdf</code> loses)</td><td><code>6.220960574271785e-16</code></td></tr>
-</table>
-<p>The last digits of those lines are the honest part: they are within the bound, not equal to the textbook value.</p>
+<section id="how"><div class="wrap">
+  <h2>How it works</h2>
+  <p class="lead">Exact accumulation, one rounding, then distribution functions checked against a reference that does not share their code.</p>
+  <div class="diagram">
+  <svg viewBox="0 0 760 330" role="img" aria-label="Flow: a CSV is read; sums, squares and products go into exact accumulators; one rounding gives the statistic; its p-value comes from the distribution functions; a gate compares both against a high-precision reference; an input outside the stated range is refused with a rule.">
+    <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="context-stroke"/></marker></defs>
+    <rect class="box" x="10" y="30" width="130" height="64" rx="10"/><text x="75" y="58" text-anchor="middle">Your data</text><text class="sm" x="75" y="78" text-anchor="middle">a CSV, exact types</text>
+    <rect class="boxa" x="190" y="30" width="150" height="64" rx="10"/><text x="265" y="58" text-anchor="middle">Exact sums</text><text class="sm" x="265" y="78" text-anchor="middle">x, x&#178;, x&#183;y: no rounding</text>
+    <path class="arrow" d="M140 62H188"/>
+    <rect class="boxa" x="390" y="30" width="150" height="64" rx="10"/><text x="465" y="58" text-anchor="middle">One rounding</text><text class="sm" x="465" y="78" text-anchor="middle">the statistic, at the end</text>
+    <path class="arrow" d="M340 62H388"/>
+    <rect class="boxa" x="390" y="150" width="150" height="64" rx="10"/><text x="465" y="178" text-anchor="middle">Distributions</text><text class="sm" x="465" y="198" text-anchor="middle">p-values, both tails</text>
+    <path class="arrow" d="M465 94V148"/>
+    <rect class="ok" x="590" y="30" width="160" height="64" rx="10"/><text x="670" y="58" text-anchor="middle">Reference &#10003;</text><text class="sm" x="670" y="78" text-anchor="middle">mpmath, 60+ digits</text>
+    <path class="arrow" d="M540 182H570Q670 182 670 98" style="stroke:var(--good)"/>
+    <rect class="no" x="190" y="260" width="350" height="54" rx="10"/><text x="365" y="283" text-anchor="middle">Outside the range? It refuses.</text><text class="sm" x="365" y="302" text-anchor="middle">a named rule, an exit code, a repair where safe</text>
+    <path class="arrow bad" d="M465 214V258"/>
+    <rect class="ok" x="590" y="260" width="160" height="54" rx="10"/><text x="670" y="283" text-anchor="middle">Same bytes</text><text class="sm" x="670" y="302" text-anchor="middle">5 machines, 16 threads</text>
+    <path class="arrow" d="M540 287H588"/>
+  </svg>
+  </div>
+</div></section>
 
-<h3>The error bound, written first</h3>
-<p>For each function and input range, a relative error bound was committed <em>before</em> the first line of the implementation: <code>B(f) = B0 + B1 |ln f|</code>, where the second term is the stated far-tail behaviour (the argument of the last <code>exp</code> carries a rounding error that grows with its size). Measured against <code>mpmath</code> at 60 digits and more, at the exact input doubles:</p>
-<table>
-<tr><th>family</th><th>bound B0</th><th>cases per range</th><th>outside</th><th>closest to the bound</th></tr>
-<tr><td>erf, erfc, normal</td><td>2e-13</td><td>20,000</td><td>0</td><td>0.12</td></tr>
-<tr><td>incomplete gamma, chi-square</td><td>2e-13 to 5e-12</td><td>20,000 (2,000 large)</td><td>0 after one correction</td><td><b>0.97</b></td></tr>
-<tr><td>incomplete beta, t, F, binomial</td><td>5e-13 to 1e-11</td><td>20,000 (2,000 large)</td><td>0</td><td>0.52</td></tr>
-<tr><td>normal quantile</td><td>1e-15 + 1e-13 |x|</td><td>20,000</td><td>0</td><td>0.06</td></tr>
-</table>
-<div class="note"><b>Found by the gate.</b> The full-size run found 26 cases up to 1.6 times the bound in the incomplete gamma that the smaller runs missed. The far-tail coefficient was corrected in place from 4e-16 to 1.5e-15 for that family, and the document says so. A ratio of 0.97 means that bound is tight, not comfortable.</div>
-<p>The accuracy is bounded only in the stated ranges; between them and the refusal limits the functions answer without a bound. A second reference, <code>scipy.special</code>, is put beside <code>mpmath</code> on 4,000 cases per range: it is never the tie-breaker, and where it is the outlier (the binomial by up to 3.4e-9) the page of results says so.</p>
-</section>
+<section id="sums"><div class="wrap">
+  <h2>How wide must an exact sum be?</h2>
+  <p class="lead">S0 measured it against exact fractions, on 600 vectors in each of ten families.</p>
+  <div class="cards">
+    <div class="card"><div class="ic">&#128683;</div><h3>Plain doubles</h3><p>Inexact in 40 to 50% of vectors; up to 1.8e-13 off on cancellation.</p></div>
+    <div class="card"><div class="ic">&#9888;</div><h3>Two-product into facc</h3><p>Exact for exponent sums from -997 to 1003, and <em>silently</em> wrong outside. So a value outside <code>2^-485 &le; |x| &lt; 2^501</code> is refused.</p></div>
+    <div class="card"><div class="ic">&#9989;</div><h3>ml.fsq, 4196 bits</h3><p>Exact for every finite double, for sums of squares. No range rule needed.</p></div>
+  </div>
+  <p class="fine">The rule that follows: squares through <code>ml.fsq</code>, products through the two-product with the refusal outside the range, one rounding at the end. Open: the exact numerator of variance and covariance needs a big-integer multiply that the compiler's library lacks; it is the first module of the next milestone.</p>
+</div></section>
 
-<section id="sums">
-<h2>Exact sums, and how wide</h2>
-<p>A variance needs <code>sum(x^2)</code> and a covariance <code>sum(x*y)</code>. S0 measured how wide an accumulator must be, against <code>fractions.Fraction</code>, on 600 vectors in each of ten families:</p>
-<table>
-<tr><th>method</th><th>sum of squares</th><th>sum of products</th></tr>
-<tr><td>plain double, in row order</td><td>inexact in 40 to 50% of vectors</td><td>up to 1.8e-13 off on cancellation</td></tr>
-<tr><td>two-product into <code>facc</code></td><td>exact inside a range, silently wrong outside it</td><td>exact for exponent sums from -997 to 1003; <b>silently</b> wrong beyond</td></tr>
-<tr><td><code>ml.fsq</code>, 4196 bits</td><td><b>exact for every finite double</b></td><td>n/a</td></tr>
-</table>
-<p>The rule that follows: squares go through <code>ml.fsq</code>; products go through the two-product and <code>facc</code> and a value outside <code>2^-485 &le; |x| &lt; 2^501</code> is refused with a named rule and a repair. One rounding, at the end.</p>
-</section>
+<section class="alt" id="numbers"><div class="wrap">
+  <h2>Measured, not promised</h2>
+  <p class="lead">Normal, Student t, chi-square, F and binomial, with survival functions that never lose a tail, and the normal quantile.</p>
+  <div class="nums">
+    <div class="num"><b>0 / 432,000</b><span>cases outside the bound, 27 ranges at full size, after one correction</span></div>
+    <div class="num"><b>1.6&times;</b><span>the worst miss the full-size run found before the correction (a bound was 4e-16, it needed 1e-15)</span></div>
+    <div class="num"><b>5</b><span>machines with a byte-identical fingerprint, at 1 to 16 threads</span></div>
+    <div class="num"><b>73 + 12</b><span>mutants killed, and survivors each explained, of 85</span></div>
+  </div>
+  <p class="fine">Measured on seeded samples at the exact input doubles, against <code>mpmath</code> at 60 digits and more; <code>scipy.special</code> is a second reference and is the outlier on the binomial by up to 3.4e-9. The closest ratio to a bound is 0.97, so that bound is tight, not comfortable. The error is bounded only in the ranges stated in <a href="https://github.com/alpibrusl/cancho-stats/blob/main/docs/numerics.md">docs/numerics.md</a>.</p>
+</div></section>
 
-<section id="bytes">
-<h2>The same bytes</h2>
-<p>A fingerprint of 48 lines (every function on fixed seeded sweeps, the edge cases, the accumulator results) is committed. The built driver prints the same bytes on:</p>
-<table>
-<tr><th>machine</th><th>equal to the golden</th><th>threads 1, 2, 3, 4, 7, 8, 16</th></tr>
-<tr><td>macOS arm64 (the writer)</td><td class="ok">yes</td><td class="ok">same bytes</td></tr>
-<tr><td>Linux x86-64 (a clean clone, 7 cores)</td><td class="ok">yes</td><td class="ok">same bytes</td></tr>
-<tr><td>GitHub: ubuntu-24.04, ubuntu-24.04-arm, macos-26</td><td class="ok">yes (CI run, no step skipped)</td><td class="ok">same bytes</td></tr>
-</table>
-<p>That shows equal bytes for these sweeps on these machines, nothing about others. One thing the gate caught on the way: the sweeps' own generator called the platform's <code>log</code>, so two machines were comparing different inputs. It is now exact integer arithmetic.</p>
-</section>
-
-<section id="run">
-<h2>Run it</h2>
-<p>Everything is pinned: the compiler, <code>cancho-table</code>'s exact-sum stores, the contract package of <code>cancho-tools</code> and the 23 numeric stores of <code>cancho-ml</code>, by commit, never copied (<code>sh scripts/check_pins.sh</code> checks that, and 21 mutants show the check can fail).</p>
-<pre><code>git clone https://github.com/alpibrusl/cancho-stats.git
+<section id="try"><div class="wrap">
+  <h2>Try it</h2>
+  <p class="lead">You need the <a href="https://github.com/alpibrusl/cancho">cancho</a> compiler at the revision in <code>cancho.toml</code> and Python 3.</p>
+<pre class="code"><code>git clone https://github.com/alpibrusl/cancho-stats.git
 cd cancho-stats
-export CANCHO=&lt;path-to-the-cancho-binary, the revision in cancho.toml&gt;
+export CANCHO=&lt;path-to-the-cancho-binary&gt;
 "$CANCHO" install
 "$CANCHO" build --bin special-check
 python3 -m venv .venv &amp;&amp; .venv/bin/pip install -r ci/requirements.txt
 sh scripts/check.sh            # every gate, minutes
-sh scripts/check.sh --full     # also the larger sweeps and the mutants</code></pre>
-<p>The driver reads cases on standard input and prints the bits of the answer, so a gate compares bytes, not decimals:</p>
-<pre><code>$ echo "1 4000000000000000 4024000000000000" | build/special-check t_sf
-1 3fa2c98ee9420ee7 0</code></pre>
-<p>(<code>t_sf(2, df 10)</code>; the first column is the case id, then the bits of the result, then the refusal code, 0 for an answer.)</p>
-</section>
+echo "1 4000000000000000 4024000000000000" | build/special-check t_sf
+1 3fa2c98ee9420ee7 0           # t_sf(2, df 10): the bits of the answer</code></pre>
+  <p class="lead" style="margin-bottom:0">Next: <code>stats describe</code> (design written, four decisions waiting), then correlations, tests, intervals, resampling and regression.</p>
+</div></section>
 
-<section id="roadmap">
-<h2>Roadmap</h2>
-<table>
-<tr><th></th><th>milestone</th><th>state</th></tr>
-<tr><td>S0</td><td>numerics: special functions, exact products, pinned stores</td><td class="ok">built, gated, merged</td></tr>
-<tr><td>S1</td><td><code>stats describe</code></td><td>design written, waiting for four decisions</td></tr>
-<tr><td>S2</td><td><code>corr</code>: Pearson, Spearman, Kendall</td><td>not started</td></tr>
-<tr><td>S3, S4</td><td><code>test</code>: t family, chi-square, proportions, rank tests, ANOVA, KS, Fisher</td><td>not started</td></tr>
-<tr><td>S5</td><td><code>ci</code>, <code>resample</code>: seeded bootstrap and permutation tests</td><td>not started</td></tr>
-<tr><td>S6</td><td>the formula grammar, then <code>lm</code> and <code>glm</code></td><td>not started</td></tr>
-<tr><td>S7</td><td><code>fit-dist</code>, <code>power</code>, <code>compare</code></td><td>not started</td></tr>
-</table>
-</section>
+<section class="alt"><div class="wrap">
+  <h2>Go deeper</h2>
+  <div class="cards">
+    <div class="card"><h3><a href="https://github.com/alpibrusl/cancho-stats/blob/main/docs/numerics.md">Numerics</a></h3><p>The accuracy targets, the gates, and every measured result of S0.</p></div>
+    <div class="card"><h3><a href="https://github.com/alpibrusl/cancho-stats/blob/main/docs/design.md">Design</a></h3><p>The whole tool: verbs, principles, milestones.</p></div>
+    <div class="card"><h3><a href="https://github.com/alpibrusl/cancho-stats/blob/main/docs/describe.md">describe</a></h3><p>The next milestone's design, before any code.</p></div>
+  </div>
+</div></section>
 
-<section id="status">
-<h2>Status and limits, stated plainly</h2>
-<ul>
-  <li>Built: the special functions, the exact-accumulation decision and its measurement, the pin check, the gates (accuracy sweeps, edges and fuzz, independence, fingerprint, 85 mutants of the special functions: 73 killed and 12 explained), the CI workflow.</li>
-  <li>Not built: every verb. There is no <code>stats</code> binary yet; the page above describes the library under it.</li>
-  <li>The error bounds are measured on seeded samples, not proved, and hold in the ranges stated in the document.</li>
-  <li>Exact variance and covariance need a big-integer multiply that the compiler's library lacks; it is S1's first module.</li>
-  <li>Licence: EUPL-1.2, copyright Alpibru S.L.</li>
-</ul>
-</section>
+<footer><div class="wrap">cancho-stats &middot; EUPL-1.2 &middot; written in <a href="https://github.com/alpibrusl/cancho">cancho</a> &middot; <a href="https://github.com/alpibrusl/cancho-table">cancho-table</a> &middot; <a href="https://github.com/alpibrusl/cancho-ml">cancho-ml</a></div></footer>
 
-</main>
-
-<footer><div class="wrap">cancho-stats &middot; <a href="https://github.com/alpibrusl/cancho-stats">source</a> &middot; <a href="https://github.com/alpibrusl/cancho-table">cancho-table</a> &middot; <a href="https://github.com/alpibrusl/cancho-ml">cancho-ml</a> &middot; <a href="https://github.com/alpibrusl/cancho">cancho</a></div></footer>
+<script>
+(function () {
+  var screen = document.getElementById("screen");
+  var lines = [
+  [
+    "d",
+    "$ sh scripts/check_pins.sh"
+  ],
+  [
+    "g",
+    "check_pins: ok (37 dependencies, none copied)"
+  ],
+  [
+    "d",
+    "$ python3 scripts/gate_domain.py --fuzz 50000"
+  ],
+  [
+    "a",
+    "gate_domain: largest |cdf + sf - 1| over 59824 answered pairs with both tails at least 1e-10: 1.3e-14"
+  ],
+  [
+    "a",
+    "gate_domain: 1321003 cases answered with no trap and no hang; codes seen: ..."
+  ],
+  [
+    "a",
+    "gate_domain: tags of special.rules not reached by any case: ['stats.noconverge']"
+  ],
+  [
+    "g",
+    "gate_domain: ok (no violation; unreached: ['stats.noconverge'])"
+  ],
+  [
+    "d",
+    "$ python3 scripts/measure_acc.py"
+  ],
+  [
+    "g",
+    "measure_acc: rule R holds on every vector sampled; B exact everywhere"
+  ],
+  [
+    "d",
+    "$ python3 scripts/gate_special.py --fast"
+  ],
+  [
+    "a",
+    "  lgamma         n=600  outside 0   worst error / bound 0.533"
+  ],
+  [
+    "a",
+    "  gamma_p mid    n=600  outside 0   worst error / bound 0.938"
+  ],
+  [
+    "a",
+    "  beta_lo large  n=200  outside 0   worst error / bound 0.0442"
+  ],
+  [
+    "a",
+    "  t_cdf          n=600  outside 0   worst error / bound 0.148"
+  ],
+  [
+    "a",
+    "  binom_sf       n=600  outside 0   worst error / bound 0.0305"
+  ],
+  [
+    "d",
+    "  ...19 more ranges, each against mpmath, none outside"
+  ],
+  [
+    "g",
+    "gate_special: 27 ranges, 0 cases outside the bound, 0 reference failures"
+  ],
+  [
+    "d",
+    "$ python3 scripts/xplat_fp.py"
+  ],
+  [
+    "g",
+    "xplat_fp: ok, 48 lines equal the golden; --threads 1,2,3,4,7,8,16 equal the sequential bytes in every sweep"
+  ]
+];
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+  function full() { screen.innerHTML = lines.map(function (l) { return '<span class="' + l[0] + '">' + esc(l[1]) + "</span>"; }).join("\n"); }
+  var timer = null;
+  function play() {
+    clearTimeout(timer); screen.innerHTML = "";
+    var i = 0, j = 0, html = "";
+    (function tick() {
+      if (i >= lines.length) { return; }
+      var l = lines[i];
+      j += 3;
+      var shown = l[1].slice(0, j);
+      screen.innerHTML = html + '<span class="' + l[0] + '">' + esc(shown) + "</span>";
+      if (j >= l[1].length) { html += '<span class="' + l[0] + '">' + esc(l[1]) + "</span>\n"; i++; j = 0; timer = setTimeout(tick, l[0] === "b" ? 900 : 450); }
+      else { timer = setTimeout(tick, 14); }
+    })();
+  }
+  full();
+  var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  document.getElementById("replay").addEventListener("click", function () { if (reduce) { full(); } else { play(); } });
+  if (!reduce) { play(); }
+})();
+</script>
 </body>
 </html>
