@@ -3,12 +3,12 @@
 #   PN1 a store of the pinned set has no block, or a block names a store that is not in the set
 #   PN2 a label, or a (git, path), appears twice
 #   PN3 a rev is not 40 hex digits, a repository's blocks carry different revs, or the rev is not the one the document names
-#   PN4 a git is not the repository's GitHub URL (the exception: cancho-ml by file:// while section 2.3 of the document says the branch is not pushed)
+#   PN4 a git is not the repository's GitHub URL
 #   PN5 a path is not .cancho-vcs/<module>
 #   PN6 a .cho file under lib, tools or tests declares a pinned module (a copy), or a sources entry of cancho.toml leaves the tree
 #   PN7 the pinned set of the document (between the pins:begin and pins:end markers) differs from the set below
 #   PN8 build/deps exists and lacks an installed module of the set
-#   PN9 CHECK_REMOTE=1: the rev has the store on GitHub (skipped for a file:// repository, and offline)
+#   PN9 CHECK_REMOTE=1: the rev has the store on GitHub (skipped offline)
 # TOML and DOC override the files read (the mutants). Exit 1 with the id and the reason on the first failure.
 set -e
 cd "$(dirname "$0")/.."
@@ -103,9 +103,6 @@ echo "$SET" | while IFS='|' read -r repo lab mod; do
   echo "$blocks" | cut -d'|' -f1 | grep -qx "$lab" || fail PN1 "the pinned set has $lab ($mod), $TOML has no [dependencies.$lab]"
 done
 
-# the exception of PN4
-if grep -q '^### 2\.3 .*\[open until cancho-ml#46 is pushed and merged\]' "$DOC"; then pushed=no; else pushed=yes; fi
-
 echo "$blocks" | while IFS='|' read -r lab git rev path; do
   [ -n "$lab" ] || continue
   entry=$(echo "$SET" | awk -F'|' -v l="$lab" '$2==l{print $1 "|" $3}')
@@ -118,15 +115,7 @@ echo "$blocks" | while IFS='|' read -r lab git rev path; do
   [ ${#want} -eq 40 ] || fail PN3 "$DOC has no line '$repo rev: \`<40 hex digits>\`'"
   [ "$rev" = "$want" ] || fail PN3 "[dependencies.$lab]: rev $rev is not the documented $want ($repo)"
   # PN4
-  if [ "$git" != "$url" ]; then
-    if [ "$repo" = cancho-ml ] && [ "$pushed" = no ]; then
-      case "$git" in file:///*cancho-ml-stores) ;; *) fail PN4 "[dependencies.$lab]: git '$git' is neither $url nor the file:// clone the document allows" ;; esac
-    else
-      fail PN4 "[dependencies.$lab]: git is '$git', not $url"
-    fi
-  elif [ "$repo" = cancho-ml ] && [ "$pushed" = no ]; then
-    fail PN4 "[dependencies.$lab]: git is the GitHub URL but $DOC section 2.3 still says the branch is not pushed"
-  fi
+  [ "$git" = "$url" ] || fail PN4 "[dependencies.$lab]: git is '$git', not $url"
   # PN5
   [ "$path" = ".cancho-vcs/$mod" ] || fail PN5 "[dependencies.$lab]: path is '$path', not .cancho-vcs/$mod"
 done
@@ -158,7 +147,6 @@ fi
 if [ -n "$CHECK_REMOTE" ]; then
   if command -v gh >/dev/null 2>&1; then
     echo "$SET" | while IFS='|' read -r repo lab mod; do
-      [ "$repo" = cancho-ml ] && [ "$pushed" = no ] && continue
       rev=$(echo "$blocks" | awk -F'|' -v l="$lab" '$1==l{print $3}')
       gh api "repos/alpibrusl/$repo/contents/.cancho-vcs/$mod?ref=$rev" >/dev/null 2>&1 || fail PN9 "$repo $rev has no .cancho-vcs/$mod on GitHub"
     done
@@ -168,4 +156,4 @@ if [ -n "$CHECK_REMOTE" ]; then
   fi
 fi
 n=$(echo "$SET" | wc -l | tr -d ' ')
-echo "check_pins: ok ($n dependencies, none copied; cancho-ml by file:// pushed=$pushed)"
+echo "check_pins: ok ($n dependencies, none copied)"

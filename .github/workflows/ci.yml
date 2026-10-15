@@ -60,9 +60,8 @@ jobs:
       - name: File sizes and documents
         run: sh scripts/check_docs.sh
 
-  # Build the drivers and run the gates on each named platform. The numeric stores of cancho-ml are fetched by `cancho install`; while cancho-ml#46 is not pushed, their pin is a
-  # file:// URL that only the maintainer's machine has (docs/numerics.md section 2.3), so the step that needs them says so and the gates that need the build are reported as skipped,
-  # in the job summary, never as passed.
+  # Build the drivers and run the gates on each named platform. The pinned stores are fetched by `cancho install`; if one is not fetchable on a runner the step says so and the gates that need the
+  # build are reported as skipped in the job summary, never as passed.
   build-test:
     if: github.event_name != 'schedule'
     strategy:
@@ -155,7 +154,7 @@ jobs:
           done
           echo "fetchable=$ok" >> "$GITHUB_OUTPUT"
           if [ "$ok" = no ]; then
-            echo "### The gates that need the build were SKIPPED on ${{ matrix.label }}: a pinned store is not fetchable (docs/numerics.md section 2.3)" >> "$GITHUB_STEP_SUMMARY"
+            echo "### The gates that need the build were SKIPPED on ${{ matrix.label }}: a pinned store is not fetchable " >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Fetch the pinned stores and build the drivers

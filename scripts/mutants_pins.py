@@ -10,8 +10,8 @@ import os, pathlib, re, shutil, subprocess, sys, tempfile
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 TOML = "cancho.toml"
 DOC = "docs/numerics.md"
-FIRST = "[dependencies.ml-rng]\ngit = \"file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores\"\nrev = \"2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0\"\npath = \".cancho-vcs/ml.rng\"\n"
-REV_ML = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+FIRST = "[dependencies.ml-rng]\ngit = \"https://github.com/alpibrusl/cancho-ml\"\nrev = \"99e9b64afb4f1ca191a4209dea1306720da43b2f\"\npath = \".cancho-vcs/ml.rng\"\n"
+REV_ML = "99e9b64afb4f1ca191a4209dea1306720da43b2f"
 REV_TAB = "202b214372a03ec6ed8ca841357f3d2ed4de8aa0"
 FLT = "[dependencies.flt]\ngit = \"https://github.com/alpibrusl/cancho-table\"\nrev = \"%s\"\npath = \".cancho-vcs/flt\"\n" % REV_TAB
 
@@ -28,8 +28,7 @@ MUTANTS = [
     ("document-has-no-rev-line", DOC, "cancho-ml rev: `%s`" % REV_ML, "cancho-ml rev is somewhere else", "PN3"),
     ("compiler-rev-moved", TOML, "cancho = \"a4572ea3b506e4bcec1c4be43deda1043c11ba9f\"", "cancho = \"e47d647e47d647e47d647e47d647e47d647e47d6\"", "PN3"),
     ("git-elsewhere", TOML, "git = \"https://github.com/alpibrusl/cancho-table\"\nrev = \"%s\"\npath = \".cancho-vcs/flt\"" % REV_TAB, "git = \"https://github.com/someone/cancho-table\"\nrev = \"%s\"\npath = \".cancho-vcs/flt\"" % REV_TAB, "PN4"),
-    ("ml-file-url-elsewhere", TOML, FIRST, FIRST.replace("cancho-ml-stores", "cancho-ml-copy"), "PN4"),
-    ("ml-github-while-unpushed", TOML, FIRST, FIRST.replace("file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores", "https://github.com/alpibrusl/cancho-ml"), "PN4"),
+    ("ml-git-elsewhere", TOML, FIRST, FIRST.replace("alpibrusl/cancho-ml", "someone/cancho-ml"), "PN4"),
     ("path-of-another-module", TOML, "path = \".cancho-vcs/flt\"", "path = \".cancho-vcs/pow\"", "PN5"),
     ("path-without-prefix", TOML, "path = \".cancho-vcs/flt\"", "path = \"flt\"", "PN5"),
     ("sources-leave-the-tree", TOML, "[package]\n", "[[bin]]\nname = \"x\"\nsources = [\"../cancho-table/tools/table\"]\n\n[package]\n", "PN6"),

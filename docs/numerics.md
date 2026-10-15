@@ -37,7 +37,7 @@ No verb is built here. The code of S0 is a library (`lib/special`) and a driver 
 | `alpibrusl/cancho` | the compiler, `cancho = "<rev>"` of `[package]` | `a4572ea3b506e4bcec1c4be43deda1043c11ba9f` | **[read]** the rev `cancho-ml` pins at the start of S0 |
 | `alpibrusl/cancho-table` | `dec`, `facc`, `flt`, `pow5`, `reader` | `202b214372a03ec6ed8ca841357f3d2ed4de8aa0` | **[read]** merge commit of cancho-table#44, the rev `cancho-ml` pins (its `docs/reader.md` section 1.3) |
 | `alpibrusl/cancho-tools` | the contract package: `cli`, `describe`, `fail`, `limit`, `lines`, `out`, `path`, `place`, `text` (`toolbox.<name>`) | `8dab9176e521660333914dc768a80a29330a2a8e` | **[read]** the rev `cancho-ml` pins; the nine it lists |
-| `alpibrusl/cancho-ml` | the 23 numeric modules of cancho-ml#46 (`ml.refuse`, `ml.limits`, `ml.rng`, `ml.exact`, `ml.fbits`, `ml.fsq`, `ml.matrix`, `linalg.{order,tensor,dot,axpy,gemv,syrk,gemm,chol,par}`, `metrics.{rules,ratio,classify,sums,regress,rank,splits}`) | `2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0` | **cancho-ml#46 is not merged and the branch is not pushed** (open at the start of S0, no pull request); the rev is the head of the local branch `v1-stores`, pinned by a `file://` URL of the maintainer's clone. Until it is pushed and merged the pin cannot be fetched from another machine: see 2.3 |
+| `alpibrusl/cancho-ml` | the 23 numeric modules of cancho-ml#46 (`ml.refuse`, `ml.limits`, `ml.rng`, `ml.exact`, `ml.fbits`, `ml.fsq`, `ml.matrix`, `linalg.{order,tensor,dot,axpy,gemv,syrk,gemm,chol,par}`, `metrics.{rules,ratio,classify,sums,regress,rank,splits}`) | `99e9b64afb4f1ca191a4209dea1306720da43b2f` | merge commit `99e9b64` of cancho-ml PR #51 (issue #46); its `.cancho-vcs` is byte-identical to the local branch head `2de565c` the design was first measured on (`git diff` empty) |
 
 The label of a block is the module name with the dot written as a dash (`ml-rng`, `linalg-chol`), as `cancho-ml`'s `docs/stores.md` section 3 says **[read]**; the toolbox
 labels are the module's short name, as in `cancho-ml`'s `cancho.toml`.
@@ -47,7 +47,7 @@ labels are the module's short name, as in `cancho-ml`'s `cancho.toml`.
 cancho rev: `a4572ea3b506e4bcec1c4be43deda1043c11ba9f`
 cancho-table rev: `202b214372a03ec6ed8ca841357f3d2ed4de8aa0`
 cancho-tools rev: `8dab9176e521660333914dc768a80a29330a2a8e`
-cancho-ml rev: `2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0`
+cancho-ml rev: `99e9b64afb4f1ca191a4209dea1306720da43b2f`
 
 <!-- pins:begin -->
 | cancho-tools | cli | toolbox.cli |
@@ -100,12 +100,12 @@ Each is a failure with its own message, exit 1:
 | PN1 | a store of the table above has no `[dependencies.<label>]` block, or a block names a store that is not in the table (an unlisted dependency) |
 | PN2 | a block is listed twice (the same label, or the same `path` of the same `git`) |
 | PN3 | a `rev` is not 40 hex digits, or a repository's blocks do not all carry one `rev`, or the `rev` is not the one of the table in this document (the documented line `<repository> rev: <hash>`) |
-| PN4 | a `git` is not the repository's GitHub URL; the one exception is `cancho-ml`, whose `file://` URL is accepted **only while** this document says in section 2.3 that the branch is not pushed |
+| PN4 | a `git` is not the repository's GitHub URL; no exception |
 | PN5 | a `path` is not `.cancho-vcs/<module>` of the block's module |
 | PN6 | a `.cho` file in this tree (outside `build/`) declares `module <name>;` for one of the pinned modules (a copy), or a `sources` entry reaches outside the tree |
 | PN7 | the documents disagree: the table of this section and the modules the script lists |
 | PN8 | `build/deps`, if present, lacks an installed module of the list |
-| PN9 | `CHECK_REMOTE=1`: the rev does not have the store on GitHub (skipped, not failed, offline or for the `file://` repository) |
+| PN9 | `CHECK_REMOTE=1`: the rev does not have the store on GitHub (skipped, not failed, offline) |
 
 `scripts/mutants_pins.py` shows each id able to fail: one mutant per row (a block removed, an unlisted block added, a block duplicated, a `rev` of 39 digits, a `rev` that
 differs in one block, a `git` pointing elsewhere, a `path` of another module, a module declared in `lib/`, `build/deps` missing a module, the document's `rev` line changed),
@@ -117,15 +117,6 @@ each run on a copy, each must exit 1 with the message of its id. The unmutated c
 and `ml.fsq` (cancho-table's exact sum and the wide accumulator of cancho-ml; the Dekker product it tests is `lib/special/xprod.cho`, this repository's), and the sweeps are generated in Python
 (a SplitMix64 stream with no call to a platform `libm`). The other pinned modules are pinned now because the verbs of S1 to S7 import them and the
 issue asks for the pins in S0; a `consume` run (section 7, gate G9) proves that the whole set installs and that a program reaching each family builds.
-
-### 2.3 The `file://` pin of the numeric stores **[open until cancho-ml#46 is pushed and merged]**
-
-The `cancho-ml` URL in `cancho.toml` is `file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores`. It installs on the machine that has that clone (**[measured]**
-2026-10-15 on the Mac: `cancho install` fetched 39 files for all the blocks). On any other machine `cancho install` fails for these 23 blocks. Consequences, stated so that nothing
-is hidden: gram builds with a `git config url.<clone>.insteadOf <the URL>` pointing at a clone of the same commit (section 6); the CI workflow runs the pin check and every gate that
-needs no store and probes the pin (`git fetch` of the rev) before the gates that do, and reports "skipped: the rev of cancho-ml is not fetchable" instead of passing silently. When
-cancho-ml#46 is merged the URL becomes `https://github.com/alpibrusl/cancho-ml`, the rev the merge commit, PN4's exception is removed from the script and this subsection is deleted
-(in one commit).
 
 ## 3. Special functions: design and accuracy target
 
@@ -288,7 +279,7 @@ i7-1260P), a clean clone under `~/Workspace/xplat-ml`, `taskset -c 0-6` for ever
 
 * `scripts/check_pins.sh`: 37 dependencies (9 contract stores, 5 cancho-table stores, 23 cancho-ml stores), none copied. `scripts/mutants_pins.py`: **22 killed of 22**, each by the id it is for; both controls pass.
 * `scripts/check_workflow.py --mutants`: **23 mutants, 0 survived** (named images `ubuntu-24.04`, `ubuntu-24.04-arm`, `macos-26`; every action pinned by a 40-hex SHA with a version comment; read-only
-  permissions). The workflow itself has **not run on GitHub**: this branch is a draft and the numeric stores are not fetchable there (2.3), so its build steps report themselves skipped.
+  permissions). The workflow's result on GitHub is in 8.7.
 * `scripts/consume.py --mutants`: a scratch package outside the tree with all 37 blocks installs, builds and prints the expected values (the first output of SplitMix64 from seed 0 `e220a8397b1dcdaf`,
   `derive(derive(42, 1), 0)` = `d8005cdd08a0d146`, `pow10`, a bit-exact round trip, `3.0^2 = 9.0` through `ml.fsq`, `facc.width() = 73`, ...; sha256 of the output `a8476e10...731f`); 3 mutants (a block removed, a wrong value, one byte of a
   store changed, which `cancho install` refuses) **all killed**.
@@ -385,8 +376,7 @@ next to the name). 7 are the controls of G2 (`control-*`): a Stirling coefficien
 
 ### 8.7 Not done, and risks
 
-* The CI workflow has not run. The numeric stores of cancho-ml are pinned by a `file://` URL of the maintainer's clone (cancho-ml#46 is unmerged and its branch not pushed): any other machine fails `cancho install`
-  for them (gram used `GIT_CONFIG_*` to redirect that URL to a clone of the same commit, not a change of its git configuration). The pin moves when #46 is merged.
+* CI result: see the first bullet of this list.
 * The sweeps ran at 2,000 cases per range (200 for `big`), not the 20,000 of 7.1; the 600-case fast run and the 2,000-case run both pass. 4,000 points per function for G3 were not reached (the fast cases, 200 to 600 per range, were).
 * Accuracy is bounded only in the ranges of 3.2; beyond them to the refusal limits the functions answer without a bound. The bounds are measured on seeded samples, not proved.
 * The exact numerator of variance and covariance (a big-integer product), the `stats.sum-overflow` and `stats.range-product` refusals and the row limit are rules of 8.2, not code.

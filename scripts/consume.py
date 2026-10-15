@@ -199,9 +199,9 @@ def main():
     if ok2:
         survived.append("wrong-value")
     # 3. one byte of a store changed in a scratch clone of the numeric stores, pinned at the new commit
-    m = re.search(r'git = "(file://[^"]*cancho-ml-stores)"', toml)
+    m = re.search(r'git = "(https://github.com/alpibrusl/cancho-ml)"', toml)
     if m:
-        src = m.group(1)[len("file://"):]
+        src = m.group(1)
         with tempfile.TemporaryDirectory() as t:
             clone = pathlib.Path(t) / "stores"
             run(["git", "clone", "-q", src, str(clone)], t)
@@ -214,7 +214,7 @@ def main():
             run(["git", "-c", "user.name=m", "-c", "user.email=m@m", "commit", "-q", "-a", "-m", "tamper"], clone)
             rev = run(["git", "rev-parse", "HEAD"], clone).stdout.strip()
             old = re.search(r'rev = "([0-9a-f]{40})"\npath = "\.cancho-vcs/ml\.rng"', toml).group(1)
-            m3 = toml.replace("file://" + src, "file://" + str(clone)).replace(old, rev)
+            m3 = toml.replace(src, "file://" + str(clone)).replace(old, rev)
             ok3, msg3, _ = proof(m3, EXPECT, "mutant store-byte-changed")
             print(msg3 if not ok3 else "mutant store-byte-changed SURVIVED")
             if ok3:
