@@ -42,6 +42,55 @@ No verb is built here. The code of S0 is a library (`lib/special`) and a driver 
 The label of a block is the module name with the dot written as a dash (`ml-rng`, `linalg-chol`), as `cancho-ml`'s `docs/stores.md` section 3 says **[read]**; the toolbox
 labels are the module's short name, as in `cancho-ml`'s `cancho.toml`.
 
+### 2.0 The pinned set, as the check reads it
+
+cancho rev: `a4572ea3b506e4bcec1c4be43deda1043c11ba9f`
+cancho-table rev: `202b214372a03ec6ed8ca841357f3d2ed4de8aa0`
+cancho-tools rev: `8dab9176e521660333914dc768a80a29330a2a8e`
+cancho-ml rev: `2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0`
+
+<!-- pins:begin -->
+| cancho-tools | cli | toolbox.cli |
+| cancho-tools | describe | toolbox.describe |
+| cancho-tools | fail | toolbox.fail |
+| cancho-tools | limit | toolbox.limit |
+| cancho-tools | lines | toolbox.lines |
+| cancho-tools | out | toolbox.out |
+| cancho-tools | path | toolbox.path |
+| cancho-tools | place | toolbox.place |
+| cancho-tools | text | toolbox.text |
+| cancho-table | dec | dec |
+| cancho-table | facc | facc |
+| cancho-table | flt | flt |
+| cancho-table | pow5 | pow5 |
+| cancho-table | reader | reader |
+| cancho-ml | ml-refuse | ml.refuse |
+| cancho-ml | ml-limits | ml.limits |
+| cancho-ml | ml-rng | ml.rng |
+| cancho-ml | ml-exact | ml.exact |
+| cancho-ml | ml-fbits | ml.fbits |
+| cancho-ml | ml-fsq | ml.fsq |
+| cancho-ml | ml-matrix | ml.matrix |
+| cancho-ml | linalg-order | linalg.order |
+| cancho-ml | linalg-tensor | linalg.tensor |
+| cancho-ml | linalg-dot | linalg.dot |
+| cancho-ml | linalg-axpy | linalg.axpy |
+| cancho-ml | linalg-gemv | linalg.gemv |
+| cancho-ml | linalg-syrk | linalg.syrk |
+| cancho-ml | linalg-gemm | linalg.gemm |
+| cancho-ml | linalg-chol | linalg.chol |
+| cancho-ml | linalg-par | linalg.par |
+| cancho-ml | metrics-rules | metrics.rules |
+| cancho-ml | metrics-ratio | metrics.ratio |
+| cancho-ml | metrics-classify | metrics.classify |
+| cancho-ml | metrics-sums | metrics.sums |
+| cancho-ml | metrics-regress | metrics.regress |
+| cancho-ml | metrics-rank | metrics.rank |
+| cancho-ml | metrics-splits | metrics.splits |
+<!-- pins:end -->
+
+(repository, label of the block, module). `scripts/check_pins.sh` holds the same list and PN7 fails when the two differ.
+
 ### 2.1 What the check refuses (`scripts/check_pins.sh`)
 
 Each is a failure with its own message, exit 1:

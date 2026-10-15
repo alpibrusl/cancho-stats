@@ -1,0 +1,196 @@
+# Every dependency is a pinned store, never a copy (docs/numerics.md section 2; scripts/check_pins.sh checks this file against the document).
+#   cancho-tools: the contract package, one store per module, at one rev (the nine modules cancho-ml lists).
+#   cancho-table: dec, facc, flt, pow5, reader, at one rev (cancho-table#44, the rev cancho-ml pins).
+#   cancho-ml: the 23 numeric modules of cancho-ml#46 (docs/stores.md of that repository), one block per module, label = module name with the dot as a dash.
+#     cancho-ml#46 is not merged and its branch is not pushed: the URL is a file:// URL of a local clone at the head of the branch v1-stores
+#     (docs/numerics.md section 2.3). It is replaced by https://github.com/alpibrusl/cancho-ml and the merge commit when that lands.
+
+[package]
+name = "stats"
+cancho = "a4572ea3b506e4bcec1c4be43deda1043c11ba9f"
+
+[dependencies.cli]
+git = "https://github.com/alpibrusl/cancho-tools"
+rev = "8dab9176e521660333914dc768a80a29330a2a8e"
+path = ".cancho-vcs/toolbox.cli"
+
+[dependencies.describe]
+git = "https://github.com/alpibrusl/cancho-tools"
+rev = "8dab9176e521660333914dc768a80a29330a2a8e"
+path = ".cancho-vcs/toolbox.describe"
+
+[dependencies.fail]
+git = "https://github.com/alpibrusl/cancho-tools"
+rev = "8dab9176e521660333914dc768a80a29330a2a8e"
+path = ".cancho-vcs/toolbox.fail"
+
+[dependencies.limit]
+git = "https://github.com/alpibrusl/cancho-tools"
+rev = "8dab9176e521660333914dc768a80a29330a2a8e"
+path = ".cancho-vcs/toolbox.limit"
+
+[dependencies.lines]
+git = "https://github.com/alpibrusl/cancho-tools"
+rev = "8dab9176e521660333914dc768a80a29330a2a8e"
+path = ".cancho-vcs/toolbox.lines"
+
+[dependencies.out]
+git = "https://github.com/alpibrusl/cancho-tools"
+rev = "8dab9176e521660333914dc768a80a29330a2a8e"
+path = ".cancho-vcs/toolbox.out"
+
+[dependencies.path]
+git = "https://github.com/alpibrusl/cancho-tools"
+rev = "8dab9176e521660333914dc768a80a29330a2a8e"
+path = ".cancho-vcs/toolbox.path"
+
+[dependencies.place]
+git = "https://github.com/alpibrusl/cancho-tools"
+rev = "8dab9176e521660333914dc768a80a29330a2a8e"
+path = ".cancho-vcs/toolbox.place"
+
+[dependencies.text]
+git = "https://github.com/alpibrusl/cancho-tools"
+rev = "8dab9176e521660333914dc768a80a29330a2a8e"
+path = ".cancho-vcs/toolbox.text"
+
+[dependencies.dec]
+git = "https://github.com/alpibrusl/cancho-table"
+rev = "202b214372a03ec6ed8ca841357f3d2ed4de8aa0"
+path = ".cancho-vcs/dec"
+
+[dependencies.facc]
+git = "https://github.com/alpibrusl/cancho-table"
+rev = "202b214372a03ec6ed8ca841357f3d2ed4de8aa0"
+path = ".cancho-vcs/facc"
+
+[dependencies.flt]
+git = "https://github.com/alpibrusl/cancho-table"
+rev = "202b214372a03ec6ed8ca841357f3d2ed4de8aa0"
+path = ".cancho-vcs/flt"
+
+[dependencies.pow5]
+git = "https://github.com/alpibrusl/cancho-table"
+rev = "202b214372a03ec6ed8ca841357f3d2ed4de8aa0"
+path = ".cancho-vcs/pow5"
+
+[dependencies.reader]
+git = "https://github.com/alpibrusl/cancho-table"
+rev = "202b214372a03ec6ed8ca841357f3d2ed4de8aa0"
+path = ".cancho-vcs/reader"
+
+[dependencies.ml-refuse]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/ml.refuse"
+
+[dependencies.ml-limits]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/ml.limits"
+
+[dependencies.ml-rng]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/ml.rng"
+
+[dependencies.ml-exact]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/ml.exact"
+
+[dependencies.ml-fbits]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/ml.fbits"
+
+[dependencies.ml-fsq]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/ml.fsq"
+
+[dependencies.ml-matrix]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/ml.matrix"
+
+[dependencies.linalg-order]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/linalg.order"
+
+[dependencies.linalg-tensor]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/linalg.tensor"
+
+[dependencies.linalg-dot]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/linalg.dot"
+
+[dependencies.linalg-axpy]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/linalg.axpy"
+
+[dependencies.linalg-gemv]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/linalg.gemv"
+
+[dependencies.linalg-syrk]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/linalg.syrk"
+
+[dependencies.linalg-gemm]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/linalg.gemm"
+
+[dependencies.linalg-chol]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/linalg.chol"
+
+[dependencies.linalg-par]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/linalg.par"
+
+[dependencies.metrics-rules]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/metrics.rules"
+
+[dependencies.metrics-ratio]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/metrics.ratio"
+
+[dependencies.metrics-classify]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/metrics.classify"
+
+[dependencies.metrics-sums]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/metrics.sums"
+
+[dependencies.metrics-regress]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/metrics.regress"
+
+[dependencies.metrics-rank]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/metrics.rank"
+
+[dependencies.metrics-splits]
+git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
+rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
+path = ".cancho-vcs/metrics.splits"
+
