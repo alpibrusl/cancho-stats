@@ -206,3 +206,10 @@ name = "acc-check"
 sources = ["lib/special", "tools/acc-check"]
 std = true
 out = "build/acc-check"
+
+# S1: the big-integer arithmetic of the exact variance (docs/describe.md section 3), checked on numbers given in hexadecimal (scripts/gate_bigint.py).
+[[bin]]
+name = "bigint-check"
+sources = ["lib/acc", "tools/bigint-check"]
+std = true
+out = "build/bigint-check"
