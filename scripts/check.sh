@@ -13,10 +13,11 @@ step "pins"; sh scripts/check_pins.sh; $PY scripts/mutants_pins.py | tail -1
 step "workflow"; $PY scripts/check_workflow.py; $PY scripts/check_workflow.py --mutants | tail -1
 step "documents"; sh scripts/check_docs.sh
 step "references"; $PY scripts/special_ref.py --selfcheck
-step "build"; $CANCHO install >/dev/null; $CANCHO build --bin special-check; $CANCHO build --bin acc-check; $CANCHO build --bin bigint-check
+step "build"; $CANCHO install >/dev/null; $CANCHO build --bin special-check; $CANCHO build --bin acc-check; $CANCHO build --bin bigint-check; $CANCHO build --bin psum-check
 step "consumption"; $PY scripts/consume.py --mutants | tail -2
 step "domain and fuzz"; $PY scripts/gate_domain.py --fuzz 50000 | grep -v "first case with"
 step "big integers"; $PY scripts/gate_bigint.py --n 3000
+step "power sums"; $PY scripts/gate_psum.py --vectors 300
 step "exact accumulation"; $PY scripts/measure_acc.py | tail -3
 step "accuracy sweeps (fast)"; $PY scripts/gate_special.py --fast
 step "independence"; $PY scripts/gate_independence.py --fast

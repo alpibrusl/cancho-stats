@@ -213,3 +213,10 @@ name = "bigint-check"
 sources = ["lib/acc", "tools/bigint-check"]
 std = true
 out = "build/bigint-check"
+
+# S1: the exact power sums of acc.psum on vectors from standard input (scripts/gate_psum.py).
+[[bin]]
+name = "psum-check"
+sources = ["lib/acc", "tools/psum-check"]
+std = true
+out = "build/psum-check"

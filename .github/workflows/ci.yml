@@ -164,6 +164,7 @@ jobs:
           cancho build --bin special-check
           cancho build --bin acc-check
           cancho build --bin bigint-check
+          cancho build --bin psum-check
 
       - name: The pins agree with the document (with the stores installed)
         if: steps.stores.outputs.fetchable == 'yes'
@@ -180,6 +181,10 @@ jobs:
       - name: Big-integer arithmetic against Python integers
         if: steps.stores.outputs.fetchable == 'yes'
         run: python3 scripts/gate_bigint.py --n 3000
+
+      - name: Exact power sums against Fractions
+        if: steps.stores.outputs.fetchable == 'yes'
+        run: python3 scripts/gate_psum.py --vectors 300
 
       - name: Accuracy sweeps against the high-precision reference (fast)
         if: steps.stores.outputs.fetchable == 'yes'

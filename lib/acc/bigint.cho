@@ -105,6 +105,16 @@ pub fn shl_add[&a](a: &!a [int], n: int, k: int, v: int) -> [] int {
     return carry;
 }
 
+// into = a (n limbs)
+pub fn copy[&d, &a](into: &!d [int], a: &a [int], n: int) -> [] int {
+    var i = 0;
+    while i < n {
+        into[i] = a[i];
+        i = i + 1;
+    }
+    return 0;
+}
+
 // a = a - b, for a >= b (na >= nb)
 pub fn sub_in[&a, &b](a: &!a [int], na: int, b: &b [int], nb: int) -> [] int {
     var owe = 0;
