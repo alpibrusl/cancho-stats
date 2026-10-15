@@ -279,7 +279,7 @@ i7-1260P), a clean clone under `~/Workspace/xplat-ml`, `taskset -c 0-6` for ever
 
 * `scripts/check_pins.sh`: 37 dependencies (9 contract stores, 5 cancho-table stores, 23 cancho-ml stores), none copied. `scripts/mutants_pins.py`: **22 killed of 22**, each by the id it is for; both controls pass.
 * `scripts/check_workflow.py --mutants`: **23 mutants, 0 survived** (named images `ubuntu-24.04`, `ubuntu-24.04-arm`, `macos-26`; every action pinned by a 40-hex SHA with a version comment; read-only
-  permissions). The workflow's result on GitHub is in 8.7.
+  permissions). The workflow ran on GitHub (run 38777354616, 2026-10-15) on `ubuntu-24.04`, `ubuntu-24.04-arm` and `macos-26`: every step succeeded, none skipped, including the build from the pinned GitHub stores, the domain, accumulation and fast accuracy gates, and the fingerprint equal to the golden with 1 to 16 threads (8.5).
 * `scripts/consume.py --mutants`: a scratch package outside the tree with all 37 blocks installs, builds and prints the expected values (the first output of SplitMix64 from seed 0 `e220a8397b1dcdaf`,
   `derive(derive(42, 1), 0)` = `d8005cdd08a0d146`, `pow10`, a bit-exact round trip, `3.0^2 = 9.0` through `ml.fsq`, `facc.width() = 73`, ...; sha256 of the output `a8476e10...731f`); 3 mutants (a block removed, a wrong value, one byte of a
   store changed, which `cancho install` refuses) **all killed**.
@@ -363,9 +363,9 @@ any case** (it was, once, by an input that is now handled: 3.3); the mutant with
 
 ### 8.5 Platforms and threads (`scripts/xplat_fp.py`)
 
-48 lines (`special` 27 sweeps of 3,000 cases (300 for `big` ranges), `edge` 18, `acc` 3), written on the Mac into `docs/xplat_fp.txt`. **Equal to the golden on macOS arm64 and on Linux x86-64 (gram)**, and on each,
+48 lines (`special` 27 sweeps of 3,000 cases (300 for `big` ranges), `edge` 18, `acc` 3), written on the Mac into `docs/xplat_fp.txt`. **Equal to the golden on macOS arm64 (M4 Max, the writer), on Linux x86-64 (gram) and, in the GitHub run of 8.1, on Linux x86-64 (`ubuntu-24.04`), Linux aarch64 (`ubuntu-24.04-arm`) and macOS arm64 (`macos-26`)**, and on each,
 `special-check FN --threads T` for T in 1, 2, 3, 4, 7, 8, 16 prints the bytes of the sequential run in every sweep (gram: 2 min 29 s for the whole check with 7 cores for 16 threads, one run). This shows equal bytes for these
-sweeps on these two platforms; it shows nothing about other inputs or platforms. With a generator that called a platform `libm` the two machines produced different *inputs* (Python's `math.log` and `exp`
+sweeps on these five machines; it shows nothing about other inputs or platforms. With a generator that called a platform `libm` the two machines produced different *inputs* (Python's `math.log` and `exp`
 differ in the last bit between them); the generator is now exact (`frexp`, `ldexp`, integer arithmetic). `--mutants` kills 6 of 6 faults of the check.
 
 ### 8.6 Mutants of the special functions (`scripts/mutants_special.py`, 85 mutants, fast gates)
@@ -376,7 +376,7 @@ next to the name). 7 are the controls of G2 (`control-*`): a Stirling coefficien
 
 ### 8.7 Not done, and risks
 
-* CI result: see the first bullet of this list.
+* The pin of the numeric stores is cancho-ml's merge commit `99e9b64` (PR #51); the full-gate job (every range at full size, the mutants) has not run on GitHub.
 * The sweeps ran at 2,000 cases per range (200 for `big`), not the 20,000 of 7.1; the 600-case fast run and the 2,000-case run both pass. 4,000 points per function for G3 were not reached (the fast cases, 200 to 600 per range, were).
 * Accuracy is bounded only in the ranges of 3.2; beyond them to the refusal limits the functions answer without a bound. The bounds are measured on seeded samples, not proved.
 * The exact numerator of variance and covariance (a big-integer product), the `stats.sum-overflow` and `stats.range-product` refusals and the row limit are rules of 8.2, not code.
