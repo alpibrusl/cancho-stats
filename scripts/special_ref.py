@@ -163,6 +163,11 @@ def beta_ix(a, b, x):
     raise RuntimeError("beta complement below the precision tried")
 
 
+def lgamma(x):
+    with mp.workdps(_dps_for(x) + 20):
+        return +mp.loggamma(mpf(x))
+
+
 def lgamma1p(a):
     """ln Gamma(1 + a) to full relative accuracy for tiny a (the working precision grows with -log10 a)."""
     a = mpf(a)

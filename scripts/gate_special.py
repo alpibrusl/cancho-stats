@@ -5,7 +5,7 @@
 
 For every range: draw the cases from a seeded SplitMix64 stream (the inputs are exact doubles), compute the reference at high precision (scripts/special_ref.py), run the driver on the
 cases (stdin: `id hex hex ...`, stdout: `id hex code`), and check each result against its bound B(f) = B0 + 4e-16 |ln f| (relative), B0 max(1, |f|) (lgamma, absolute) or 1e-15 + 1e-13 |x| (qnorm).
-A true value below the smallest normal double is judged by an absolute bound of 2e-323; a result that is NaN, infinite, or accompanied by a refusal code is a failure inside a range.
+The bound carries 4 units of the smallest subnormal as an absolute allowance (2e-323), which matters only for results below the smallest normal double; a result that is NaN, infinite, or accompanied by a refusal code is a failure inside a range.
 
 The references are cached (`--refs`, default build/refs-<seed>-<scale>.json) so that the mutants, which rerun the driver only, do not recompute them.
 Exit 0: every case of every range is inside its bound. Exit 1: a case is outside (the report names the worst case per range). Exit 2: the harness failed.
@@ -48,7 +48,15 @@ class SM64:
         return lo + (hi - lo) * self.u()
 
     def logu(self, lo, hi):
-        return math.exp(math.log(lo) + self.u() * (math.log(hi) - math.log(lo)))
+        """log-uniform in [lo, hi] WITHOUT libm (a platform's exp and log differ in the last bit, which would change the cases and so the fingerprint): a uniform binary exponent and a
+        mantissa uniform in [1, 2), rejected outside [lo, hi]. frexp and ldexp are exact."""
+        elo = math.frexp(lo)[1]
+        ehi = math.frexp(hi)[1]
+        while True:
+            e = elo - 1 + self.next() % (ehi - elo + 2)
+            v = math.ldexp(1.0 + self.u(), e)
+            if lo <= v <= hi:
+                return v
 
     def pick(self, seq):
         return seq[self.next() % len(seq)]
@@ -126,7 +134,14 @@ def g_erfc(r, i):
 
 def g_gamma_mid(r, i):
     a = r.logu(1e-2, 1e4)
-    m = i % 5
+    m = i % 7
+    if m == 5:
+        # moderate deviations (10% to 70%) at large a: the range where Loader's x ln(x / np) is not in its series window
+        a = r.logu(1e3, 1e4)
+        return (a, a * (r.uni(0.3, 0.9) if r.u() < 0.5 else r.uni(1.1, 2.5)))
+    if m == 6:
+        a = r.logu(15.0, 1e3)
+        return (a, a * (r.uni(0.2, 0.9) if r.u() < 0.5 else r.uni(1.1, 3.0)))
     if m == 0:
         x = r.logu(1e-300, 1e5)
     elif m == 1 or m == 2:
@@ -387,18 +402,17 @@ def judge(kind, b0, y, code, tag, f):
     mp.dps = 60
     err = abs(mpf(y) - f)
     af = abs(f)
+    if af == 0 and kind not in ("lgamma", "qnorm"):
+        return (y == 0.0), (0.0 if y == 0.0 else float("inf")), float(err)
     if kind == "lgamma":
         bound = mpf(b0) * max(mpf(1), af)
     elif kind == "qnorm":
         bound = mpf("1e-15") + mpf("1e-13") * af
-    elif kind == "relflat" and af >= SMALLEST_NORMAL:
-        bound = mpf(b0) * af
-    elif af < SMALLEST_NORMAL:
-        bound = mpf("2e-323")
-        if af == 0:
-            return (y == 0.0), (0.0 if y == 0.0 else float("inf")), float(err)
+    elif kind == "relflat":
+        bound = mpf(b0) * af + mpf("2e-323")
     else:
-        bound = (mpf(b0) + mpf(B1) * abs(mp.log(af))) * af
+        # relative bound with the stated far-tail term, plus 4 units of the smallest subnormal: below the smallest normal double a result has fewer bits, and the unit is what is left
+        bound = (mpf(b0) + mpf(B1) * abs(mp.log(af))) * af + mpf("2e-323")
     ratio = float(err / bound)
     return err <= bound, ratio, float(err / af) if af != 0 else float(err)
 
