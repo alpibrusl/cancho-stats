@@ -8,6 +8,7 @@ D1  the edges (0, 1, 2^-1074, 2^-1022, the largest double, +-inf, NaN payloads, 
 D2  fuzz: N random 64-bit patterns per argument position per function, uniform over the BIT PATTERNS (so exponents are uniform: huge, tiny, subnormal, inf and NaN all appear). Every answer must
     satisfy the contract of its function: code 0 means a finite value in the range of the function; code != 0 means a NaN value and a tag of special.rules; cdf and sf of a pair are in [0,1] and
     cdf + sf is within 1e-12 of 1 where both are at least 1e-10 (each is promised to 5e-13 relative, so a tighter criterion would not follow from the bounds); the quantile is monotone on a random sorted set of probabilities.
+D1b the table EXPECT of this file: the exact refusal tag (or an answer) of 52 edges, one or more per function.
 D3  every tag of special.rules is reached by at least one case of D1 or D2, and no other tag is printed. (stats.noconverge is the one tag the inputs of D1 and D2 do not reach: see the report; the
     mutant that lowers the iteration cap shows the path is wired.)
 Exit 0: all hold. Exit 1: a violation (the first few are printed). Exit 2: the harness failed.
@@ -77,6 +78,35 @@ def edge_cases(fn):
 FIRST = {}
 
 
+NAN = float("nan")
+INF = math.inf
+# the refusal each of these edges must give (the document's section 3.3 and 3.4): "ok" is an answer
+EXPECT = [
+    ("lgamma", (1.0,), "ok"), ("lgamma", (0.0,), "stats.domain-param"), ("lgamma", (-1.0,), "stats.domain-param"), ("lgamma", (NAN,), "stats.domain-nan"), ("lgamma", (1e301,), "stats.domain-range"),
+    ("erf", (NAN,), "stats.domain-nan"), ("erf", (INF,), "ok"), ("erfc", (-INF,), "ok"), ("erfc", (NAN,), "stats.domain-nan"),
+    ("gamma_p", (1.0, 0.0), "ok"), ("gamma_p", (1.0, INF), "ok"), ("gamma_p", (0.0, 1.0), "stats.domain-param"), ("gamma_p", (1.0, -1.0), "stats.domain-param"),
+    ("gamma_q", (NAN, 1.0), "stats.domain-nan"), ("gamma_q", (1.0, NAN), "stats.domain-nan"), ("gamma_q", (2e8, 1.0), "stats.domain-range"),
+    ("beta_lo", (1.0, 1.0, 0.0), "ok"), ("beta_lo", (0.0, 1.0, 0.5), "stats.domain-param"), ("beta_lo", (1.0, 1.0, 1.5), "stats.domain-param"), ("beta_lo", (1.0, 1.0, NAN), "stats.domain-nan"),
+    ("beta_up", (2e8, 1.0, 0.5), "stats.domain-range"), ("beta_up", (1.0, -1.0, 0.5), "stats.domain-param"),
+    ("norm_cdf", (NAN,), "stats.domain-nan"), ("norm_sf", (INF,), "ok"), ("norm_cdf", (-INF,), "ok"),
+    ("qnorm", (0.5,), "ok"), ("qnorm", (0.0,), "stats.domain-prob"), ("qnorm", (1.0,), "stats.domain-prob"), ("qnorm", (-0.5,), "stats.domain-prob"), ("qnorm", (NAN,), "stats.domain-nan"),
+    ("t_cdf", (1.0, 3.0), "ok"), ("t_cdf", (1.0, 0.0), "stats.domain-param"), ("t_cdf", (1.0, 3e8), "stats.domain-range"), ("t_cdf", (NAN, 1.0), "stats.domain-nan"), ("t_sf", (INF, 3.0), "ok"),
+    ("chi2_cdf", (-1.0, 3.0), "stats.domain-param"), ("chi2_sf", (1.0, 3e8), "stats.domain-range"), ("chi2_sf", (NAN, 3.0), "stats.domain-nan"), ("chi2_cdf", (0.0, 3.0), "ok"),
+    ("f_cdf", (1.0, 0.0, 2.0), "stats.domain-param"), ("f_cdf", (-1.0, 2.0, 2.0), "stats.domain-param"), ("f_sf", (1.0, 3e8, 2.0), "stats.domain-range"), ("f_sf", (1.0, 2.0, NAN), "stats.domain-nan"), ("f_cdf", (INF, 2.0, 2.0), "ok"),
+    ("binom_cdf", (1.0, 10.0, 2.0), "stats.domain-prob"), ("binom_cdf", (1.0, 0.5, 0.5), "stats.domain-param"), ("binom_sf", (1.0, 1.5, 0.5), "stats.domain-param"),
+    ("binom_cdf", (1.0, 2e8, 0.5), "stats.domain-range"), ("binom_sf", (1.5, 10.0, 0.5), "stats.domain-param"), ("binom_cdf", (NAN, 10.0, 0.5), "stats.domain-nan"), ("binom_cdf", (3.0, 10.0, 0.5), "ok"),
+]
+
+
+def check_expect(driver, tags, bad, threads):
+    for fn, args, want in EXPECT:
+        (v, code), = run(driver, fn, [args], 0)
+        got = "ok" if code == 0 else tags.get(code, "?%d" % code)
+        if got != want:
+            bad.append((fn, args, "expected %s, got %s" % (want, got)))
+    return len(EXPECT)
+
+
 def contract(fn, case, value, code, tags, bad):
     if code != 0 and (code, fn) not in FIRST:
         FIRST[(code, fn)] = case
@@ -114,6 +144,7 @@ def main():
     r = SM64(a.seed)
     total = 0
     try:
+        total += check_expect(a.driver, tags, bad, a.threads)
         for fn in ARITY:
             # D1
             cs = edge_cases(fn)
