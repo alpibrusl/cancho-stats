@@ -1,0 +1,147 @@
+edition 5;
+
+module special.igam;
+
+import std.math;
+import special.lgam;
+import special.rules;
+
+// The regularised incomplete gamma functions P(a, x) and Q(a, x) (docs/numerics.md section 3.1). The prefactor x^a e^-x / Gamma(a + 1) is Loader's saddle-point form for
+// a >= 15 and a direct exponential below; the power series for x < a + 1 (a >= 0.1), Lentz's continued fraction above; for a < 0.1 and x < 1 a series that computes Q
+// without the cancellation of 1 - P (Q = -expm1(L) - e^L a S, L = a ln x - lgamma(1 + a)). Both tails are answered, each computed directly where the other would lose it.
+// Out of range is a refusal (a code and NaN), never a trap; the series and the fraction have an iteration cap (`cap`), reaching it is `stats.noconverge`.
+
+fn nan() -> [] float {
+    return 0.0 / 0.0;
+}
+
+// the iteration cap of the series and of the continued fraction for the parameter `a` (docs/numerics.md section 3.3)
+pub fn cap(a: float) -> [] int {
+    return 2000 + truncate(100.0 * sqrt(a));
+}
+
+// x^a e^-x / Gamma(a + 1) for a > 0, x > 0
+pub fn pre(a: float, x: float) -> [] float {
+    if a >= 15.0 {
+        return math.exp(0.0 - lgam.stirlerr(a) - lgam.bd0(a, x)) / sqrt(6.283185307179586 * a);
+    }
+    return math.exp(a * math.log(x) - x - lgam.lgamma1p(a));
+}
+
+// sum_{n>=0} x^n / ((a + 1) ... (a + n)); NaN when the cap is reached
+pub fn series(a: float, x: float) -> [] float {
+    var term = 1.0;
+    var sum = 1.0;
+    var n = 1;
+    let cp = cap(a);
+    while n <= cp {
+        term = term * x / (a + float_of(n));
+        sum = sum + term;
+        if term < sum * 1.0e-17 {
+            return sum;
+        }
+        n = n + 1;
+    }
+    return nan();
+}
+
+// the continued fraction 1 / (x + 1 - a - 1 (1 - a) / (x + 3 - a - 2 (2 - a) / (x + 5 - a - ...))) by the modified Lentz method; NaN when the cap is reached.
+// Q(a, x) = pre(a, x) * a * cf_h(a, x).
+pub fn cf_h(a: float, x: float) -> [] float {
+    let tiny = 1.0e-300;
+    var b = x - a + 1.0;
+    var c = 1.0 / tiny;
+    var d = 1.0 / b;
+    var h = d;
+    var i = 1;
+    let cp = cap(a);
+    while i <= cp {
+        let fi = float_of(i);
+        let an = 0.0 - fi * (fi - a);
+        b = b + 2.0;
+        d = an * d + b;
+        if math.fabs(d) < tiny {
+            d = tiny;
+        }
+        c = b + an / c;
+        if math.fabs(c) < tiny {
+            c = tiny;
+        }
+        d = 1.0 / d;
+        let del = d * c;
+        h = h * del;
+        if math.fabs(del - 1.0) < 2.5e-16 {
+            return h;
+        }
+        i = i + 1;
+    }
+    return nan();
+}
+
+fn clamp01(v: float) -> [] float {
+    if v > 1.0 {
+        return 1.0;
+    }
+    if v < 0.0 {
+        return 0.0;
+    }
+    return v;
+}
+
+// (P, Q, code) of the regularised incomplete gamma function at a > 0 (a <= 1e8), x >= 0
+pub fn gamma_pq(a: float, x: float) -> [] (float, float, int) {
+    if is_nan(a) || is_nan(x) {
+        return (nan(), nan(), rules.domain_nan());
+    }
+    if a <= 0.0 || x < 0.0 {
+        return (nan(), nan(), rules.domain_param());
+    }
+    if a > 1.0e8 {
+        return (nan(), nan(), rules.domain_range());
+    }
+    if x == 0.0 {
+        return (0.0, 1.0, 0);
+    }
+    if x > 1.7976931348623157e308 {
+        return (1.0, 0.0, 0);
+    }
+    if a < 0.1 && x < 1.0 {
+        let l = a * math.log(x) - lgam.lgamma1p(a);
+        var sum = 0.0;
+        var term = 1.0;
+        var n = 1;
+        while n < 60 {
+            term = term * (0.0 - x) / float_of(n);
+            let t = term / (a + float_of(n));
+            sum = sum + t;
+            if math.fabs(t) < 1.0e-20 * math.fabs(sum) {
+                n = 60;
+            }
+            n = n + 1;
+        }
+        let el = math.exp(l);
+        return (clamp01(el * (1.0 + a * sum)), clamp01(0.0 - math.expm1(l) - el * a * sum), 0);
+    }
+    let pr = pre(a, x);
+    if pr == 0.0 {
+        // the prefactor underflowed: the tail it multiplies is below the smallest double (and a subnormal first term would keep the fraction from settling)
+        if x < a + 1.0 {
+            return (0.0, 1.0, 0);
+        }
+        return (1.0, 0.0, 0);
+    }
+    if a >= 0.1 && x < a + 1.0 {
+        let s = series(a, x);
+        if is_nan(s) {
+            return (nan(), nan(), rules.noconverge());
+        }
+        let p = clamp01(pr * s);
+        return (p, clamp01(1.0 - p), 0);
+    }
+    let h = cf_h(a, x);
+    if is_nan(h) {
+        return (nan(), nan(), rules.noconverge());
+    }
+    let q = clamp01(pr * a * h);
+    return (clamp01(1.0 - q), q, 0);
+}

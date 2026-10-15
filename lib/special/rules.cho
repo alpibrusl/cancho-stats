@@ -1,0 +1,49 @@
+edition 5;
+
+module special.rules;
+
+// The refusals of the special functions (docs/numerics.md section 3.4): a code (0 is "no refusal") and its stable rule tag. A refusing function answers the value NaN
+// and the code; nothing in this library traps, and no tag carries data from the input.
+
+pub fn count() -> [] int {
+    return 5;
+}
+
+pub fn domain_nan() -> [] int {
+    return 1;
+}
+
+pub fn domain_param() -> [] int {
+    return 2;
+}
+
+pub fn domain_prob() -> [] int {
+    return 3;
+}
+
+pub fn domain_range() -> [] int {
+    return 4;
+}
+
+pub fn noconverge() -> [] int {
+    return 5;
+}
+
+pub fn tag(code: int) -> [] &static [byte] {
+    if code == 1 {
+        return "stats.domain-nan";
+    }
+    if code == 2 {
+        return "stats.domain-param";
+    }
+    if code == 3 {
+        return "stats.domain-prob";
+    }
+    if code == 4 {
+        return "stats.domain-range";
+    }
+    if code == 5 {
+        return "stats.noconverge";
+    }
+    return "stats.unknown";
+}
