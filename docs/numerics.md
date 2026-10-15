@@ -156,13 +156,13 @@ argument of the last `exp`). Ranges are of the *inputs*, sampled as in 7.1.
 | `erf(x)` | `abs x` in `[1e-300, 6]` | relative | `2e-13` | for `abs x` below `1e-8`, `erf(x)` is `2x/sqrt(pi)` to the last bit of the product |
 | `erfc(x)` | `x` in `[-6, 26.5]` | relative | `2e-13` | `B1` term applies; from `x = 26.5` the result is below `1e-306` and the bound is waived, see 3.3 |
 | `P(a, x)`, `Q(a, x)` | `a` in `[1e-2, 1e4]`, `x` in `[1e-300, 1e5]` | relative | `2e-13` | the smaller tail included (any `P` or `Q` above `1e-300`) |
-| same | `a` in `(1e4, 1e7]`, `x` within `a +- 40 sqrt(a)` | relative | `2e-12` | |
+| same | `a` in `(1e4, 1e7]`, `x` within `a +- 12 sqrt(a)` | relative | `5e-12` | beyond 12 standard deviations the relative sensitivity to the rounding of `n * p`-type products (about `a eps` times the deviation) is of the size of the bound; the sweep stops there and the document says so |
 | same | `a` in `[1e-300, 1e-2)` | relative | `2e-12` | |
 | `I_x(a, b)` both tails | `a`, `b` in `[1e-2, 1e3]` | relative | `5e-13` | |
-| same | `a` or `b` in `(1e3, 1e6]`, the other in `[1e-2, 1e6]` | relative | `5e-12` | `x` within `a/(a+b) +- 40 sd` of the mean |
+| same | `a` or `b` in `(1e3, 1e6]`, the other in `[1e-2, 1e6]` | relative | `1e-11` | `x` within `a/(a+b) +- 12 sd` of the mean |
 | normal `cdf`, `sf` | `z` in `[-38, 38]` | relative | `2e-13` | |
 | Student `t` cdf, sf | `nu` in `[0.1, 1e6]` and `nu = 1e8`, `t` such that the tail is at least `1e-300` | relative | `1e-12` | |
-| chi-square cdf, sf | `nu` in `[1e-2, 1e6]` | relative | `2e-13` for `nu <= 1e4`, `2e-12` above | |
+| chi-square cdf, sf | `nu` in `[1e-2, 1e6]` | relative | `2e-13` for `nu <= 1e4`, `5e-12` above (`x` within `nu +- 12 sqrt(2 nu)`) | |
 | `F` cdf, sf | `d1`, `d2` in `[0.1, 1e5]` | relative | `1e-12` | |
 | binomial cdf, sf | `n` in `[1, 1e6]`, `p` in `[1e-6, 1 - 1e-6]`, integer `k` | relative | `5e-12` | |
 | `qnorm(p)` | `p` in `[1e-300, 1)`, and subnormal `p` down to `5e-324` | absolute plus relative | `1e-15 + 1e-13 * abs x` | `p > 1/2` uses `-qnorm(1-p)`, exact subtraction |
@@ -191,7 +191,7 @@ that no other tag is printed.
 
 ## 4. How the special functions are judged
 
-The oracle is `scripts/oracle_special.py` (a venv inside the clone: `mpmath`, `numpy`, `scipy`; the venv is not committed, `ci/requirements.txt` lists the versions). `numpy` and `scipy` appear in
+The reference is `scripts/special_ref.py` and the gate `scripts/gate_special.py` (a venv inside the clone: `mpmath`, `numpy`, `scipy`; the venv is not committed, `ci/requirements.txt` lists the versions). `mpmath`'s own `gammainc` and `betainc` fail to converge or take minutes for parameters of 1e4 and above **[measured, 2026-10-15, mpmath 1.4.1]**, so for those two the reference evaluates the defining series and continued fraction in `mpmath` arithmetic at 100 digits (more when the exponent is large); that reference is itself gated by `special_ref.py --selfcheck`: it must agree with `mpmath`'s native functions to 1e-30 relative wherever the native value is at least 1e-20 (below that `mpmath` itself returns noise, even a negative number, **[measured]**), and with `scipy` in G3. `numpy` and `scipy` appear in
 **one** place: the *independence check* of 7.1 item 5, a second reference to catch an error shared by `mpmath`'s own evaluation at a few thousand points; **no sentence of this repository says a result "matches" scipy beyond the bound
 fixed here and measured.**
 
