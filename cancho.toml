@@ -194,3 +194,10 @@ git = "file:///Users/alfonso/Workspace/alpibrusl/lexsys/cancho-ml-stores"
 rev = "2de565c99eb5e8f8c28ed984fbcbea3136b5b2f0"
 path = ".cancho-vcs/metrics.splits"
 
+
+# S0: the driver of the numeric gates (docs/numerics.md section 4). `cancho build --bin special-check`, after `cancho install`.
+[[bin]]
+name = "special-check"
+sources = ["lib/special", "tools/special-check"]
+std = true
+out = "build/special-check"

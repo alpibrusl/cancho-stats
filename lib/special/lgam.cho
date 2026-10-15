@@ -1,0 +1,117 @@
+edition 5;
+
+module special.lgam;
+
+import std.math;
+
+// ln Gamma and the pieces the incomplete functions need (docs/numerics.md section 3.1): Stirling's correction, `lgamma`, `lgamma1p` (accurate for small arguments),
+// Loader's `stirlerr` and `bd0` (the saddle-point form of a Poisson or binomial density, free of the cancellation `x ln x - x` has for large x).
+// Only `std.math` is used: `exp`, `log`, `log1p` are cancho's own (docs/float-math.md section 9). Every function here assumes a finite argument in its domain; the callers check.
+
+fn nan() -> [] float {
+    return 0.0 / 0.0;
+}
+
+// delta(z) = lgamma(z) - (z - 1/2) ln z + z - ln sqrt(2 pi), for z >= 10, by the series 1/(12 z) - 1/(360 z^3) + 1/(1260 z^5) - ... (to z^-13: the next term is below 4e-17 at z = 10)
+pub fn delta(z: float) -> [] float {
+    let w = 1.0 / (z * z);
+    let s = 1.0 / 12.0 - w * (1.0 / 360.0 - w * (1.0 / 1260.0 - w * (1.0 / 1680.0 - w * (1.0 / 1188.0 - w * (691.0 / 360360.0 - w * (1.0 / 156.0))))));
+    return s / z;
+}
+
+// ln Gamma(x) for finite x > 0: Stirling's series from 10 up, the upward recurrence below
+pub fn lgamma_pos(x: float) -> [] float {
+    if x >= 10.0 {
+        return (x - 0.5) * math.log(x) - x + 0.9189385332046727 + delta(x);
+    }
+    var p = 1.0;
+    var z = x;
+    while z < 10.0 {
+        p = p * z;
+        z = z + 1.0;
+    }
+    return (z - 0.5) * math.log(z) - z + 0.9189385332046727 + delta(z) - math.log(p);
+}
+
+// zeta(k) - 1 for k = 2..17 (index k), by the direct sum to 29 and the Euler-Maclaurin tail (relative error below 1e-13 at k = 2, falling fast with k)
+static zeta_m1: [float] {
+    let t = alloc_slice[static](18, 0.0);
+    let pw = alloc_slice[static](30, 1.0);
+    var nk = 1.0;
+    let n = 30.0;
+    var k = 1;
+    var kf = 1.0;
+    while k < 18 {
+        var j = 2;
+        var jf = 2.0;
+        var s = 0.0;
+        while j < 30 {
+            pw[j] = pw[j] / jf;
+            s = s + pw[j];
+            j = j + 1;
+            jf = jf + 1.0;
+        }
+        nk = nk / n;
+        if k >= 2 {
+            let tail = nk * n / (kf - 1.0) + nk / 2.0 + kf * nk / n / 12.0 - kf * (kf + 1.0) * (kf + 2.0) * nk / (n * n * n) / 720.0 + kf * (kf + 1.0) * (kf + 2.0) * (kf + 3.0) * (kf + 4.0) * nk / (n * n * n * n * n) / 30240.0;
+            t[k] = s + tail;
+        }
+        k = k + 1;
+        kf = kf + 1.0;
+    }
+    return t;
+}
+
+// ln Gamma(1 + a) for 0 <= a: for a < 1/10 the series -gamma a + (ln(1+a) - a) + sum_{k>=2} (-1)^k (zeta(k) - 1) a^k / k, which keeps the relative accuracy that
+// lgamma(1 + a) loses for small a (it is about -0.577 a there); above, `lgamma_pos` (its absolute error is what the callers need)
+pub fn lgamma1p(a: float) -> [] float {
+    if a >= 0.1 {
+        return lgamma_pos(1.0 + a);
+    }
+    var s = 0.0;
+    var pw = a * a;
+    var k = 2;
+    var sign = 1.0;
+    while k < 18 {
+        s = s + sign * zeta_m1[k] * pw / float_of(k);
+        pw = pw * a;
+        sign = 0.0 - sign;
+        k = k + 1;
+    }
+    return 0.0 - 0.5772156649015329 * a + (math.log1p(a) - a) + s;
+}
+
+// stirlerr(n) = ln n! - ln(sqrt(2 pi n) (n/e)^n), n > 0 (Loader 2000)
+pub fn stirlerr(n: float) -> [] float {
+    if n <= 15.0 {
+        return lgamma_pos(n + 1.0) - (n + 0.5) * math.log(n) + n - 0.9189385332046727;
+    }
+    let nn = n * n;
+    return (1.0 / 12.0 - (1.0 / 360.0 - (1.0 / 1260.0 - (1.0 / 1680.0 - 1.0 / 1188.0 / nn) / nn) / nn) / nn) / n;
+}
+
+// bd0(x, np) = x ln(x / np) + np - x, x, np > 0 (Loader 2000): by the series in (x - np) / (x + np) when the two are within 10%
+pub fn bd0(x: float, np: float) -> [] float {
+    let d = x - np;
+    if math.fabs(d) < 0.1 * (x + np) {
+        let v0 = d / (x + np);
+        var s = d * v0;
+        if math.fabs(s) < 2.2250738585072014e-308 {
+            return s;
+        }
+        var ej = 2.0 * x * v0;
+        let v = v0 * v0;
+        var j = 1;
+        while j < 1000 {
+            ej = ej * v;
+            let s1 = s + ej / float_of(2 * j + 1);
+            if s1 == s {
+                return s1;
+            }
+            s = s1;
+            j = j + 1;
+        }
+        return s;
+    }
+    return x * math.log(x / np) + np - x;
+}

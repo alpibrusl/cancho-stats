@@ -1,0 +1,416 @@
+edition 5;
+
+module special.dist;
+
+import std.math;
+import special.lgam;
+import special.igam;
+import special.ibeta;
+import special.rules;
+
+// The public special functions and distribution functions (docs/numerics.md section 3): lgamma, erf, erfc, the normal, Student t, chi-square, F and binomial distribution
+// functions with their survival functions, and the normal quantile. Every function answers (value, code): code 0 is an answer, any other is a refusal (rules.tag) and the value is NaN.
+// A survival function is computed from its own tail, never as 1 - cdf.
+
+fn nan() -> [] float {
+    return 0.0 / 0.0;
+}
+
+fn is_inf(x: float) -> [] bool {
+    return x > 1.7976931348623157e308 || x < -1.7976931348623157e308;
+}
+
+// a with its low 27 bits cleared (Veltkamp), so that the square of the result is exact; needs |a| < 2^996
+fn high_half(a: float) -> [] float {
+    let c = 134217729.0 * a;
+    return c - (c - a);
+}
+
+// exp(-k x^2) for 0 <= x, k = 1 or 1/2, without the rounding error of x^2 growing with the size of the result's exponent: x = xh + xl with xh^2 exact
+fn exp_neg_sq(x: float, k: float) -> [] float {
+    if x > 1.0e150 {
+        return 0.0;
+    }
+    let xh = high_half(x);
+    let xl = x - xh;
+    return math.exp(0.0 - k * xh * xh) * math.exp(0.0 - k * xl * (x + xh));
+}
+
+// ---------------------------------------------------------------------------------------------------------------- lgamma, erf, erfc
+
+pub fn lgamma(x: float) -> [] (float, int) {
+    if is_nan(x) {
+        return (nan(), rules.domain_nan());
+    }
+    if x <= 0.0 {
+        return (nan(), rules.domain_param());
+    }
+    if x > 1.0e300 {
+        return (nan(), rules.domain_range());
+    }
+    return (lgam.lgamma_pos(x), 0);
+}
+
+// (erf w, erfc w, code) for finite w >= 0
+fn erf_parts(w: float) -> [] (float, float, int) {
+    if w == 0.0 {
+        return (0.0, 1.0, 0);
+    }
+    if w > 27.5 {
+        return (1.0, 0.0, 0);
+    }
+    let s = w * w;
+    let pr = exp_neg_sq(w, 1.0) * 2.0 * w / 1.7724538509055159;
+    if s < 1.5 {
+        let sm = igam.series(0.5, s);
+        if is_nan(sm) {
+            return (nan(), nan(), rules.noconverge());
+        }
+        let p = pr * sm;
+        return (p, 1.0 - p, 0);
+    }
+    let h = igam.cf_h(0.5, s);
+    if is_nan(h) {
+        return (nan(), nan(), rules.noconverge());
+    }
+    let q = pr * 0.5 * h;
+    return (1.0 - q, q, 0);
+}
+
+pub fn erf(x: float) -> [] (float, int) {
+    if is_nan(x) {
+        return (nan(), rules.domain_nan());
+    }
+    if is_inf(x) {
+        if x > 0.0 {
+            return (1.0, 0);
+        }
+        return (-1.0, 0);
+    }
+    var w = x;
+    if x < 0.0 {
+        w = 0.0 - x;
+    }
+    let (p, q, code) = erf_parts(w);
+    if code != 0 {
+        return (nan(), code);
+    }
+    if x < 0.0 {
+        return (0.0 - p, 0);
+    }
+    return (p, 0);
+}
+
+pub fn erfc(x: float) -> [] (float, int) {
+    if is_nan(x) {
+        return (nan(), rules.domain_nan());
+    }
+    if is_inf(x) {
+        if x > 0.0 {
+            return (0.0, 0);
+        }
+        return (2.0, 0);
+    }
+    var w = x;
+    if x < 0.0 {
+        w = 0.0 - x;
+    }
+    let (p, q, code) = erf_parts(w);
+    if code != 0 {
+        return (nan(), code);
+    }
+    if x < 0.0 {
+        return (1.0 + p, 0);
+    }
+    return (q, 0);
+}
+
+// ---------------------------------------------------------------------------------------------------------------- the normal distribution
+
+// (Phi(-w), Phi(w), code) for finite w >= 0
+fn norm_parts(w: float) -> [] (float, float, int) {
+    if w == 0.0 {
+        return (0.5, 0.5, 0);
+    }
+    if w > 40.0 {
+        return (0.0, 1.0, 0);
+    }
+    let s = w * w / 2.0;
+    let pr = exp_neg_sq(w, 0.5) * w * 0.7978845608028654;
+    if s < 1.5 {
+        let sm = igam.series(0.5, s);
+        if is_nan(sm) {
+            return (nan(), nan(), rules.noconverge());
+        }
+        let p = pr * sm;
+        return (0.5 * (1.0 - p), 0.5 * (1.0 + p), 0);
+    }
+    let h = igam.cf_h(0.5, s);
+    if is_nan(h) {
+        return (nan(), nan(), rules.noconverge());
+    }
+    let tail = 0.25 * pr * h;
+    return (tail, 1.0 - tail, 0);
+}
+
+fn norm_both(z: float) -> [] (float, float, int) {
+    if is_nan(z) {
+        return (nan(), nan(), rules.domain_nan());
+    }
+    if is_inf(z) {
+        if z > 0.0 {
+            return (1.0, 0.0, 0);
+        }
+        return (0.0, 1.0, 0);
+    }
+    var w = z;
+    if z < 0.0 {
+        w = 0.0 - z;
+    }
+    let (tail, big, code) = norm_parts(w);
+    if code != 0 {
+        return (nan(), nan(), code);
+    }
+    if z < 0.0 {
+        return (tail, big, 0);
+    }
+    return (big, tail, 0);
+}
+
+pub fn norm_cdf(z: float) -> [] (float, int) {
+    let (c, s, code) = norm_both(z);
+    return (c, code);
+}
+
+pub fn norm_sf(z: float) -> [] (float, int) {
+    let (c, s, code) = norm_both(z);
+    return (s, code);
+}
+
+// ln Phi(x) for x <= 0, in the log domain so that it does not underflow
+fn ln_phi_lower(x: float) -> [] float {
+    let w = 0.0 - x;
+    if w > 5.0 {
+        let s = w * w / 2.0;
+        let h = igam.cf_h(0.5, s);
+        return math.log(w) - s + math.log(h) - 1.612085713764618;
+    }
+    let (tail, big, code) = norm_parts(w);
+    return math.log(tail);
+}
+
+// the start of the quantile for 0 < p < 1/2: Acklam's rational approximation (relative error about 1.15e-9)
+fn acklam(p: float) -> [] float {
+    if p < 0.02425 {
+        let q = sqrt(-2.0 * math.log(p));
+        return (((((-7.784894002430293e-03 * q - 3.223964580411365e-01) * q - 2.400758277161838e+00) * q - 2.549732539343734e+00) * q + 4.374664141464968e+00) * q + 2.938163982698783e+00) / ((((7.784695709041462e-03 * q + 3.224671290700398e-01) * q + 2.445134137142996e+00) * q + 3.754408661907416e+00) * q + 1.0);
+    }
+    let q = p - 0.5;
+    let r = q * q;
+    return (((((-3.969683028665376e+01 * r + 2.209460984245205e+02) * r - 2.759285104469687e+02) * r + 1.383577518672690e+02) * r - 3.066479806614716e+01) * r + 2.506628277459239e+00) * q / (((((-5.447609879822406e+01 * r + 1.615858368580409e+02) * r - 1.556989798598866e+02) * r + 6.680131188771972e+01) * r - 1.328068155288572e+01) * r + 1.0);
+}
+
+// the z with Phi(z) = p, 0 < p < 1/2: Acklam's start, then Newton steps on ln Phi(z) - ln p
+fn qnorm_lower(p: float) -> [] float {
+    var x = acklam(p);
+    let lp = math.log(p);
+    var i = 0;
+    while i < 3 {
+        let lphi = ln_phi_lower(x);
+        let f = lphi - lp;
+        let fp = math.exp(-0.5 * x * x - 0.9189385332046727 - lphi);
+        x = x - f / fp;
+        i = i + 1;
+    }
+    return x;
+}
+
+pub fn qnorm(p: float) -> [] (float, int) {
+    if is_nan(p) {
+        return (nan(), rules.domain_nan());
+    }
+    if p <= 0.0 || p >= 1.0 {
+        return (nan(), rules.domain_prob());
+    }
+    if p == 0.5 {
+        return (0.0, 0);
+    }
+    if p > 0.5 {
+        return (0.0 - qnorm_lower(1.0 - p), 0);
+    }
+    return (qnorm_lower(p), 0);
+}
+
+// ---------------------------------------------------------------------------------------------------------------- Student t, chi-square, F, binomial
+
+// (cdf, sf, code) of Student's t with nu degrees of freedom
+fn t_both(t: float, nu: float) -> [] (float, float, int) {
+    if is_nan(t) || is_nan(nu) {
+        return (nan(), nan(), rules.domain_nan());
+    }
+    if nu <= 0.0 || is_inf(nu) {
+        return (nan(), nan(), rules.domain_param());
+    }
+    if nu > 2.0e8 {
+        return (nan(), nan(), rules.domain_range());
+    }
+    if t == 0.0 {
+        return (0.5, 0.5, 0);
+    }
+    if is_inf(t) {
+        if t > 0.0 {
+            return (1.0, 0.0, 0);
+        }
+        return (0.0, 1.0, 0);
+    }
+    var at = t;
+    if t < 0.0 {
+        at = 0.0 - t;
+    }
+    var x = 0.0;
+    var y = 0.0;
+    if at < 1.0 {
+        x = nu / (nu + at * at);
+        y = at * at / (nu + at * at);
+    } else {
+        let r = nu / at;
+        x = r / (r + at);
+        y = at / (r + at);
+    }
+    let (lo, up, code) = ibeta.beta_xy(nu / 2.0, 0.5, x, y);
+    if code != 0 {
+        return (nan(), nan(), code);
+    }
+    let tail = lo / 2.0;
+    let other = (1.0 + up) / 2.0;
+    if t > 0.0 {
+        return (other, tail, 0);
+    }
+    return (tail, other, 0);
+}
+
+pub fn t_cdf(t: float, nu: float) -> [] (float, int) {
+    let (c, s, code) = t_both(t, nu);
+    return (c, code);
+}
+
+pub fn t_sf(t: float, nu: float) -> [] (float, int) {
+    let (c, s, code) = t_both(t, nu);
+    return (s, code);
+}
+
+fn chi2_both(x: float, nu: float) -> [] (float, float, int) {
+    if is_nan(x) || is_nan(nu) {
+        return (nan(), nan(), rules.domain_nan());
+    }
+    if nu <= 0.0 || is_inf(nu) || x < 0.0 {
+        return (nan(), nan(), rules.domain_param());
+    }
+    if nu > 2.0e8 {
+        return (nan(), nan(), rules.domain_range());
+    }
+    let (p, q, code) = igam.gamma_pq(nu / 2.0, x / 2.0);
+    return (p, q, code);
+}
+
+pub fn chi2_cdf(x: float, nu: float) -> [] (float, int) {
+    let (c, s, code) = chi2_both(x, nu);
+    return (c, code);
+}
+
+pub fn chi2_sf(x: float, nu: float) -> [] (float, int) {
+    let (c, s, code) = chi2_both(x, nu);
+    return (s, code);
+}
+
+fn f_both(f: float, d1: float, d2: float) -> [] (float, float, int) {
+    if is_nan(f) || is_nan(d1) || is_nan(d2) {
+        return (nan(), nan(), rules.domain_nan());
+    }
+    if d1 <= 0.0 || d2 <= 0.0 || is_inf(d1) || is_inf(d2) || f < 0.0 {
+        return (nan(), nan(), rules.domain_param());
+    }
+    if d1 > 2.0e8 || d2 > 2.0e8 {
+        return (nan(), nan(), rules.domain_range());
+    }
+    if f == 0.0 {
+        return (0.0, 1.0, 0);
+    }
+    if is_inf(f) {
+        return (1.0, 0.0, 0);
+    }
+    let r = d1 * f;
+    var x = 0.0;
+    var y = 0.0;
+    if is_inf(r) {
+        x = 1.0;
+        y = 0.0;
+    } else if r <= d2 {
+        x = r / (r + d2);
+        y = d2 / (r + d2);
+    } else {
+        let u = d2 / r;
+        x = 1.0 / (1.0 + u);
+        y = u / (1.0 + u);
+    }
+    let (lo, up, code) = ibeta.beta_xy(d1 / 2.0, d2 / 2.0, x, y);
+    return (lo, up, code);
+}
+
+pub fn f_cdf(f: float, d1: float, d2: float) -> [] (float, int) {
+    let (c, s, code) = f_both(f, d1, d2);
+    return (c, code);
+}
+
+pub fn f_sf(f: float, d1: float, d2: float) -> [] (float, int) {
+    let (c, s, code) = f_both(f, d1, d2);
+    return (s, code);
+}
+
+fn is_whole(v: float) -> [] bool {
+    return float_of(truncate(v)) == v;
+}
+
+// (P(X <= k), P(X > k), code) for X binomial with n trials and success probability p
+fn binom_both(k: float, n: float, p: float) -> [] (float, float, int) {
+    if is_nan(k) || is_nan(n) || is_nan(p) {
+        return (nan(), nan(), rules.domain_nan());
+    }
+    if p < 0.0 || p > 1.0 {
+        return (nan(), nan(), rules.domain_prob());
+    }
+    if n < 1.0 || is_inf(n) || is_inf(k) {
+        return (nan(), nan(), rules.domain_param());
+    }
+    if n > 1.0e8 {
+        return (nan(), nan(), rules.domain_range());
+    }
+    if !is_whole(n) || (k > -1.0e15 && k < 1.0e15 && !is_whole(k)) {
+        return (nan(), nan(), rules.domain_param());
+    }
+    if k < 0.0 {
+        return (0.0, 1.0, 0);
+    }
+    if k >= n {
+        return (1.0, 0.0, 0);
+    }
+    if p == 0.0 {
+        return (1.0, 0.0, 0);
+    }
+    if p == 1.0 {
+        return (0.0, 1.0, 0);
+    }
+    var q = 1.0 - p;
+    let (lo, up, code) = ibeta.beta_xy(n - k, k + 1.0, q, p);
+    return (lo, up, code);
+}
+
+pub fn binom_cdf(k: float, n: float, p: float) -> [] (float, int) {
+    let (c, s, code) = binom_both(k, n, p);
+    return (c, code);
+}
+
+pub fn binom_sf(k: float, n: float, p: float) -> [] (float, int) {
+    let (c, s, code) = binom_both(k, n, p);
+    return (s, code);
+}
