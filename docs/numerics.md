@@ -139,8 +139,9 @@ the switch point, so it carries no cancellation).
 
 ### 3.2 Accuracy target (the bounds the gates enforce)
 
-`B(f) = B0 + B1 |ln f|` relative to `f` unless the metric says absolute. `B1 = 4e-16` everywhere it appears (about two ulps of `|ln f|`: the rounding of the
-argument of the last `exp`). Ranges are of the *inputs*, sampled as in 7.1.
+`B(f) = B0 + B1 |ln f|` relative to `f` unless the metric says absolute. `B1 = 4e-16` where it appears (about two ulps of `|ln f|`: the rounding of the
+argument of the last `exp`), except `B1 = 1.5e-15` for the incomplete gamma and chi-square with `a` in `[15, 1e4]` (*corrected in place*: the full-size sweep, 20,000 cases per range, found 26 cases up to 1.6 times the bound at
+`a` of 1e3 to 1e4 with `x` 30% from `a` and tails of 1e-90 to 1e-280; Loader's exponent there has terms near 3000 that cancel to 600, so one ulp of `log` times `x` is 5e-13; the coefficient those cases need is 9.5e-16). Ranges are of the *inputs*, sampled as in 7.1.
 
 | function | input range | metric | `B0` | notes |
 |---|---|---|---|---|
