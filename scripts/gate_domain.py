@@ -29,6 +29,7 @@ ARITY = {"lgamma": 1, "erf": 1, "erfc": 1, "gamma_p": 2, "gamma_q": 2, "beta_lo"
 PAIRS = [("gamma_p", "gamma_q"), ("beta_lo", "beta_up"), ("norm_cdf", "norm_sf"), ("t_cdf", "t_sf"), ("chi2_cdf", "chi2_sf"), ("f_cdf", "f_sf"), ("binom_cdf", "binom_sf")]
 PROB = {"gamma_p", "gamma_q", "beta_lo", "beta_up", "norm_cdf", "norm_sf", "t_cdf", "t_sf", "chi2_cdf", "chi2_sf", "f_cdf", "f_sf", "binom_cdf", "binom_sf"}
 TAGS = {}
+PAIRSTAT = [0.0, 0]
 
 
 def driver_tags(driver):
@@ -183,6 +184,9 @@ def main():
             for c, (v1, c1), (v2, c2) in zip(cs, ra, rb):
                 seen.add(c1)
                 seen.add(c2)
+                if c1 == 0 and c2 == 0 and v1 >= 1e-10 and v2 >= 1e-10:
+                    PAIRSTAT[0] = max(PAIRSTAT[0], abs(v1 + v2 - 1.0))
+                    PAIRSTAT[1] += 1
                 if c1 == 0 and c2 == 0 and v1 >= 1e-10 and v2 >= 1e-10 and abs(v1 + v2 - 1.0) > 1e-12:
                     bad.append((f1, c, "cdf + sf = %r" % (v1 + v2)))
             total += 2 * len(cs)
@@ -199,6 +203,7 @@ def main():
         print("gate_domain: harness failure: %s" % e)
         return 2
     unreached = sorted(tags[c] for c in tags if c not in seen)
+    print("gate_domain: largest |cdf + sf - 1| over %d answered pairs with both tails at least 1e-10: %.3g" % (PAIRSTAT[1], PAIRSTAT[0]))
     unknown = sorted(c for c in seen if c != 0 and c not in tags)
     print("gate_domain: %d cases answered with no trap and no hang; codes seen: %s" % (total, sorted(tags.get(c, "?%d" % c) for c in seen if c != 0)))
     print("gate_domain: tags of special.rules not reached by any case: %s" % (unreached or "none"))

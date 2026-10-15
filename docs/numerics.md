@@ -113,8 +113,9 @@ each run on a copy, each must exit 1 with the message of its id. The unmutated c
 
 ### 2.2 Which stores the code of S0 imports
 
-`lib/special` imports `std.math` only. The driver imports `ml.fbits` (the exact bits-to-double decode the oracle's inputs need) and `ml.rng` (the derived streams of the
-sweeps), and the accumulator experiment imports `facc` and `ml.fsq`. The other pinned modules are pinned now because the verbs of S1 to S7 import them and the
+`lib/special` imports `std.math` and its own modules only. The driver `special-check` imports `ml.fbits` (the exact bits-to-double decode of its input), `acc-check` imports `facc`, `flt`
+and `ml.fsq` (cancho-table's exact sum and the wide accumulator of cancho-ml; the Dekker product it tests is `lib/special/xprod.cho`, this repository's), and the sweeps are generated in Python
+(a SplitMix64 stream with no call to a platform `libm`). The other pinned modules are pinned now because the verbs of S1 to S7 import them and the
 issue asks for the pins in S0; a `consume` run (section 7, gate G9) proves that the whole set installs and that a program reaching each family builds.
 
 ### 2.3 The `file://` pin of the numeric stores **[open until cancho-ml#46 is pushed and merged]**
@@ -138,7 +139,7 @@ cancho-ml#46 is merged the URL becomes `https://github.com/alpibrusl/cancho-ml`,
 | `erf`, `erfc` | `special.erf`, `special.erfc` | `erf(x) = sign(x) P(1/2, x^2)`, `erfc(x) = Q(1/2, x^2)` for `x >= 0`, `erfc(-x) = 2 - erfc(x)` |
 | `P(a, x)`, `Q(a, x)` (regularised incomplete gamma) | `special.gamma_pq` | power series for `x < a + 1`, Lentz's continued fraction otherwise; the prefactor `x^a e^-x / Gamma(a+1)` by Loader's saddle-point form (`stirlerr`, `bd0`) for `a >= 15`, by `exp(a ln x - x - lgamma(a+1))` below |
 | `I_x(a, b)` (regularised incomplete beta), both tails | `special.beta_ix` | Lentz's continued fraction on the side where it converges (`x < (a+1)/(a+b+2)`, else the swapped arguments); input is the pair `(x, 1-x)` so neither is rounded; the prefactor `x^a (1-x)^b / B(a, b)` by Loader's binomial form for `a, b >= 10`, by `exp(a ln x + b ln(1-x) - betaln(a, b))` below, `betaln` by the Stirling-difference form when one argument is large |
-| normal quantile | `special.qnorm` | Acklam's rational approximation as a start (**[choice]**, its published relative error is about `1.15e-9`), then Halley steps on the accurate normal survival function, until the step is below one ulp (at most 4) |
+| normal quantile | `special.qnorm` | Acklam's rational approximation as a start (**[choice]**, its published relative error is about `1.15e-9`), then three Newton steps on `ln Phi(z) - ln p` (the log domain, so that a subnormal `p` does not lose its bits) |
 | normal, Student t, chi-square, F, binomial (cdf and survival) | `special.dist` | the functions above: `Phi(z) = erfc(-z/sqrt2)/2`, `t` and `F` through `beta_ix`, chi-square through `gamma_pq`, binomial `P(X <= k) = I_{1-p}(n-k, k+1)` |
 
 Both tails of every distribution are computed on their own: a survival function is never `1 - cdf`, so it does not lose a tail. `beta_ix` and `gamma_pq` answer
@@ -172,13 +173,17 @@ argument of the last `exp`). Ranges are of the *inputs*, sampled as in 7.1.
 * **The error grows like `ln f`, not like `f`.** The `B1` term is the rule: at `f = 1e-300` (`|ln f| = 690`) the bound is `B0 + 2.8e-13`. This is the honest cost of
   one `exp` of a rounded argument; it is **[open]** whether a split `exp(-x^2)` (a high part with an exact square) would remove it for `erfc`; not done in S0 (a choice: the bound above is
   met without it or the bound is corrected in place).
-* **Underflow.** When the true value is below `2.2250738585072014e-308` (subnormal) the relative bound is waived and the absolute error must be at most `5e-324 * 4`; a true value below `2.5e-324`
-  answers 0 (not NaN, not a refusal: it is a correct answer rounded to the representable).
+* **Underflow.** Every bound carries an absolute allowance of `2e-323` (four units of the smallest subnormal): `|y - f| <= B(f) |f| + 2e-323`. It matters only below the smallest normal double
+  (`2.2250738585072014e-308`), where a result has fewer bits; above it the allowance is below the bound by a factor of at least `1e10`. A true value that is zero answers zero exactly, and a true
+  value below `2.5e-324` answers 0 (not NaN, not a refusal: the correct answer rounded to the representable). *Corrected in place:* the first version of this bullet waived the relative bound below the
+  smallest normal and allowed only four units; the first sweep that reached `1e-309` showed a relative error of `1.8e-13` there (36 units), inside `B(f)`, so the rule is the relative bound plus the allowance.
 * **Edges.** `P(a, 0) = 0`, `Q(a, 0) = 1`; `x = +inf` gives `P = 1`, `Q = 0` (a finite `a`); `I_0 = 0`, `I_1 = 1`; `qnorm(0.5) = 0` exactly and `qnorm(p) = -qnorm(1-p)` bit for bit for `p` in `[1/2, 1)`;
   `erf(0) = 0`, `erf(+-inf) = +-1`; NaN in any argument is a refusal `stats.domain-nan`; a parameter that must be positive and is not is `stats.domain-param`; a probability outside `(0, 1)` is `stats.domain-prob`
   (`qnorm(0)` and `qnorm(1)` are refusals, not infinities).
-* **Non-convergence.** The continued fractions and the series have an iteration cap derived from the arguments (`max(1000, 40 * sqrt(max(a, b)) + 100)` terms, the cap is a named function); reaching it is the
-  refusal `stats.noconverge` with value NaN, never a loop that does not end. A gate (7.2) feeds the arguments the cap is for.
+* **Non-convergence.** The continued fractions and the series have an iteration cap derived from the arguments (`2000 + 100 * sqrt(a)` terms for the incomplete gamma, `2000 + 100 * sqrt(max(a, b))` for the incomplete beta; each is a named function `cap`); reaching it is the
+  refusal `stats.noconverge` with value NaN, never a loop that does not end. The edge gate reached it once (`gamma_p` with a tiny `a` and `x` near the largest double, where a subnormal first
+  term kept the fraction from settling); the prefactor underflow test removes that input, and no input of the gates reaches the refusal now (section 8.3). The mutant that sets the cap to 1 shows
+  that the path is wired.
 * **Ties between branches.** The series/continued-fraction switch at `x = a + 1`, the swap of `beta_ix` at `x = (a+1)/(a+b+2)`, Loader against direct prefactor at `a = 15` or `a, b = 10`, the Stirling switch at `x = 10`,
   Acklam's tail switch at `p = 0.02425`: the sweeps contain the boundary value, its predecessor and its successor (`nextafter` by integer arithmetic on the bits) and the bound must hold on all three; this is where a branch
   that is wrong by a constant shows.
@@ -186,8 +191,10 @@ argument of the last `exp`). Ranges are of the *inputs*, sampled as in 7.1.
 ### 3.4 Rule tags **[choice]**
 
 `stats.domain-nan`, `stats.domain-param`, `stats.domain-prob`, `stats.domain-range` (an argument beyond the range of 3.2 for which the functions do not promise the bound: a refusal, e.g. `a > 1e7`),
-`stats.noconverge`. A refusal never carries input data in its tag. Every refusal the driver prints is `refused <tag>`; the gate of 7.2 checks that each tag in `special.rules` is reached by at least one case and
-that no other tag is printed.
+`stats.noconverge`. A refusal never carries input data in its tag. Every refusal the driver prints is `refused <tag>`; the gate of 7.2 checks that each tag in `special.rules` other than `stats.noconverge` is reached by at least one case and
+that no other tag is printed; `noconverge` is the one tag no input is known to reach (see 3.3). The refusal limits (`domain-range`): `a` above `1e8` for the incomplete gamma, `a` or `b` above `1e8` for the
+incomplete beta, `nu` or a degree of freedom above `2e8` for t, chi-square and F, `n` above `1e8` for the binomial, `x` above `1e300` for `lgamma`. Between the limits of 3.2 (where the bounds are measured)
+and these, the functions answer and the gates do not bound the answer.
 
 ## 4. How the special functions are judged
 
@@ -242,7 +249,7 @@ The accumulators of section 5 are sequential in S0; their row-order invariance i
 | id | gate | fails when |
 |---|---|---|
 | G1 | **Sweeps against `mpmath`**: per function and range of 3.2, at least 20,000 cases (2,000 for the functions whose `mpmath` evaluation is slow: `betainc` with a parameter above `1e3`, the large-`a` gamma), half log-uniform in the parameters and half concentrated on the transition region (`x` near `a`, near the mean of the beta, near the Stirling and Acklam switches, and the `+-1 ulp` neighbours of every branch tie of 3.3) | any case exceeds `B(f)`; the report prints the maximum error per range and the case that attains it |
-| G2 | **Controls**: the sweep is run against a driver built with a deliberately wrong algorithm: a Stirling coefficient `1/12` changed to `1/12.001`, the series cut at 12 terms, the Lentz tiny-value guard `1e-30` replaced by `1e-3`, `Q = 1 - P` in the survival function, the beta swap threshold moved by 5%, Acklam's constant changed in the 4th digit **and the Halley steps removed**. For each control the gate G1 must **fail**, in the range the control is for | a control stays inside the bound: the bound is too loose or the sweep does not reach the code (the report says which) |
+| G2 | **Controls**: the sweep is run against a driver built with a deliberately wrong algorithm: a Stirling coefficient `1/12` changed to `1/12.001`, the series cut at 12 terms, the Lentz stopping tolerance loosened from `2.5e-16` to `2.5e-6`, `Q = 1 - P` in the survival function, the beta swap threshold moved by 5%, Acklam's constant changed in the 4th digit **and the Newton steps removed**. For each control the gate G1 must **fail**, in the range the control is for | a control stays inside the bound: the bound is too loose or the sweep does not reach the code (the report says which) |
 | G3 | **Independence**: 4,000 points per function against `scipy.special` (`gammaln`, `erf`, `erfc`, `gammainc`, `gammaincc`, `betainc`, `ndtr`, `ndtri`, `stdtr`, `chdtr`, `fdtr`, `bdtr`) and `mpmath`, reported separately; the sweep reports the disagreement of the two *references*, so an `mpmath` evaluation error cannot be hidden by the driver agreeing with it | the references disagree beyond `1e-10` relative on a point (the point is reported and removed from G1 only with a written reason) |
 | G4 | **Exact accumulation**: section 5, per family, per rule | an exactly rounded value is not reproduced bit for bit inside the rule's range |
 | G5 | **Mutants** for every function (7.3) | a survivor without an explanation |
@@ -252,7 +259,7 @@ The accumulators of section 5 are sequential in S0; their row-order invariance i
 | id | gate | fails when |
 |---|---|---|
 | D1 | the edges of 3.3 for every function: `0`, `1`, `2^-1074`, `2^-1022`, the largest double, `+-inf`, a NaN bit pattern (every NaN payload: the driver decodes `bits` itself), `-0.0`, the neighbours of each branch tie | the process traps, hangs (a 10 s timeout per case batch, the driver is killed) or answers a value where a refusal is specified (or the reverse) |
-| D2 | fuzz: 200,000 random 64-bit patterns per argument position, each function, uniformly over the *bit patterns* (so exponents are uniform: huge, tiny, subnormal, inf, NaN all appear) | any trap or timeout; any value outside the contract of the function (cdf outside `[0, 1]`, `cdf + sf` not within `2^-50` of 1 where neither is below `1e-10`, the quantile not monotone on a random sorted set) |
+| D2 | fuzz: 200,000 random 64-bit patterns per argument position, each function, uniformly over the *bit patterns* (so exponents are uniform: huge, tiny, subnormal, inf, NaN all appear) | any trap or timeout; any value outside the contract of the function (cdf outside `[0, 1]`, `cdf + sf` not within `1e-12` of 1 where neither is below `1e-10`, the quantile not monotone on a random sorted set) |
 | D3 | every tag of `special.rules` is reached; no other tag is printed; no refusal prints input data | a tag unreached or unknown |
 
 ### 7.3 Mutants
