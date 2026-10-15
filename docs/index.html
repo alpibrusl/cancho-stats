@@ -46,7 +46,7 @@ h2 { font-size: clamp(1.4rem, 3vw, 1.9rem); margin: 0 0 .6rem; letter-spacing: -
 .term .bar { display: flex; align-items: center; gap: .4rem; padding: .55rem .8rem; border-bottom: 1px solid #1f2a30; font: .78rem var(--mono); color: var(--term-dim); }
 .term .bar i { width: .7rem; height: .7rem; border-radius: 50%; background: #2c3a41; display: inline-block; }
 .term .bar button { margin-left: auto; font: .78rem var(--mono); color: var(--term-fg); background: #1b262c; border: 1px solid #2c3a41; border-radius: 6px; padding: .2rem .6rem; cursor: pointer; }
-.term pre { margin: 0; padding: 1rem 1.1rem; min-height: 17.5rem; overflow-x: auto; font: .85rem/1.55 var(--mono); white-space: pre; }
+.term pre { margin: 0; padding: 1rem 1.1rem; min-height: 17.5rem; overflow-x: auto; font: .85rem/1.55 var(--mono); white-space: pre-wrap; word-break: break-all; }
 .term .g { color: var(--term-good); } .term .b { color: var(--term-bad); } .term .d { color: var(--term-dim); } .term .a { color: var(--term-acc); }
 .caption { text-align: center; color: var(--muted); font-size: .88rem; max-width: 46rem; margin: .8rem auto 0; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 1rem; }
@@ -79,7 +79,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2rem; color: var(-
 <header class="top"><div class="wrap">
   <a class="brand" href=".">cancho-stats</a>
   <nav>
-    <a href="#how">How it works</a><a class="opt" href="#sums">Exact sums</a><a class="opt" href="#numbers">Results</a><a href="#try">Try it</a>
+    <a href="#first">The first command</a><a class="opt" href="#how">How it works</a><a class="opt" href="#sums">Exact sums</a><a class="opt" href="#numbers">Results</a><a href="#try">Try it</a>
     <a class="opt" href="https://github.com/alpibrusl/cancho-stats/blob/main/docs/numerics.md">Numerics</a><a href="https://github.com/alpibrusl/cancho-stats">GitHub</a>
   </nav>
 </div></header>
@@ -91,11 +91,11 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2rem; color: var(-
 </div>
 
 <div class="wrap" style="padding-bottom:2.5rem">
-  <div class="term" role="img" aria-label="Replay of a real run of the gates: the pins check, the edge and fuzz gate, the exact accumulation, the accuracy sweeps, and the cross-platform fingerprint">
+  <div class="term" role="img" aria-label="Replay of real runs of the stats command: describing a small CSV file, and a refusal of a malformed one">
     <div class="bar"><i></i><i></i><i></i> a real run, replayed <button id="replay" type="button">&#8635; replay</button></div>
     <pre id="screen"></pre>
   </div>
-  <p class="caption">A real run of the S0 gates on a Mac (Apple M4 Max; the middle of the accuracy log is elided: 27 ranges, 600 cases each, 200 for the slowest). It is a replay of the log, not a live session. There is no <code>stats</code> command yet: this is the library under it.</p>
+  <p class="caption">Two real runs of <code>stats describe</code> on a Mac (Apple M4 Max): the file <code>docs/example/readings.csv</code> of this repository, and a file with a short record. The command prints one line of JSON, which the page wraps; nothing is elided or edited. It is a replay, not a live session. The numbers in it are the exact mean and variance of the doubles in the file, rounded once.</p>
 </div>
 
 <section class="alt" id="why"><div class="wrap">
@@ -143,6 +143,17 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2rem; color: var(-
   <p class="fine">The rule that follows: squares through <code>ml.fsq</code>, products through the two-product with the refusal outside the range, one rounding at the end. Open: the exact numerator of variance and covariance needs a big-integer multiply that the compiler's library lacks; it is the first module of the next milestone.</p>
 </div></section>
 
+<section id="first"><div class="wrap">
+  <h2>The first command</h2>
+  <p class="lead"><code>stats describe FILE</code> reads a CSV and describes each column. The mean and the variance come from sums that are exact and rounded once.</p>
+  <div class="cards">
+    <div class="card"><div class="ic">&#129518;</div><h3>Exact, so it can be checked</h3><p>The <code>drift</code> column of the example (readings near 1e8 that differ in the first decimal) has variance <code>0.022142858015639467</code>, the exactly rounded value. The textbook one-pass formula in plain doubles gives <code>-2.2857</code> on the same eight numbers (a negative variance; Python 3.14 on this Mac).</p></div>
+    <div class="card"><div class="ic">&#128196;</div><h3>Same bytes, any row order</h3><p>Shuffling the rows of a file cannot change a byte of the answer, and the answer is the same on a Mac and on a Linux x86-64 machine. <code>stats</code> uses no threads, no clock and no network: the compiler proves it.</p></div>
+    <div class="card"><div class="ic">&#128679;</div><h3>Refusals with a name</h3><p>A short record is <code>stats.csv-ragged</code>, exit 8, with the line number. 25 refusal cases and 5,000 hostile files are in the gates: no trap, no hang, one line of JSON.</p></div>
+  </div>
+  <p class="fine">Measured: 1,000 generated files, 40,078 values, every one bit for bit equal to exact fractions rounded once, and 26 of 26 mutants of the program killed. Not built yet: skewness, kurtosis, quantiles, histogram, distinct counts, <code>--by</code>.</p>
+</div></section>
+
 <section class="alt" id="numbers"><div class="wrap">
   <h2>Measured, not promised</h2>
   <p class="lead">Normal, Student t, chi-square, F and binomial, with survival functions that never lose a tail, and the normal quantile.</p>
@@ -162,12 +173,14 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2rem; color: var(-
 cd cancho-stats
 export CANCHO=&lt;path-to-the-cancho-binary&gt;
 "$CANCHO" install
+"$CANCHO" build --bin stats
+build/stats describe docs/example/readings.csv
 "$CANCHO" build --bin special-check
 python3 -m venv .venv &amp;&amp; .venv/bin/pip install -r ci/requirements.txt
 sh scripts/check.sh            # every gate, minutes
 echo "1 4000000000000000 4024000000000000" | build/special-check t_sf
 1 3fa2c98ee9420ee7 0           # t_sf(2, df 10): the bits of the answer</code></pre>
-  <p class="lead" style="margin-bottom:0">Next: <code>stats describe</code> (design written, four decisions waiting), then correlations, tests, intervals, resampling and regression.</p>
+  <p class="lead" style="margin-bottom:0">Next in <code>describe</code>: skewness, kurtosis, quantiles, histogram and distinct counts; then correlations, tests, intervals, resampling and regression.</p>
 </div></section>
 
 <section class="alt"><div class="wrap">
@@ -187,79 +200,63 @@ echo "1 4000000000000000 4024000000000000" | build/special-check t_sf
   var lines = [
   [
     "d",
-    "$ sh scripts/check_pins.sh"
+    "$ cat readings.csv"
   ],
   [
-    "g",
-    "check_pins: ok (37 dependencies, none copied)"
+    "a",
+    "sensor,temp,pressure,drift"
+  ],
+  [
+    "a",
+    "A1,21.4,1013.2,100000000.1"
+  ],
+  [
+    "a",
+    "A2,21.9,1012.8,100000000.4"
+  ],
+  [
+    "a",
+    "A3,,1013.5,100000000.2"
+  ],
+  [
+    "a",
+    "B1,22.3,1011.9,100000000.3"
+  ],
+  [
+    "a",
+    "B2,21.7,1013.1,100000000.2"
+  ],
+  [
+    "a",
+    "B3,22.0,,100000000.5"
+  ],
+  [
+    "a",
+    "C1,21.5,1012.4,100000000.1"
+  ],
+  [
+    "a",
+    "C2,22.1,1012.9,100000000.4"
   ],
   [
     "d",
-    "$ python3 scripts/gate_domain.py --fuzz 50000"
-  ],
-  [
-    "a",
-    "gate_domain: largest |cdf + sf - 1| over 59824 answered pairs with both tails at least 1e-10: 1.3e-14"
-  ],
-  [
-    "a",
-    "gate_domain: 1321003 cases answered with no trap and no hang; codes seen: ..."
-  ],
-  [
-    "a",
-    "gate_domain: tags of special.rules not reached by any case: ['stats.noconverge']"
+    "$ stats describe readings.csv"
   ],
   [
     "g",
-    "gate_domain: ok (no violation; unreached: ['stats.noconverge'])"
+    "{\"ok\":true,\"command\":\"stats\",\"schema\":\"stats.v1\",\"data\":{\"rows\":8,\"ddof\":1,\"rounding\":\"mean and variance: exact, rounded once; sd: the square root of the rounded variance, two roundings\",\"columns\":[{\"name\":\"sensor\",\"kind\":\"text\",\"count\":8,\"missing\":0},{\"name\":\"temp\",\"kind\":\"numeric\",\"count\":7,\"missing\":1,\"min\":21.4,\"max\":22.3,\"mean\":21.84285714285714,\"variance\":0.10619047619047664,\"sd\":0.3258688021128697},{\"name\":\"pressure\",\"kind\":\"numeric\",\"count\":7,\"missing\":1,\"min\":1011.9,\"max\":1013.5,\"mean\":1012.8285714285714,\"variance\":0.2857142857143036,\"sd\":0.5345224838248654},{\"name\":\"drift\",\"kind\":\"numeric\",\"count\":8,\"missing\":0,\"min\":100000000.1,\"max\":100000000.5,\"mean\":100000000.275,\"variance\":0.022142858015639467,\"sd\":0.1488047647612114}]},\"meta\":{\"version\":\"0.1.0\"}}"
   ],
   [
     "d",
-    "$ python3 scripts/measure_acc.py"
+    "$ stats describe broken.csv; echo \"exit $?\""
   ],
   [
-    "g",
-    "measure_acc: rule R holds on every vector sampled; B exact everywhere"
+    "b",
+    "{\"ok\":false,\"command\":\"stats\",\"schema\":\"stats.v1\",\"error\":{\"code\":\"PRECONDITION_FAILED\",\"rule\":\"stats.csv-ragged\",\"message\":\"a record has a different number of fields than the header\",\"hint\":\"check the delimiter and the quoting of that line\",\"repair\":null,\"detail\":{\"line\":3,\"columns\":2}},\"errors\":[{\"code\":\"PRECONDITION_FAILED\",\"rule\":\"stats.csv-ragged\",\"message\":\"a record has a different number of fields than the header\",\"hint\":\"check the delimiter and the quoting of that line\",\"repair\":null,\"detail\":{\"line\":3,\"columns\":2}}],\"meta\":{\"version\":\"0.1.0\"}}"
   ],
   [
-    "d",
-    "$ python3 scripts/gate_special.py --fast"
-  ],
-  [
-    "a",
-    "  lgamma         n=600  outside 0   worst error / bound 0.533"
-  ],
-  [
-    "a",
-    "  gamma_p mid    n=600  outside 0   worst error / bound 0.938"
-  ],
-  [
-    "a",
-    "  beta_lo large  n=200  outside 0   worst error / bound 0.0442"
-  ],
-  [
-    "a",
-    "  t_cdf          n=600  outside 0   worst error / bound 0.148"
-  ],
-  [
-    "a",
-    "  binom_sf       n=600  outside 0   worst error / bound 0.0305"
-  ],
-  [
-    "d",
-    "  ...19 more ranges, each against mpmath, none outside"
-  ],
-  [
-    "g",
-    "gate_special: 27 ranges, 0 cases outside the bound, 0 reference failures"
-  ],
-  [
-    "d",
-    "$ python3 scripts/xplat_fp.py"
-  ],
-  [
-    "g",
-    "xplat_fp: ok, 48 lines equal the golden; --threads 1,2,3,4,7,8,16 equal the sequential bytes in every sweep"
+    "b",
+    "exit 8"
   ]
 ];
   function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
@@ -271,7 +268,7 @@ echo "1 4000000000000000 4024000000000000" | build/special-check t_sf
     (function tick() {
       if (i >= lines.length) { return; }
       var l = lines[i];
-      j += 3;
+      j += 3 + Math.floor(l[1].length / 200);
       var shown = l[1].slice(0, j);
       screen.innerHTML = html + '<span class="' + l[0] + '">' + esc(shown) + "</span>";
       if (j >= l[1].length) { html += '<span class="' + l[0] + '">' + esc(l[1]) + "</span>\n"; i++; j = 0; timer = setTimeout(tick, l[0] === "b" ? 900 : 450); }
