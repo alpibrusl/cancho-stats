@@ -136,6 +136,7 @@ MUTANTS = [
 
 # a survivor that no input can kill: the mutation changes no result. Name -> reason.
 EXPLAINED = {
+    "log-ratio-correction-dropped": "tolerance-equivalent under the corrected far-tail coefficient (1.5e-15 for the incomplete gamma, docs/numerics.md 3.2): without the correction the exponent loses about eps x (2e-13 at a = 2000), which the bound now admits; it was killed while the coefficient was 4e-16. The correction stays: it removes the larger part of that error",
     "lgamma-delta-drops-a-term": "tolerance-equivalent: the dropped term 1/(156 z^13) is below 6.4e-16 for z >= 10, the bound is 1e-14 max(1, |f|) with |f| >= 12.8",
     "stirlerr-switch-too-low": "tolerance-equivalent: the series is used from n = 5; its truncation error there (about 2e-14 in the exponent at n = 10, larger at 5 only where Loader's form is not used) stays below the 2e-13 bound of every range",
     "bd0-series-switch-window": "equivalent: the series in (x - np)/(x + np) converges for every ratio and is exact on the wider window; only the speed changes",
