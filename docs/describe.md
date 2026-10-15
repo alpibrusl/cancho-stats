@@ -93,5 +93,7 @@ column, `--by`, `--cols`, `--bins`, `--quantile-type`, `--format text`, the tie 
   the multi-line record, the overflow code). `mutants_psum.py` and `mutants_bigint.py` (S1's accumulators): 19 of 20 and 20 of 21 killed, the survivors explained in the files.
 * **The same bytes** (`xplat_fp.py`, 12 `describe` files added to the golden, now 60 lines): equal to the golden, written on the Mac, on gram, and the thread check of the other 48 lines holds on both; the fingerprint does
   not exercise threads for `describe` because the program has no `conc`: its authority has none, and `manifests/stats.authority.json` derived on gram is the one committed from the Mac (`manifest.py --check`).
+* **On GitHub** (run 38811179034, `ubuntu-24.04`, `ubuntu-24.04-arm`, `macos-26`): the `describe` gates (200 files against Fractions, 1,000 fuzz files, `manifest.py --check`) and the fingerprint of 60 lines with its thread check
+  all succeeded, none skipped.
 * **Not measured:** speed (no time is asserted); files above 1,000 rows were not generated beyond 400 rows per column in these gates (`--max-rows` defaults to 1,000,000: the memory of the accumulators is 508 integers per column and
   does not grow with rows, but that bound is argued here, not measured at a million rows).
