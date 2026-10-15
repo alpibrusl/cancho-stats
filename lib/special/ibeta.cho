@@ -65,13 +65,14 @@ fn front(a: float, b: float, x: float, y: float) -> [] float {
 }
 
 // the continued fraction of I_x(a, b) (Numerical Recipes' betacf, modified Lentz); NaN when the cap is reached
-fn cf(a: float, b: float, x: float) -> [] float {
+fn cf(a: float, b: float, x: float, y: float) -> [] float {
     let tiny = 1.0e-300;
     let qab = a + b;
     let qap = a + 1.0;
     let qam = a - 1.0;
     var c = 1.0;
-    var d = 1.0 - qab * x / qap;
+    // 1 - (a + b) x / (a + 1) = (a y + 1 - b x) / (a + 1) with y = 1 - x known to full accuracy: the direct form cancels to 1/(1 - x) digits near the switch point
+    var d = (a * y + 1.0 - b * x) / qap;
     if math.fabs(d) < tiny {
         d = tiny;
     }
@@ -115,7 +116,7 @@ fn cf(a: float, b: float, x: float) -> [] float {
 
 // I_x(a, b) by the fraction (the caller chose the side), NaN if it does not converge
 fn side(a: float, b: float, x: float, y: float) -> [] float {
-    let h = cf(a, b, x);
+    let h = cf(a, b, x, y);
     if is_nan(h) {
         return h;
     }
@@ -157,7 +158,7 @@ pub fn beta_xy(a: float, b: float, x: float, y: float) -> [] (float, float, int)
             return (nan(), nan(), rules.noconverge());
         }
         up = 1.0 - lo;
-        if up < 0.05 {
+        if up < 0.001 {
             let u2 = side(b, a, y, x);
             if !is_nan(u2) {
                 up = u2;
@@ -169,7 +170,7 @@ pub fn beta_xy(a: float, b: float, x: float, y: float) -> [] (float, float, int)
             return (nan(), nan(), rules.noconverge());
         }
         lo = 1.0 - up;
-        if lo < 0.05 {
+        if lo < 0.001 {
             let l2 = side(a, b, x, y);
             if !is_nan(l2) {
                 lo = l2;

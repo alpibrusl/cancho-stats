@@ -115,7 +115,9 @@ def beta_ix(a, b, x):
         return mpf(0), mpf(1)
     if x >= 1:
         return mpf(1), mpf(0)
-    with mp.workdps(_dps_for(a, b)):
+    # 1 - x must keep its digits when x is tiny (a double down to 5e-324)
+    boost = int(-mp.log10(x)) + 10 if x < mpf(10) ** -3 else 0
+    with mp.workdps(_dps_for(a, b) + boost):
         a = mpf(a)
         b = mpf(b)
         x = mpf(x)
@@ -161,6 +163,13 @@ def beta_ix(a, b, x):
 def lgamma(x):
     with mp.workdps(_dps_for(x) + 20):
         return +mp.loggamma(mpf(x))
+
+
+def lgamma1p(a):
+    """ln Gamma(1 + a) to full relative accuracy for tiny a (the working precision grows with -log10 a)."""
+    a = mpf(a)
+    with mp.workdps(120 + (int(-mp.log10(a)) if a > 0 and a < 1 else 0)):
+        return +mp.loggamma(1 + mpf(a))
 
 
 def erf(x):
@@ -262,6 +271,8 @@ def ref(fn, args):
     a = args
     if fn == "lgamma":
         return lgamma(a[0])
+    if fn == "lgamma1p":
+        return lgamma1p(a[0])
     if fn == "erf":
         return erf(a[0])
     if fn == "erfc":
@@ -299,7 +310,7 @@ def ref(fn, args):
     raise KeyError(fn)
 
 
-ARITY = {"lgamma": 1, "erf": 1, "erfc": 1, "gamma_p": 2, "gamma_q": 2, "beta_lo": 3, "beta_up": 3, "norm_cdf": 1, "norm_sf": 1, "qnorm": 1,
+ARITY = {"lgamma1p": 1, "lgamma": 1, "erf": 1, "erfc": 1, "gamma_p": 2, "gamma_q": 2, "beta_lo": 3, "beta_up": 3, "norm_cdf": 1, "norm_sf": 1, "qnorm": 1,
          "t_cdf": 2, "t_sf": 2, "chi2_cdf": 2, "chi2_sf": 2, "f_cdf": 3, "f_sf": 3, "binom_cdf": 3, "binom_sf": 3}
 
 

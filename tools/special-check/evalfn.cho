@@ -7,6 +7,7 @@ module check.evalfn;
 import std.math;
 import ml.fbits;
 import special.dist;
+import special.lgam;
 import special.igam;
 import special.ibeta;
 
@@ -78,6 +79,9 @@ pub fn which[&s](name: &s [byte]) -> [] int {
     }
     if same(name, "binom_sf") {
         return 18;
+    }
+    if same(name, "lgamma1p") {
+        return 19;
     }
     return 0;
 }
@@ -162,6 +166,12 @@ pub fn eval(f: int, x: float, y: float, z: float) -> [] (float, int) {
     }
     if f == 17 {
         return dist.binom_cdf(x, y, z);
+    }
+    if f == 19 {
+        if is_nan(x) || x < 0.0 {
+            return (0.0 / 0.0, 2);
+        }
+        return (lgam.lgamma1p(x), 0);
     }
     return dist.binom_sf(x, y, z);
 }

@@ -94,6 +94,17 @@ def g_lgamma(r, i):
     return (r.pick([nb(10.0, -3), nb(10.0, 3), 9.99999, 10.00001, 0.5, 1.5, 3.0, 20.0]) * (1 + 0 * r.u()),)
 
 
+def g_lgamma1p(r, i):
+    m = i % 4
+    if m == 0:
+        return (r.logu(1e-300, 0.1),)
+    if m == 1:
+        return (r.uni(1e-3, 0.0999999),)
+    if m == 2:
+        return (r.pick(around(0.1) + [nb(0.1, -2), 1e-8, 5e-324, 0.05]),)
+    return (r.logu(1e-12, 1e-2),)
+
+
 def g_erf(r, i):
     m = i % 3
     s = 1.0 if r.u() < 0.5 else -1.0
@@ -265,6 +276,7 @@ def g_binom(r, i):
 # (name, fn, n cases, generator, kind, B0, slow)
 RANGES = [
     ("lgamma", "lgamma", 20000, g_lgamma, "lgamma", 1e-14, False),
+    ("lgamma1p", "lgamma1p", 20000, g_lgamma1p, "relflat", 1e-15, False),
     ("erf", "erf", 20000, g_erf, "rel", 2e-13, False),
     ("erfc", "erfc", 20000, g_erfc, "rel", 2e-13, False),
     ("gamma_p mid", "gamma_p", 20000, g_gamma_mid, "rel", 2e-13, False),
@@ -337,7 +349,7 @@ def references(specs, seed, scale, fast, workers, cache):
             index.append((spec[0], k))
     store = {}
     if cache and pathlib.Path(cache).exists():
-        store = json.load(open(cache))
+        store = {k: v for k, v in json.load(open(cache)).items() if not v.startswith("ERR:")}
     key = lambda j: j[0] + "|" + ",".join(hx(a) for a in j[1])
     todo = [j for j in jobs if key(j) not in store]
     if todo:
@@ -379,6 +391,10 @@ def judge(kind, b0, y, code, tag, f):
         bound = mpf(b0) * max(mpf(1), af)
     elif kind == "qnorm":
         bound = mpf("1e-15") + mpf("1e-13") * af
+    elif kind == "relflat":
+        bound = mpf(b0) * af
+        if af == 0:
+            return (y == 0.0), (0.0 if y == 0.0 else float("inf")), float(err)
     elif af < SMALLEST_NORMAL:
         bound = mpf("2e-323")
         if af == 0:

@@ -1,0 +1,277 @@
+# What this workflow runs, on which machines and what it does not show: docs/numerics.md section 7.4. Third-party actions are pinned by full commit SHA and carry a version comment
+# (scripts/check_workflow.py fails on any other form), the runner images are named (never `-latest`: a moving label changes the platform under a green run), the compiler revision is
+# read from cancho.toml and written nowhere else, and no job can write: the permissions are read-only everywhere.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *" # nightly: the full gate only
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+    working-directory: stats # the checkout of this repository; the compiler is built next to it, in ../cancho
+
+jobs:
+  # The gates that need no compiler: the pins against the document, the workflow's own structure, the Python references of the gates against mpmath's native functions.
+  static:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out this repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: stats
+          persist-credentials: false
+
+      - name: Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Install the packages of the gates (ci/requirements.txt)
+        run: python3 -m pip install --disable-pip-version-check -r ci/requirements.txt
+
+      - name: The pins agree with the document, and the check can fail
+        run: |
+          sh scripts/check_pins.sh
+          python3 scripts/mutants_pins.py
+
+      - name: This workflow's own checks
+        run: |
+          python3 scripts/check_workflow.py
+          python3 scripts/check_workflow.py --mutants
+
+      - name: The high-precision references against mpmath's native functions
+        run: python3 scripts/special_ref.py --selfcheck
+
+      - name: File sizes and documents
+        run: sh scripts/check_docs.sh
+
+  # Build the drivers and run the gates on each named platform. The numeric stores of cancho-ml are fetched by `cancho install`; while cancho-ml#46 is not pushed, their pin is a
+  # file:// URL that only the maintainer's machine has (docs/numerics.md section 2.3), so the step that needs them says so and the gates that need the build are reported as skipped,
+  # in the job summary, never as passed.
+  build-test:
+    if: github.event_name != 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-24.04, label: linux-x86_64-ubuntu24}
+          - {os: ubuntu-24.04-arm, label: linux-aarch64-ubuntu24}
+          - {os: macos-26, label: darwin-arm64}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - name: Check out this repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: stats
+          persist-credentials: false
+
+      - name: Platform
+        run: |
+          uname -a
+          if command -v sw_vers >/dev/null; then sw_vers; fi
+          cc --version | head -1 || true
+          python3 --version
+
+      - name: The compiler revision, read from cancho.toml
+        id: pins
+        run: |
+          rev=$(sed -n 's/^cancho *= *"\([0-9a-f]*\)".*/\1/p' cancho.toml)
+          test "${#rev}" -eq 40 || { echo "cancho.toml has no 40-digit compiler revision" >&2; exit 1; }
+          echo "rev=$rev" >> "$GITHUB_OUTPUT"
+          echo "compiler revision $rev"
+
+      - name: Cache the compiler
+        id: compiler
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: cancho/target/release/cancho
+          key: cancho-compiler-${{ steps.pins.outputs.rev }}-${{ matrix.label }}
+
+      - name: Check out the compiler
+        if: steps.compiler.outputs.cache-hit != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: alpibrusl/cancho
+          ref: ${{ steps.pins.outputs.rev }}
+          path: cancho
+          persist-credentials: false
+
+      - name: Build the compiler
+        if: steps.compiler.outputs.cache-hit != 'true'
+        working-directory: cancho
+        run: |
+          channel=$(sed -n 's/^channel *= *"\([^"]*\)".*/\1/p' rust-toolchain.toml)
+          test -n "$channel"
+          rustup toolchain install "$channel" --profile minimal
+          export RUSTUP_TOOLCHAIN="$channel"
+          cargo --version
+          time cargo build --release -p cancho
+
+      - name: The compiler runs
+        run: |
+          echo "CANCHO=$GITHUB_WORKSPACE/cancho/target/release/cancho" >> "$GITHUB_ENV"
+          echo "$GITHUB_WORKSPACE/cancho/target/release" >> "$GITHUB_PATH"
+          "$GITHUB_WORKSPACE/cancho/target/release/cancho" --version
+
+      - name: Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Install the packages of the gates (ci/requirements.txt)
+        run: python3 -m pip install --disable-pip-version-check -r ci/requirements.txt
+
+      - name: Are the pinned stores fetchable
+        id: stores
+        run: |
+          set -e
+          ok=yes
+          for label in ml-rng facc cli; do
+            blk=$(awk -v h="[dependencies.$label]" '$0==h{f=1;next} /^\[/{f=0} f' cancho.toml)
+            url=$(echo "$blk" | sed -n 's/^git *= *"\(.*\)".*/\1/p')
+            rev=$(echo "$blk" | sed -n 's/^rev *= *"\(.*\)".*/\1/p')
+            probe=$(mktemp -d)
+            git -C "$probe" init -q
+            if ! git -C "$probe" fetch -q --depth 1 "$url" "$rev" 2>/dev/null; then
+              echo "::warning::$label: $rev is not fetchable from $url on this runner"
+              ok=no
+            fi
+          done
+          echo "fetchable=$ok" >> "$GITHUB_OUTPUT"
+          if [ "$ok" = no ]; then
+            echo "### The gates that need the build were SKIPPED on ${{ matrix.label }}: a pinned store is not fetchable (docs/numerics.md section 2.3)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Fetch the pinned stores and build the drivers
+        if: steps.stores.outputs.fetchable == 'yes'
+        run: |
+          cancho install
+          cancho build --bin special-check
+          cancho build --bin acc-check
+
+      - name: The pins agree with the document (with the stores installed)
+        if: steps.stores.outputs.fetchable == 'yes'
+        run: sh scripts/check_pins.sh
+
+      - name: Domain, edge and fuzz gate
+        if: steps.stores.outputs.fetchable == 'yes'
+        run: python3 scripts/gate_domain.py --fuzz 50000
+
+      - name: Exact accumulation (the candidates against Fractions)
+        if: steps.stores.outputs.fetchable == 'yes'
+        run: python3 scripts/measure_acc.py
+
+      - name: Accuracy sweeps against the high-precision reference (fast)
+        if: steps.stores.outputs.fetchable == 'yes'
+        run: python3 scripts/gate_special.py --fast --workers 2
+
+      - name: Determinism gate (the fingerprint equals the committed golden, 1 to 16 threads)
+        if: steps.stores.outputs.fetchable == 'yes'
+        run: |
+          python3 scripts/xplat_fp.py | tee "../xplat-check-${{ matrix.label }}.txt"
+          python3 scripts/xplat_fp.py --print --no-threads > "../xplat-fp-${{ matrix.label }}.txt"
+
+      - name: The determinism gate can fail (its mutants)
+        if: steps.stores.outputs.fetchable == 'yes'
+        run: python3 scripts/xplat_fp.py --mutants
+
+      - name: Upload the fingerprint and logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: stats-s0-${{ matrix.label }}
+          path: |
+            xplat-check-*.txt
+            xplat-fp-*.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+  # The full gates (every range at its full size, the mutants), on request and nightly.
+  full-gate:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Check out this repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: stats
+          persist-credentials: false
+
+      - name: The compiler revision, read from cancho.toml
+        id: pins
+        run: |
+          rev=$(sed -n 's/^cancho *= *"\([0-9a-f]*\)".*/\1/p' cancho.toml)
+          test "${#rev}" -eq 40 || { echo "cancho.toml has no 40-digit compiler revision" >&2; exit 1; }
+          echo "rev=$rev" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the compiler
+        id: compiler
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: cancho/target/release/cancho
+          key: cancho-compiler-${{ steps.pins.outputs.rev }}-linux-x86_64-ubuntu24
+
+      - name: Check out the compiler
+        if: steps.compiler.outputs.cache-hit != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: alpibrusl/cancho
+          ref: ${{ steps.pins.outputs.rev }}
+          path: cancho
+          persist-credentials: false
+
+      - name: Build the compiler
+        if: steps.compiler.outputs.cache-hit != 'true'
+        working-directory: cancho
+        run: |
+          channel=$(sed -n 's/^channel *= *"\([^"]*\)".*/\1/p' rust-toolchain.toml)
+          test -n "$channel"
+          rustup toolchain install "$channel" --profile minimal
+          export RUSTUP_TOOLCHAIN="$channel"
+          cargo build --release -p cancho
+
+      - name: The compiler runs
+        run: |
+          echo "CANCHO=$GITHUB_WORKSPACE/cancho/target/release/cancho" >> "$GITHUB_ENV"
+          echo "$GITHUB_WORKSPACE/cancho/target/release" >> "$GITHUB_PATH"
+          "$GITHUB_WORKSPACE/cancho/target/release/cancho" --version
+
+      - name: Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Install the packages of the gates (ci/requirements.txt)
+        run: python3 -m pip install --disable-pip-version-check -r ci/requirements.txt
+
+      - name: Fetch the pinned stores and build the drivers
+        run: |
+          cancho install
+          cancho build --bin special-check
+          cancho build --bin acc-check
+
+      - name: Accuracy sweeps at full size
+        run: python3 scripts/gate_special.py --workers 3
+
+      - name: Independence check against scipy
+        run: python3 scripts/gate_independence.py
+
+      - name: Mutants of the special functions
+        run: python3 scripts/mutants_special.py

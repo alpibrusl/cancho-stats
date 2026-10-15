@@ -268,7 +268,7 @@ the survivors **each explained in the file** (an equivalent mutant: e.g. a chang
 | G6 | `scripts/check_pins.sh` and its mutants (section 2) | see 2.1 |
 | G7 | `.github/workflows/ci.yml`, modeled on `alpibrusl/cancho-ml`'s: named runner images (never `-latest`), actions pinned by full commit SHA, `permissions: contents: read`; `scripts/check_workflow.py` and its mutants | any `uses:` without a 40-hex SHA, any `-latest`, any permission other than read |
 | G8 | the fingerprint of section 6: equal to the golden on this Mac and on gram; `T = 1..16` equal | a differing line |
-| G9 | `scripts/consume.sh`: a scratch package (outside the repository) with every block of `cancho.toml`, `cancho install`, and a program that imports and calls one function of each family (the numeric stores, `facc`, `flt`, `reader`, the contract package) and prints known values | an install, build or value failure; mutants: a block removed, a store byte changed |
+| G9 | `scripts/consume.py`: a scratch package (outside the repository) with every block of `cancho.toml`, `cancho install`, and a program that imports and calls one function of each family (the numeric stores, `facc`, `flt`, `reader`, the contract package) and prints known values | an install, build or value failure; mutants: a block removed, a store byte changed |
 | G10 | no file over 2,000 lines; docs have no changelog narration (`scripts/check_docs.sh`: the sentences of the document are in the present tense, no "was added", no dates in prose other than the status line) | a file at 2,001 lines |
 
 ## 8. Results

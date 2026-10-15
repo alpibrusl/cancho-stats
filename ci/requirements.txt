@@ -1,0 +1,6 @@
+# The Python packages the gates of .github/workflows/ci.yml import (docs/numerics.md section 4): mpmath for the high-precision reference, numpy and scipy for the independence
+# check (G3) only, PyYAML for scripts/check_workflow.py. Exact versions, as on the maintainer's Mac when the gates were written (a venv inside the clone, never committed).
+mpmath==1.4.1
+numpy==2.5.4
+scipy==1.18.1
+PyYAML==6.0.3

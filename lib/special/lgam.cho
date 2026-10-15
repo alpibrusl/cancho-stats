@@ -62,7 +62,7 @@ static zeta_m1: [float] {
     return t;
 }
 
-// ln Gamma(1 + a) for 0 <= a: for a < 1/10 the series -gamma a + (ln(1+a) - a) + sum_{k>=2} (-1)^k (zeta(k) - 1) a^k / k, which keeps the relative accuracy that
+// ln Gamma(1 + a) for 0 <= a: for a < 1/10 the series -gamma a + (a - ln(1+a)) + sum_{k>=2} (-1)^k (zeta(k) - 1) a^k / k, which keeps the relative accuracy that
 // lgamma(1 + a) loses for small a (it is about -0.577 a there); above, `lgamma_pos` (its absolute error is what the callers need)
 pub fn lgamma1p(a: float) -> [] float {
     if a >= 0.1 {
@@ -78,7 +78,7 @@ pub fn lgamma1p(a: float) -> [] float {
         sign = 0.0 - sign;
         k = k + 1;
     }
-    return 0.0 - 0.5772156649015329 * a + (math.log1p(a) - a) + s;
+    return 0.0 - 0.5772156649015329 * a + (a - math.log1p(a)) + s;
 }
 
 // stirlerr(n) = ln n! - ln(sqrt(2 pi n) (n/e)^n), n > 0 (Loader 2000)
