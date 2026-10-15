@@ -1,0 +1,214 @@
+// bigint-check: the operations of acc.bigint on numbers given in hexadecimal, for scripts/gate_bigint.py. One line per operation on standard input:
+//
+//     mul A B             the product, in hexadecimal
+//     ratio N D E         the double nearest to (N / D) * 2^E (E a signed decimal), as `BITS CODE` (16 hex digits of the double, and the code of acc.bigint)
+//     sub A B             A - B for A >= B, in hexadecimal
+//     add A B             A + B, in hexadecimal (the sum must fit in 398 limbs)
+//
+// A, B, N, D are hexadecimal without a prefix (at most 1,200 digits).
+edition 5;
+
+import std.io;
+import acc.bigint;
+
+fn hexval(c: int) -> [] int {
+    if c >= '0' && c <= '9' {
+        return c - '0';
+    }
+    if c >= 'a' && c <= 'f' {
+        return c - 'a' + 10;
+    }
+    if c >= 'A' && c <= 'F' {
+        return c - 'A' + 10;
+    }
+    return 0;
+}
+
+fn hex16[&i](io: &!i Io, bits: int) -> [io_write] int {
+    var k = 0;
+    while k < 16 {
+        let nib = bits >> 60 - 4 * k & 15;
+        if nib < 10 {
+            putchar(io, '0' + nib);
+        } else {
+            putchar(io, 'a' + nib - 10);
+        }
+        k = k + 1;
+    }
+    return 0;
+}
+
+// the number in hex, no leading zeros ("0" for zero)
+fn put_hex[&i, &a](io: &!i Io, a: &a [int], n: int) -> [io_write] int {
+    let bl = bigint.bit_length(a, n);
+    if bl == 0 {
+        putchar(io, '0');
+        return 0;
+    }
+    var pos = (bl + 3) / 4 * 4 - 4;
+    while pos >= 0 {
+        var v = 0;
+        var k = 3;
+        while k >= 0 {
+            v = v * 2 + bigint.bit_at(a, n, pos + k);
+            k = k - 1;
+        }
+        if v < 10 {
+            putchar(io, '0' + v);
+        } else {
+            putchar(io, 'a' + v - 10);
+        }
+        pos = pos - 4;
+    }
+    return 0;
+}
+
+fn word[&s](line: &s [byte], from: int) -> [] int {
+    var i = from;
+    while i < len(line) && int_of(line[i]) != ' ' {
+        i = i + 1;
+    }
+    return i;
+}
+
+// read the hex word line[from..to) into out (limbs 0..n), answers nothing
+fn read_hex[&s, &o](line: &s [byte], from: int, to: int, out: &!o [int], n: int) -> [] int {
+    bigint.clear(out, n);
+    var i = from;
+    while i < to {
+        bigint.shl_add(out, n, 4, hexval(int_of(line[i])));
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn number_of[&s](line: &s [byte], from: int, to: int) -> [] int {
+    var i = from;
+    var neg = false;
+    if i < to && int_of(line[i]) == '-' {
+        neg = true;
+        i = i + 1;
+    }
+    var v = 0;
+    while i < to {
+        let c = int_of(line[i]);
+        if c >= '0' && c <= '9' && v < 100000000000 {
+            v = v * 10 + (c - '0');
+        }
+        i = i + 1;
+    }
+    if neg {
+        return 0 - v;
+    }
+    return v;
+}
+
+fn run[&h, &i, &s](heap: &!h Heap, io: &!i Io, line: &s [byte]) -> [heap, io_write] int {
+    if len(line) < 4 {
+        return 0;
+    }
+    let cap = 400;
+    let a = box_slice(heap, cap, 0);
+    let b = box_slice(heap, cap, 0);
+    let c = box_slice(heap, 2 * cap + 8, 0);
+    let q = box_slice(heap, 2 * cap + 8, 0);
+    let r = box_slice(heap, cap + 2, 0);
+    let op = int_of(line[0]);
+    let s0 = word(line, 0) + 1;
+    let w1 = word(line, s0);
+    let w2 = word(line, w1 + 1);
+    let w3 = word(line, w2 + 1);
+    borrow mut a as &!aw in {
+        borrow mut b as &!bw in {
+            borrow mut c as &!cw in {
+                borrow mut q as &!qw in {
+                    borrow mut r as &!rw in {
+                        let av = contents(aw);
+                        let bv = contents(bw);
+                        let cv = contents(cw);
+                        let qv = contents(qw);
+                        let rv = contents(rw);
+                        read_hex(line, s0, w1, av, cap - 2);
+                        read_hex(line, w1 + 1, w2, bv, cap - 2);
+                        if op == 'm' {
+                            // the exact limb counts, so that the carry out of the last limb of a row is exercised (a zero-padded operand would absorb it)
+                            var na = (bigint.bit_length(av, cap - 2) + 25) / 26;
+                            var nb = (bigint.bit_length(bv, cap - 2) + 25) / 26;
+                            if na < 1 {
+                                na = 1;
+                            }
+                            if nb < 1 {
+                                nb = 1;
+                            }
+                            bigint.mul(cv, av, na, bv, nb);
+                            put_hex(io, cv, na + nb);
+                            io.newline(io);
+                        } else if op == 'a' {
+                            bigint.add_in(av, cap - 2, bv, cap - 2);
+                            put_hex(io, av, cap - 2);
+                            io.newline(io);
+                        } else if op == 's' {
+                            bigint.sub_in(av, cap - 2, bv, cap - 2);
+                            put_hex(io, av, cap - 2);
+                            io.newline(io);
+                        } else {
+                            let e = number_of(line, w2 + 1, w3);
+                            // the quotient with at least 66 significant bits
+                            let bn = bigint.bit_length(av, cap - 2);
+                            let bd = bigint.bit_length(bv, cap - 2);
+                            var k = 66 + bd - bn;
+                            if k < 0 {
+                                k = 0;
+                            }
+                            let sticky = bigint.div_shifted(av, cap - 2, bv, cap - 2, k, qv, rv);
+                            let (bits, code) = bigint.round_bits(qv, 2 * cap + 8, e - k, sticky);
+                            hex16(io, bits);
+                            io.space(io);
+                            io.print_int(io, code);
+                            io.newline(io);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    unbox_slice(heap, a);
+    unbox_slice(heap, b);
+    unbox_slice(heap, c);
+    unbox_slice(heap, q);
+    unbox_slice(heap, r);
+    return 0;
+}
+
+fn main(world: World) -> [] int {
+    let Split { io, ffi, fs, heap, args, net, clock } = split(world);
+    release(ffi);
+    release(net);
+    release(fs);
+    release(clock);
+    release(args);
+    borrow mut heap as &!h in {
+        borrow mut io as &!w in {
+            var buf = box_slice(h, 4096, byte_of(0));
+            var n = 0;
+            var c = getchar(w);
+            borrow mut buf as &!bw in {
+                let bytes = contents(bw);
+                while c >= 0 {
+                    if c == '\n' {
+                        run(h, w, bytes[0..n]);
+                        n = 0;
+                    } else if n < 4090 {
+                        bytes[n] = byte_of(c);
+                        n = n + 1;
+                    }
+                    c = getchar(w);
+                }
+            }
+            unbox_slice(h, buf);
+        }
+    }
+    release(heap);
+    release(io);
+    return 0;
+}

@@ -1,0 +1,257 @@
+edition 5;
+
+module acc.bigint;
+
+// Unsigned big integers for the exact variance and covariance of docs/describe.md section 3: a number is a slice of limbs of 26 bits, least significant first, with an explicit count of limbs in use.
+// The compiler's own `std.bignum` has no product of two big numbers and no division (docs/numerics.md 8.2), and a limb of 26 bits keeps every partial product of two limbs below 2^52 so that a
+// row of them adds without a trap. Everything is integer arithmetic: no float operation, so the same bytes on every platform. Division is the binary shift-and-subtract kind: a few thousand steps
+// for the numbers here (at most about 5000 bits), used once per column, so it is chosen for being obviously correct, not for speed.
+
+pub fn limb_bits() -> [] int {
+    return 26;
+}
+
+fn mask() -> [] int {
+    return 67108863;
+}
+
+pub fn is_zero[&a](a: &a [int], n: int) -> [] bool {
+    var i = 0;
+    while i < n {
+        if a[i] != 0 {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+// 1 if a > b, 0 if equal, -1 if a < b
+pub fn compare[&a, &b](a: &a [int], na: int, b: &b [int], nb: int) -> [] int {
+    var n = na;
+    if nb > n {
+        n = nb;
+    }
+    var i = n - 1;
+    while i >= 0 {
+        var x = 0;
+        var y = 0;
+        if i < na {
+            x = a[i];
+        }
+        if i < nb {
+            y = b[i];
+        }
+        if x > y {
+            return 1;
+        }
+        if x < y {
+            return -1;
+        }
+        i = i - 1;
+    }
+    return 0;
+}
+
+// the number of the highest set bit plus one (0 for zero)
+pub fn bit_length[&a](a: &a [int], n: int) -> [] int {
+    var i = n - 1;
+    while i >= 0 {
+        if a[i] != 0 {
+            var v = a[i];
+            var b = 0;
+            while v > 0 {
+                b = b + 1;
+                v = v >> 1;
+            }
+            return i * 26 + b;
+        }
+        i = i - 1;
+    }
+    return 0;
+}
+
+pub fn bit_at[&a](a: &a [int], n: int, pos: int) -> [] int {
+    if pos < 0 || pos >= n * 26 {
+        return 0;
+    }
+    return a[pos / 26] >> pos % 26 & 1;
+}
+
+pub fn set_bit[&a](a: &!a [int], pos: int) -> [] int {
+    a[pos / 26] = a[pos / 26] | 1 << pos % 26;
+    return 0;
+}
+
+pub fn clear[&a](a: &!a [int], n: int) -> [] int {
+    var i = 0;
+    while i < n {
+        a[i] = 0;
+        i = i + 1;
+    }
+    return 0;
+}
+
+// a = a * 2^k + v for k <= 20 and v < 2^k (the step of reading a number digit by digit); the caller leaves room for the carry
+pub fn shl_add[&a](a: &!a [int], n: int, k: int, v: int) -> [] int {
+    var carry = v;
+    var i = 0;
+    while i < n {
+        let t = (a[i] << k) + carry;
+        a[i] = t & mask();
+        carry = t >> 26;
+        i = i + 1;
+    }
+    return carry;
+}
+
+// a = a - b, for a >= b (na >= nb)
+pub fn sub_in[&a, &b](a: &!a [int], na: int, b: &b [int], nb: int) -> [] int {
+    var owe = 0;
+    var i = 0;
+    while i < na {
+        var y = 0;
+        if i < nb {
+            y = b[i];
+        }
+        var t = a[i] - y - owe;
+        if t < 0 {
+            t = t + 67108864;
+            owe = 1;
+        } else {
+            owe = 0;
+        }
+        a[i] = t;
+        i = i + 1;
+    }
+    return owe;
+}
+
+// a = a + b (na >= nb), answers the carry out
+pub fn add_in[&a, &b](a: &!a [int], na: int, b: &b [int], nb: int) -> [] int {
+    var carry = 0;
+    var i = 0;
+    while i < na {
+        var y = 0;
+        if i < nb {
+            y = b[i];
+        }
+        let t = a[i] + y + carry;
+        a[i] = t & mask();
+        carry = t >> 26;
+        i = i + 1;
+    }
+    return carry;
+}
+
+// out[0 .. na + nb) = a * b
+pub fn mul[&o, &a, &b](out: &!o [int], a: &a [int], na: int, b: &b [int], nb: int) -> [] int {
+    clear(out, na + nb);
+    var i = 0;
+    while i < na {
+        var carry = 0;
+        var j = 0;
+        while j < nb {
+            let t = out[i + j] + a[i] * b[j] + carry;
+            out[i + j] = t & mask();
+            carry = t >> 26;
+            j = j + 1;
+        }
+        out[i + nb] = out[i + nb] + carry;
+        i = i + 1;
+    }
+    return 0;
+}
+
+// r = 2 r + bit, for r with room for one more limb (nr limbs in use, answered count is nr)
+fn shl1_bit[&r](r: &!r [int], nr: int, bit: int) -> [] int {
+    var carry = bit;
+    var i = 0;
+    while i < nr {
+        let t = (r[i] << 1) + carry;
+        r[i] = t & mask();
+        carry = t >> 26;
+        i = i + 1;
+    }
+    return carry;
+}
+
+// The quotient and the remainder of (num * 2^shift) / den by shift-and-subtract. q receives the quotient bits (it must have room for bit_length(num) + shift bits and
+// be zero), r is scratch of nd + 1 limbs. Answers 1 if the remainder is not zero. den must not be zero.
+pub fn div_shifted[&n, &d, &q, &r](num: &n [int], nn: int, den: &d [int], nd: int, shift: int, q: &!q [int], r: &!r [int]) -> [] int {
+    clear(r, nd + 1);
+    let total = bit_length(num, nn) + shift;
+    var pos = total - 1;
+    var qbit = total - 1;
+    while pos >= 0 {
+        // the bit of num * 2^shift at `pos`: bit pos - shift of num (zero below the shift)
+        var b = 0;
+        if pos >= shift {
+            b = bit_at(num, nn, pos - shift);
+        }
+        shl1_bit(r, nd + 1, b);
+        if compare(r, nd + 1, den, nd) >= 0 {
+            sub_in(r, nd + 1, den, nd);
+            set_bit(q, qbit);
+        }
+        qbit = qbit - 1;
+        pos = pos - 1;
+    }
+    if is_zero(r, nd + 1) {
+        return 0;
+    }
+    return 1;
+}
+
+// The double nearest to q * 2^e (+ a tail below q's last bit when `sticky` is 1), as the BITS of the double, round half to even, one rounding. q has nq limbs and is not zero.
+// Precondition: sticky is 0 or q has at least 54 bits. Answers (bits, code): code 0, or 1 when the value is beyond the largest double (bits then 0). A value below half the smallest subnormal answers bits 0.
+pub fn round_bits[&q](q: &q [int], nq: int, e: int, sticky: int) -> [] (int, int) {
+    let t = bit_length(q, nq) - 1;
+    var lsb = t - 52;
+    if e + lsb < -1074 {
+        lsb = -1074 - e;
+    }
+    var m = 0;
+    var k = t;
+    while k >= lsb && k >= 0 {
+        m = m * 2 + bit_at(q, nq, k);
+        k = k - 1;
+    }
+    var guard = 0;
+    var rest = sticky == 1;
+    if lsb >= 1 {
+        guard = bit_at(q, nq, lsb - 1);
+        var j = lsb - 2;
+        while j >= 0 && !rest {
+            if bit_at(q, nq, j) == 1 {
+                rest = true;
+            }
+            j = j - 1;
+        }
+    }
+    // q has fewer than 53 bits: the mantissa is q padded with zeros, which is exact only if there is no tail below q's last bit (callers keep at least 54 bits whenever they have a tail)
+    var pad = lsb;
+    while pad < 0 {
+        m = m * 2;
+        pad = pad + 1;
+    }
+    if guard == 1 && (rest || m & 1 == 1) {
+        m = m + 1;
+    }
+    var q2 = e + lsb;
+    if m == 9007199254740992 {
+        m = 4503599627370496;
+        q2 = q2 + 1;
+    }
+    if m == 0 {
+        return (0, 0);
+    }
+    if m >= 4503599627370496 {
+        let biased = q2 + 1075;
+        if biased >= 2047 {
+            return (0, 1);
+        }
+        return (biased * 4503599627370496 + (m - 4503599627370496), 0);
+    }
+    return (m, 0);
+}
