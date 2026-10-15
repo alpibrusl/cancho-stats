@@ -139,8 +139,9 @@ the switch point, so it carries no cancellation).
 
 ### 3.2 Accuracy target (the bounds the gates enforce)
 
-`B(f) = B0 + B1 |ln f|` relative to `f` unless the metric says absolute. `B1 = 4e-16` everywhere it appears (about two ulps of `|ln f|`: the rounding of the
-argument of the last `exp`). Ranges are of the *inputs*, sampled as in 7.1.
+`B(f) = B0 + B1 |ln f|` relative to `f` unless the metric says absolute. `B1 = 4e-16` where it appears (about two ulps of `|ln f|`: the rounding of the
+argument of the last `exp`), except `B1 = 1.5e-15` for the incomplete gamma and chi-square with `a` in `[15, 1e4]` (*corrected in place*: the full-size sweep, 20,000 cases per range, found 26 cases up to 1.6 times the bound at
+`a` of 1e3 to 1e4 with `x` 30% from `a` and tails of 1e-90 to 1e-280; Loader's exponent there has terms near 3000 that cancel to 600, so one ulp of `log` times `x` is 5e-13; the coefficient those cases need is 9.5e-16). Ranges are of the *inputs*, sampled as in 7.1.
 
 | function | input range | metric | `B0` | notes |
 |---|---|---|---|---|
@@ -345,7 +346,7 @@ Cases per range as listed (the ranges named `big` use 200: the high-precision re
 | binom_cdf | 2000 | 5e-12 | 0 | 0.0264 |
 | binom_sf | 2000 | 5e-12 | 0 | 0.0487 |
 
-0 of 49,000 cases outside. The ratios close to 1 are `gamma_p mid` (0.94) and `gamma_q mid` (0.80), `lgamma` (0.67, absolute error near the roots at 1 and 2) and `lgamma1p` (0.60): those bounds are tight, not slack.
+0 of 49,000 cases outside at this size. **The full-size run is below (8.3.1) and found 26 cases outside until the far-tail coefficient was corrected.** The ratios close to 1 are `gamma_p mid` (0.94) and `gamma_q mid` (0.80), `lgamma` (0.67, absolute error near the roots at 1 and 2) and `lgamma1p` (0.60): those bounds are tight, not slack.
 The sweep has modes for moderate deviations at large `a` (10% to 70%), where Loader's form is not in its series window; a mutant that drops the quotient correction is killed only by them.
 
 * **Independence (G3, `scripts/gate_independence.py --fast`).** Over the same cases, **no point where the `mpmath` reference is the isolated one**; the largest disagreement between `scipy.special` and the reference
@@ -354,6 +355,15 @@ The sweep has modes for moderate deviations at large `a` (10% to 70%), where Loa
 * **Refinements the sweeps forced (kept as measured facts).** The continued fraction of the incomplete beta in double precision is ill-conditioned for large `a` near its switch point: its error did not shrink
   with the iterations (1e-10 at `a = 5e5`, bound 1e-11), so it runs in double-double (`lib/special/dd.cho`); `x` and `1 - y` are made consistent exactly (a 1e-16 inconsistency was 1e-9 of `y` at `nu = 1e8`);
   `x ln(x/np)` in Loader's form needs the quotient corrected (2e-13 at `a = 2000`); a sign error in the `lgamma1p` series was found by the gate.
+
+#### 8.3.1 The full-size run and the independence run (gram, `taskset -c 0-6`, 6 workers, seed 1)
+
+`gate_special.py` at full size: 20,000 cases per range (2,000 for `big`), 432,000 references in 467 s: **26 cases outside**, all in `gamma_p mid` (20) and `gamma_q mid` (6), the worst 1.61 times the bound
+(`a` between 1e3 and 1e4, `x` about 30% from `a`, tails of 1e-90 to 1e-280); the smaller runs of 8.3 did not contain them. After the correction of 3.2 (`B1 = 1.5e-15` for that family) the four ranges
+`gamma_p mid`, `gamma_q mid`, `chi2_cdf mid`, `chi2_sf mid` have **0 outside**, with largest ratios 0.75, **0.97**, 0.38 and **0.96**; the other 23 ranges had 0 outside, the largest ratios being `lgamma` 0.73,
+`lgamma1p` 0.70, `f_cdf` 0.52 and `f_sf` 0.51. Two ratios close to 1 mean those bounds are tight at this size, not that they are comfortable.
+`gate_independence.py` with 4,000 cases per range (400 for `big`): **no point where the `mpmath` reference is the isolated one**; `scipy` is the outlier on `gamma_p big` (2.1e-2, 42 points above 1e-10),
+`chi2_cdf big` (2.1e-9, 2 points), `binom_cdf` (3.4e-9, 187 points) and `binom_sf` (3.0e-9, 208 points).
 
 ### 8.4 Domain, edges and fuzz (`scripts/gate_domain.py`)
 
@@ -370,14 +380,13 @@ differ in the last bit between them); the generator is now exact (`frexp`, `ldex
 
 ### 8.6 Mutants of the special functions (`scripts/mutants_special.py`, 85 mutants, fast gates)
 
-**74 killed, 11 survived and each is explained in the file** (tolerance-equivalent: the mutation moves every result by less than the bound of every range, or it is an equivalent change; the explanation is
+**73 killed, 12 survived and each is explained in the file** (tolerance-equivalent: the mutation moves every result by less than the bound of every range, or it is an equivalent change; the explanation is
 next to the name). 7 are the controls of G2 (`control-*`): a Stirling coefficient `1/12.001`, the series of `lgamma1p` cut at 4 terms, the Lentz tolerances loosened, `Q = 1 - P` for small `a`, the beta switch at
 `x = 1/2`, and no Newton steps: all killed. 0 invalid. The mutants cover every public function and the helpers they stand on (the file lists them by name); a first run left a hole (the correction of Loader's quotient survived): the sweep gained a mode and that mutant is killed now.
 
 ### 8.7 Not done, and risks
 
 * The pin of the numeric stores is cancho-ml's merge commit `99e9b64` (PR #51); the full-gate job (every range at full size, the mutants) has not run on GitHub.
-* The sweeps ran at 2,000 cases per range (200 for `big`), not the 20,000 of 7.1; the 600-case fast run and the 2,000-case run both pass. 4,000 points per function for G3 were not reached (the fast cases, 200 to 600 per range, were).
 * Accuracy is bounded only in the ranges of 3.2; beyond them to the refusal limits the functions answer without a bound. The bounds are measured on seeded samples, not proved.
 * The exact numerator of variance and covariance (a big-integer product), the `stats.sum-overflow` and `stats.range-product` refusals and the row limit are rules of 8.2, not code.
 * Threads: the functions are pure, so the thread test shows what it shows (block copies and ordered write-back); the accumulators are sequential.

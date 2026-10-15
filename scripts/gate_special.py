@@ -320,6 +320,8 @@ RANGES = [
 ]
 
 B1 = 4e-16
+# the far-tail coefficient of the incomplete gamma and chi-square for a in [15, 1e4]: Loader's exponent x ln(x/np) + np - x has terms near 3000 that cancel to 600, so a 1-ulp log costs 5e-13 (measured, docs/numerics.md 8.3)
+B1_OF = {"gamma_p mid": 1.5e-15, "gamma_q mid": 1.5e-15, "chi2_cdf mid": 1.5e-15, "chi2_sf mid": 1.5e-15}
 SMALLEST_NORMAL = 2.2250738585072014e-308
 
 
@@ -393,7 +395,7 @@ def run_driver(driver, fn, cases, timeout=900, threads=None):
     return out
 
 
-def judge(kind, b0, y, code, tag, f):
+def judge(kind, b0, y, code, tag, f, b1=B1):
     """(ok, ratio of error to bound, absolute error) for a double y against the reference f (mpf)."""
     from mpmath import mp, mpf
 
@@ -412,7 +414,7 @@ def judge(kind, b0, y, code, tag, f):
         bound = mpf(b0) * af + mpf("2e-323")
     else:
         # relative bound with the stated far-tail term, plus 4 units of the smallest subnormal: below the smallest normal double a result has fewer bits, and the unit is what is left
-        bound = (mpf(b0) + mpf(B1) * abs(mp.log(af))) * af + mpf("2e-323")
+        bound = (mpf(b0) + mpf(b1) * abs(mp.log(af))) * af + mpf("2e-323")
     ratio = float(err / bound)
     return err <= bound, ratio, float(err / af) if af != 0 else float(err)
 
@@ -438,7 +440,7 @@ def evaluate(driver, specs, seed, scale, fast, workers, cache, quiet=False):
                 continue
             f = mpf(rv)
             y = unhx(o[1])
-            ok, ratio, rel = judge(kind, b0, y, int(o[2]), None, f)
+            ok, ratio, rel = judge(kind, b0, y, int(o[2]), None, f, B1_OF.get(name, B1))
             if not ok:
                 bad += 1
                 if first_bad is None or ratio > first_bad[0]:
