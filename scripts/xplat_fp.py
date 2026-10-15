@@ -7,7 +7,7 @@
     python3 scripts/xplat_fp.py --mutants        # the checks are shown able to fail
 
 The fingerprint is one tab-separated line per sweep: `kind  name  count  sha256`, the hash over the driver's output lines (`id  hex bits of the result  code`) for a fixed list of cases:
-`special` the first N cases of each range of gate_special.py (seed 1), `edge` the edge cases of gate_domain.py for each function, `acc` the vectors of three families of measure_acc.py through acc-check.
+`special` the first N cases of each range of gate_special.py (seed 1), `edge` the edge cases of gate_domain.py for each function, `acc` the vectors of three families of measure_acc.py through acc-check, `describe` the bytes `stats describe` prints for 12 seeded CSV files.
 Equal to the golden is equal to each other: the golden was written on one machine and every other platform of the workflow must print its bytes.
 Thread check: for every sweep, `special-check FN --threads T` for T in 1, 2, 3, 4, 7, 8, 16 must print the bytes of the sequential run.
 Exit 0: the fingerprint equals the golden and the thread check holds. Exit 1: a difference (printed). Exit 2: the script could not run.
@@ -24,6 +24,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import gate_domain  # noqa: E402
 import gate_special  # noqa: E402
 import measure_acc  # noqa: E402
+import gate_describe  # noqa: E402
+import tempfile  # noqa: E402
 
 GOLDEN = ROOT / "docs" / "xplat_fp.txt"
 THREADS = (1, 2, 3, 4, 7, 8, 16)
@@ -64,7 +66,30 @@ def acc_vectors():
     return out
 
 
-def fingerprint(driver, acc, threads_check=True):
+def describe_lines(stats):
+    """`stats describe` on 12 seeded CSV files (the shapes of gate_describe.py): the hash of the bytes it prints, with --ddof 1 and 0."""
+    r = gate_special.SM64(11)
+    out = []
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        for k in range(12):
+            ncols = 1 + int(r.next() % 5)
+            shapes = [gate_describe.SHAPES[int(r.next() % len(gate_describe.SHAPES))] for _ in range(ncols)]
+            n = [1, 2, 3, 5, 20, 100, 400][int(r.next() % 7)]
+            cols = [gate_describe.column(r, sh, n) for sh in shapes]
+            names = ["c%d_%s" % (j, sh) for j, sh in enumerate(shapes)]
+            rows = [[cols[j][i] for j in range(ncols)] for i in range(n)]
+            h = hashlib.sha256()
+            for ddof in (1, 0):
+                p = gate_describe.run(stats, tmp, names, rows, ddof)
+                if p.returncode != 0:
+                    raise RuntimeError("stats exit %d" % p.returncode)
+                h.update(p.stdout.encode())
+            out.append("describe\tfile%02d\t%d\t%s" % (k, n, h.hexdigest()))
+    return out
+
+
+def fingerprint(driver, acc, threads_check=True, stats=None):
     lines = []
     bad = []
     for kind, name, fn, cases in list(special_sweeps()) + list(edge_sweeps()):
@@ -82,6 +107,8 @@ def fingerprint(driver, acc, threads_check=True):
         if r.returncode != 0:
             raise RuntimeError("acc-check exit %d" % r.returncode)
         lines.append("acc\t%s\t%d\t%s" % (name, len(vecs), sha(r.stdout)))
+    if stats:
+        lines += describe_lines(stats)
     return lines, bad
 
 
@@ -96,18 +123,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--driver", default=str(ROOT / "build" / "special-check"))
     ap.add_argument("--acc", default=str(ROOT / "build" / "acc-check"))
+    ap.add_argument("--stats", default=str(ROOT / "build" / "stats"))
     ap.add_argument("--golden", default=str(GOLDEN))
     ap.add_argument("--print", dest="show", action="store_true")
     ap.add_argument("--update", action="store_true")
     ap.add_argument("--mutants", action="store_true")
     ap.add_argument("--no-threads", action="store_true")
     a = ap.parse_args()
-    for b in (a.driver, a.acc):
+    for b in (a.driver, a.acc, a.stats):
         if not pathlib.Path(b).exists():
             print("xplat_fp: no binary %s (cancho install && cancho build --bin special-check && cancho build --bin acc-check)" % b)
             return 2
     try:
-        lines, bad = fingerprint(a.driver, a.acc, threads_check=not a.no_threads)
+        lines, bad = fingerprint(a.driver, a.acc, threads_check=not a.no_threads, stats=a.stats)
     except Exception as e:
         print("xplat_fp: could not run: %s" % e)
         return 2

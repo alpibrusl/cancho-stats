@@ -1,6 +1,6 @@
 # `stats describe`: design (milestone S1)
 
-**Status: design, written before any code of S1. Nothing here is measured for `describe`; what S0 measured is in `docs/numerics.md` and is cited by section.** Tags: **[read]** read from a document or source,
+**Status: the design was written before any code of S1. Section 7 says what the first slice of the verb does and where it differs from the design; sections 1 to 6 are the design as written, and a paragraph that the code has overtaken says so. What S0 measured is in `docs/numerics.md` and is cited by section.** Tags: **[read]** read from a document or source,
 **[measured]** printed by a script (S0's), **[choice]** a decision the maintainer can overturn, **[open]** not decided. Written 2026-10-15.
 
 ## 1. What it does
@@ -55,3 +55,31 @@ distinct levels and bins each have a flag, a default and a ceiling, checked befo
 2. Whether `sd` may be a second rounding (rounding the exact variance first) instead of the tie check of section 2: simpler, but then "one rounding" is not true for `sd`, and the answer would say `rounding: "exact-then-2"`.
 3. Whether `acc.psum` and `acc.bigint` should be published as stores for S2 to pin, or stay in this repository until a second consumer exists (the rule of `cancho-ml/docs/stores.md`: a module stays out until a consumer needs it).
 4. The histogram's edge convention (closed last bin, exact comparison against rational edges).
+
+## 7. The first slice (built) and what is not yet
+
+`stats describe FILE` exists (`tools/stats/main.cho`, built by `cancho build --bin stats`). It prints, per column: `kind` (numeric, text, empty), `count`, `missing`, and for a numeric column `min`, `max`, `mean`,
+`variance` and `sd`, one JSON document of the contract of cancho-tools' `toolbox` (`stats.v1`, `schemas/stats.v1.json`), with `introspect` and `skill` from the same flag table and the authority report the compiler derives
+(`manifests/stats.authority.json`, bounded; `args`, `dir_read`, `err_write`, `file_read`, `fs_read`, `heap`, `io_write`; no `conc`, `clock`, `net` or `ffi`).
+
+**Where the code differs from sections 2 and 3.**
+* **`S1` and `S2` both come from `acc.psum`** (k = 1 and 2, own accumulators, gated in `scripts/gate_psum.py`), not from `facc` and `ml.fsq`: the numerator `n S2 - S1^2` needs both sums as limb numbers in
+  compatible units (2^-2148), and `ml.fsq` and `facc` publish only a rounded result. `facc` and `ml.fsq` stay pinned for the reader and the measurement of `docs/numerics.md` 8.2.
+* **`sd` is the square root of the rounded variance**: two roundings, said in the answer (`rounding`), the simpler of the two options of section 2 and the one of open point 2; the tie check of section 2 is not built.
+* **`ddof` is 0 or 1**; the variance is `null` when `n - ddof < 1` or when the exact variance is beyond the largest double.
+* **A cell that is not a number makes its column `text`**: a quoted cell, an empty-or-not cell the reader of cancho-table (`flt.parse_float`) refuses (NaN, infinity, a bare sign, a space). No cell value is printed.
+* **A blank line is skipped, except in a file of one column, where it is one missing cell.** A record that continues on the next line (a quoted newline) is refused (`stats.csv-multiline`), not read.
+* Rules of this tool's own: `stats.csv-ragged`, `stats.csv-multiline`, `stats.csv-bad-quote`, `stats.no-header`, `stats.bad-verb` (exit 2), `limit.too-many-rows`, `limit.too-many-columns`, each with exit 8 except the verb.
+
+**Gates of this slice** (all in CI and `scripts/check.sh`): `scripts/gate_describe.py` (generated files of 14 column shapes, every number against `Fraction`, bit for bit, with `--ddof 1` and `0` and a shuffled-row rerun that must print
+the same bytes), `scripts/gate_describe_refusals.py` (25 table cases with the exact tag and exit code, and fuzz of hostile files and arguments), `scripts/mutants_stats.py` (26 mutants), `scripts/manifest.py --check`, and the
+fingerprint lines `describe` of `docs/xplat_fp.txt`. Measured results are in section 8.
+
+**Not built yet:** skewness and kurtosis (the sums `S3` and `S4` exist in `acc.psum`, the formulas are not written), the quantiles and their nine types, the histogram, `distinct` and the most frequent levels of a text
+column, `--by`, `--cols`, `--bins`, `--quantile-type`, `--format text`, the tie check of `sd`. The four open points of section 6 keep their proposed defaults and are the maintainer's to change.
+
+## 8. Results of the first slice
+
+*(printed by the scripts named; the machine is the Mac of docs/numerics.md section 8, load as stated there)*
+
+GRAM_PLACEHOLDER
