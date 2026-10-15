@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cancho-stats: statistics whose last digit you can check</title>
+<meta name="description" content="A command line that describes data and draws inferences from it, written in cancho: exact sums rounded once, the same bytes on every platform and at any thread count, and distribution functions with an error bound that was written first and measured.">
+<meta property="og:title" content="cancho-stats: statistics whose last digit you can check">
+<meta property="og:description" content="Exact sums rounded once, identical bytes on five machines, p-values with a stated and measured error bound, refusals that name their rule.">
+<meta name="color-scheme" content="light dark">
+<style>
+:root {
+  --bg: #fbfcfd; --fg: #14181a; --muted: #55606a; --line: #dfe5e7; --surface: #ffffff; --soft: #eff4f4;
+  --accent: #1f5fa6; --accent-fg: #ffffff; --good: #0f7b5f; --warn: #92400e; --warn-bg: #fdf6e7; --warn-line: #e0b765; --bad: #b42d27;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0b0f14; --fg: #e7ebec; --muted: #9aa8ae; --line: #212a2d; --surface: #131a1c; --soft: #172022;
+    --accent: #7fb2ff; --accent-fg: #07162c; --good: #4fd1a5; --warn: #f3c77a; --warn-bg: #1d1a12; --warn-line: #8a6a2a; --bad: #ff7b73; }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; scroll-padding-top: 4rem; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 1rem/1.6 var(--font); }
+a { color: var(--accent); text-underline-offset: .15em; }
+.wrap { width: 100%; max-width: 68rem; margin: 0 auto; padding: 0 16px; }
+header.top { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+header.top .wrap { display: flex; align-items: center; gap: 1.5rem; height: 3.4rem; }
+.brand { display: inline-flex; align-items: center; gap: .5rem; font: 700 1rem var(--mono); color: var(--fg); text-decoration: none; letter-spacing: -.01em; }
+nav { display: flex; gap: 1.2rem; margin-left: auto; }
+nav a { color: var(--muted); text-decoration: none; font-size: .93rem; }
+nav a:hover { color: var(--fg); }
+@media (max-width: 40rem) { nav a.opt { display: none; } }
+.hero { padding: 3.5rem 0 2.5rem; border-bottom: 1px solid var(--line); }
+.hero h1 { font-size: clamp(1.6rem, 4vw, 2.6rem); line-height: 1.15; margin: 0 0 1rem; letter-spacing: -.02em; }
+.hero .sub { font-size: 1.1rem; color: var(--muted); max-width: 44rem; margin: 0; }
+.pill { display: inline-block; font: 600 .78rem var(--mono); color: var(--warn); border: 1px solid var(--warn-line); background: var(--warn-bg); padding: .2rem .6rem; border-radius: 99px; margin-bottom: 1rem; }
+main { padding: 2rem 0 4rem; }
+section { margin: 2.5rem 0; }
+h2 { font-size: 1.35rem; margin: 0 0 .8rem; letter-spacing: -.01em; }
+h3 { font-size: 1.05rem; margin: 1.6rem 0 .5rem; }
+p { margin: .6rem 0; max-width: 46rem; }
+ul { max-width: 44rem; padding-left: 1.2rem; }
+li { margin: .3rem 0; }
+pre { background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: .9rem 1rem; overflow-x: auto; font: .88rem/1.5 var(--mono); margin: 1rem 0; }
+code { font: .9em var(--mono); background: var(--soft); border-radius: 4px; padding: .08em .3em; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; width: 100%; max-width: 46rem; margin: 1rem 0; font-size: .93rem; }
+th, td { border: 1px solid var(--line); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+th { background: var(--soft); font-weight: 600; }
+.note { border: 1px solid var(--warn-line); background: var(--warn-bg); border-radius: 8px; padding: .8rem 1rem; margin: 1rem 0; max-width: 46rem; }
+.note b { color: var(--warn); }
+.ok { color: var(--good); font-weight: 600; }
+table.wide { max-width: 100%; }
+footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2rem; color: var(--muted); font-size: .9rem; }
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href=".">cancho-stats</a>
+  <nav>
+    <a href="#why">Why</a>
+    <a href="#numbers">The numbers</a>
+    <a href="#sums">Exact sums</a>
+    <a href="#bytes">Same bytes</a>
+    <a href="#run">Run it</a>
+    <a href="#roadmap">Roadmap</a>
+    <a class="opt" href="https://github.com/alpibrusl/cancho-stats">GitHub</a>
+  </nav>
+</div></header>
+
+<div class="hero"><div class="wrap">
+  <span class="pill">milestone S0 built and gated; no verb yet</span>
+  <h1>Statistics whose last digit you can check</h1>
+  <p class="sub">A command line, in the shape of <a href="https://github.com/alpibrusl/cancho-table">cancho-table</a> and <a href="https://github.com/alpibrusl/cancho-ml">cancho-ml</a>, that describes data and draws inferences from it: summaries, correlations, tests, intervals, resampling, regression with standard errors. A mean, a variance and a p-value are each printed as one correctly rounded number, with an error bound that was written before the code and measured after it.</p>
+</div></div>
+
+<main class="wrap">
+
+<section id="why">
+<h2>Why</h2>
+<p>A statistics tool answers with numbers people paste into reports. Most of them are sums of floating-point terms, so the last digits depend on the order of the rows, the number of threads and the platform's maths library. Here:</p>
+<ul>
+  <li><b>Where a sum decides the result, it is exact</b> and rounded once, at the end. The row order cannot change a bit.</li>
+  <li><b>The same input, seed and arguments give the same bytes</b> at 1 to 16 threads and on every platform the CI workflow covers.</li>
+  <li><b>Every refusal is data:</b> a rule tag <code>stats.&lt;name&gt;</code>, an exit code, a repair where one is safe. No input reaches a trap.</li>
+  <li><b>No claim about another library</b> that was not measured here, with the machine and the case count next to it.</li>
+</ul>
+<p>The design is <a href="https://github.com/alpibrusl/cancho-stats/blob/main/docs/design.md">docs/design.md</a>. What S0 settled, with the measurements, is <a href="https://github.com/alpibrusl/cancho-stats/blob/main/docs/numerics.md">docs/numerics.md</a>.</p>
+</section>
+
+<section id="numbers">
+<h2>The distribution functions</h2>
+<p>The p-values rest on <code>lgamma</code>, <code>erf</code>, the regularised incomplete gamma and beta functions and the normal quantile, written in cancho from <code>std.math</code>'s own <code>exp</code> and <code>log</code> (no platform <code>libm</code>). From them: normal, Student t, chi-square, F and binomial, each with a survival function that is computed from its own tail, never as <code>1 - cdf</code>. Real outputs of the built driver:</p>
+<table>
+<tr><th>call</th><th>result</th></tr>
+<tr><td><code>norm_sf(1.96)</code></td><td><code>0.024997895148220414</code></td></tr>
+<tr><td><code>qnorm(0.975)</code></td><td><code>1.959963984540055</code></td></tr>
+<tr><td><code>t_sf(2.228138851986274, df 10)</code></td><td><code>0.024999999999999984</code></td></tr>
+<tr><td><code>chi2_sf(3.841458820694124, df 1)</code></td><td><code>0.050000000000000176</code></td></tr>
+<tr><td><code>f_sf(4.964602743730711, 1, 10)</code></td><td><code>0.04999999999999997</code></td></tr>
+<tr><td><code>norm_sf(8)</code> (a tail that <code>1 - cdf</code> loses)</td><td><code>6.220960574271785e-16</code></td></tr>
+</table>
+<p>The last digits of those lines are the honest part: they are within the bound, not equal to the textbook value.</p>
+
+<h3>The error bound, written first</h3>
+<p>For each function and input range, a relative error bound was committed <em>before</em> the first line of the implementation: <code>B(f) = B0 + B1 |ln f|</code>, where the second term is the stated far-tail behaviour (the argument of the last <code>exp</code> carries a rounding error that grows with its size). Measured against <code>mpmath</code> at 60 digits and more, at the exact input doubles:</p>
+<table>
+<tr><th>family</th><th>bound B0</th><th>cases per range</th><th>outside</th><th>closest to the bound</th></tr>
+<tr><td>erf, erfc, normal</td><td>2e-13</td><td>20,000</td><td>0</td><td>0.12</td></tr>
+<tr><td>incomplete gamma, chi-square</td><td>2e-13 to 5e-12</td><td>20,000 (2,000 large)</td><td>0 after one correction</td><td><b>0.97</b></td></tr>
+<tr><td>incomplete beta, t, F, binomial</td><td>5e-13 to 1e-11</td><td>20,000 (2,000 large)</td><td>0</td><td>0.52</td></tr>
+<tr><td>normal quantile</td><td>1e-15 + 1e-13 |x|</td><td>20,000</td><td>0</td><td>0.06</td></tr>
+</table>
+<div class="note"><b>Found by the gate.</b> The full-size run found 26 cases up to 1.6 times the bound in the incomplete gamma that the smaller runs missed. The far-tail coefficient was corrected in place from 4e-16 to 1.5e-15 for that family, and the document says so. A ratio of 0.97 means that bound is tight, not comfortable.</div>
+<p>The accuracy is bounded only in the stated ranges; between them and the refusal limits the functions answer without a bound. A second reference, <code>scipy.special</code>, is put beside <code>mpmath</code> on 4,000 cases per range: it is never the tie-breaker, and where it is the outlier (the binomial by up to 3.4e-9) the page of results says so.</p>
+</section>
+
+<section id="sums">
+<h2>Exact sums, and how wide</h2>
+<p>A variance needs <code>sum(x^2)</code> and a covariance <code>sum(x*y)</code>. S0 measured how wide an accumulator must be, against <code>fractions.Fraction</code>, on 600 vectors in each of ten families:</p>
+<table>
+<tr><th>method</th><th>sum of squares</th><th>sum of products</th></tr>
+<tr><td>plain double, in row order</td><td>inexact in 40 to 50% of vectors</td><td>up to 1.8e-13 off on cancellation</td></tr>
+<tr><td>two-product into <code>facc</code></td><td>exact inside a range, silently wrong outside it</td><td>exact for exponent sums from -997 to 1003; <b>silently</b> wrong beyond</td></tr>
+<tr><td><code>ml.fsq</code>, 4196 bits</td><td><b>exact for every finite double</b></td><td>n/a</td></tr>
+</table>
+<p>The rule that follows: squares go through <code>ml.fsq</code>; products go through the two-product and <code>facc</code> and a value outside <code>2^-485 &le; |x| &lt; 2^501</code> is refused with a named rule and a repair. One rounding, at the end.</p>
+</section>
+
+<section id="bytes">
+<h2>The same bytes</h2>
+<p>A fingerprint of 48 lines (every function on fixed seeded sweeps, the edge cases, the accumulator results) is committed. The built driver prints the same bytes on:</p>
+<table>
+<tr><th>machine</th><th>equal to the golden</th><th>threads 1, 2, 3, 4, 7, 8, 16</th></tr>
+<tr><td>macOS arm64 (the writer)</td><td class="ok">yes</td><td class="ok">same bytes</td></tr>
+<tr><td>Linux x86-64 (a clean clone, 7 cores)</td><td class="ok">yes</td><td class="ok">same bytes</td></tr>
+<tr><td>GitHub: ubuntu-24.04, ubuntu-24.04-arm, macos-26</td><td class="ok">yes (CI run, no step skipped)</td><td class="ok">same bytes</td></tr>
+</table>
+<p>That shows equal bytes for these sweeps on these machines, nothing about others. One thing the gate caught on the way: the sweeps' own generator called the platform's <code>log</code>, so two machines were comparing different inputs. It is now exact integer arithmetic.</p>
+</section>
+
+<section id="run">
+<h2>Run it</h2>
+<p>Everything is pinned: the compiler, <code>cancho-table</code>'s exact-sum stores, the contract package of <code>cancho-tools</code> and the 23 numeric stores of <code>cancho-ml</code>, by commit, never copied (<code>sh scripts/check_pins.sh</code> checks that, and 21 mutants show the check can fail).</p>
+<pre><code>git clone https://github.com/alpibrusl/cancho-stats.git
+cd cancho-stats
+export CANCHO=&lt;path-to-the-cancho-binary, the revision in cancho.toml&gt;
+"$CANCHO" install
+"$CANCHO" build --bin special-check
+python3 -m venv .venv &amp;&amp; .venv/bin/pip install -r ci/requirements.txt
+sh scripts/check.sh            # every gate, minutes
+sh scripts/check.sh --full     # also the larger sweeps and the mutants</code></pre>
+<p>The driver reads cases on standard input and prints the bits of the answer, so a gate compares bytes, not decimals:</p>
+<pre><code>$ echo "1 4000000000000000 4024000000000000" | build/special-check t_sf
+1 3fa2c98ee9420ee7 0</code></pre>
+<p>(<code>t_sf(2, df 10)</code>; the first column is the case id, then the bits of the result, then the refusal code, 0 for an answer.)</p>
+</section>
+
+<section id="roadmap">
+<h2>Roadmap</h2>
+<table>
+<tr><th></th><th>milestone</th><th>state</th></tr>
+<tr><td>S0</td><td>numerics: special functions, exact products, pinned stores</td><td class="ok">built, gated, merged</td></tr>
+<tr><td>S1</td><td><code>stats describe</code></td><td>design written, waiting for four decisions</td></tr>
+<tr><td>S2</td><td><code>corr</code>: Pearson, Spearman, Kendall</td><td>not started</td></tr>
+<tr><td>S3, S4</td><td><code>test</code>: t family, chi-square, proportions, rank tests, ANOVA, KS, Fisher</td><td>not started</td></tr>
+<tr><td>S5</td><td><code>ci</code>, <code>resample</code>: seeded bootstrap and permutation tests</td><td>not started</td></tr>
+<tr><td>S6</td><td>the formula grammar, then <code>lm</code> and <code>glm</code></td><td>not started</td></tr>
+<tr><td>S7</td><td><code>fit-dist</code>, <code>power</code>, <code>compare</code></td><td>not started</td></tr>
+</table>
+</section>
+
+<section id="status">
+<h2>Status and limits, stated plainly</h2>
+<ul>
+  <li>Built: the special functions, the exact-accumulation decision and its measurement, the pin check, the gates (accuracy sweeps, edges and fuzz, independence, fingerprint, 85 mutants of the special functions: 73 killed and 12 explained), the CI workflow.</li>
+  <li>Not built: every verb. There is no <code>stats</code> binary yet; the page above describes the library under it.</li>
+  <li>The error bounds are measured on seeded samples, not proved, and hold in the ranges stated in the document.</li>
+  <li>Exact variance and covariance need a big-integer multiply that the compiler's library lacks; it is S1's first module.</li>
+  <li>Licence: EUPL-1.2, copyright Alpibru S.L.</li>
+</ul>
+</section>
+
+</main>
+
+<footer><div class="wrap">cancho-stats &middot; <a href="https://github.com/alpibrusl/cancho-stats">source</a> &middot; <a href="https://github.com/alpibrusl/cancho-table">cancho-table</a> &middot; <a href="https://github.com/alpibrusl/cancho-ml">cancho-ml</a> &middot; <a href="https://github.com/alpibrusl/cancho">cancho</a></div></footer>
+</body>
+</html>
