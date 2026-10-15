@@ -311,11 +311,20 @@ def _ref(job):
     import special_ref
     from mpmath import mp
 
+    import signal
+
+    def on_alarm(sig, frm):
+        raise TimeoutError("reference took more than 120 s")
+
+    signal.signal(signal.SIGALRM, on_alarm)
+    signal.alarm(120)
     try:
         v = special_ref.ref(fn, args)
         return mp.nstr(v, 45)
-    except Exception as e:  # a reference that fails is reported, never guessed
+    except BaseException as e:  # a reference that fails is reported, never guessed
         return "ERR:" + type(e).__name__ + ":" + str(e)[:60]
+    finally:
+        signal.alarm(0)
 
 
 def references(specs, seed, scale, fast, workers, cache):

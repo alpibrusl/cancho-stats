@@ -1,0 +1,189 @@
+// acc-check: the exact-accumulation candidates of docs/numerics.md section 5, on vectors from standard input. One vector pair per line:
+//
+//     N X1 .. XN Y1 .. YN       N decimal (at most 65536), each X and Y the 16 hex digits of the bits of a FINITE double
+//
+// One line per pair, five hex words (the bits of a double) and three statuses:
+//
+//     A_sq A_xy B_sq C_sq C_xy S1 S2 T    A: x*x and x*y by two-product into facc, rounded once at the end (cancho-table's facc)
+//                                     B: the sum of x^2 by ml.fsq (the pinned wide accumulator of 4196 bits)
+//                                     C: the plain double sum, in row order
+//                                     S1, S2: 0, or 1 when the sum of squares (S1), or of products (S2), of A is beyond the largest double (facc's own status);
+//                                     T: the status of ml.fsq (0, or nonzero when beyond)
+edition 5;
+
+import std.io;
+import std.math;
+import std.vec;
+import ml.fbits;
+import ml.fsq;
+import facc;
+import flt;
+import acc.xprod;
+
+fn hexval(c: int) -> [] int {
+    if c >= '0' && c <= '9' {
+        return c - '0';
+    }
+    if c >= 'a' && c <= 'f' {
+        return c - 'a' + 10;
+    }
+    if c >= 'A' && c <= 'F' {
+        return c - 'A' + 10;
+    }
+    return 0;
+}
+
+fn hex16[&i](io: &!i Io, bits: int) -> [io_write] int {
+    var k = 0;
+    while k < 16 {
+        let nib = bits >> 60 - 4 * k & 15;
+        if nib < 10 {
+            putchar(io, '0' + nib);
+        } else {
+            putchar(io, 'a' + nib - 10);
+        }
+        k = k + 1;
+    }
+    return 0;
+}
+
+fn add_pair[&v](acc: &!v vec.Vec[int], p: float, e: float) -> [] int {
+    facc.add_bits(acc, 0, bits_of(p));
+    facc.add_bits(acc, 0, bits_of(e));
+    return 0;
+}
+
+fn compute[&h, &i, &x, &y](heap: &!h Heap, io: &!i Io, xs: &x [int], ys: &y [int], n: int) -> [heap, io_write] int {
+    var sq = vec.empty(heap, 73, 0);
+    var xy = vec.empty(heap, 73, 0);
+    let wide = box_slice(heap, fsq.size() + 1, 0);
+    var plain_sq = 0.0;
+    var plain_xy = 0.0;
+    var ak = 0;
+    var ak2 = 0;
+    var over1 = 0;
+    var over2 = 0;
+    var bb = 0.0;
+    var bstat = 0;
+    borrow mut wide as &!w in {
+        borrow mut sq as &!sw in {
+            borrow mut xy as &!xw in {
+                var i = 0;
+                while i < n {
+                    let fx = fbits.decode(xs[i]);
+                    let fy = fbits.decode(ys[i]);
+                    let (p, e) = xprod.two_product(fx, fx);
+                    add_pair(sw, p, e);
+                    let (p2, e2) = xprod.two_product(fx, fy);
+                    add_pair(xw, p2, e2);
+                    fsq.add_square(contents(w), xs[i], 0);
+                    plain_sq = plain_sq + fx * fx;
+                    plain_xy = plain_xy + fx * fy;
+                    i = i + 1;
+                }
+                let (b, bst) = fsq.finish(contents(w));
+                bb = b;
+                bstat = bst;
+                let (k1, o1) = facc.finalize_key(sw, 0);
+                let (k2, o2) = facc.finalize_key(xw, 0);
+                ak = bits_of(flt.float_of_key(k1));
+                ak2 = bits_of(flt.float_of_key(k2));
+                over1 = o1;
+                over2 = o2;
+            }
+        }
+    }
+    hex16(io, ak);
+    io.space(io);
+    hex16(io, ak2);
+    io.space(io);
+    hex16(io, bits_of(bb));
+    io.space(io);
+    hex16(io, bits_of(plain_sq));
+    io.space(io);
+    hex16(io, bits_of(plain_xy));
+    io.space(io);
+    io.print_int(io, over1);
+    io.space(io);
+    io.print_int(io, over2);
+    io.space(io);
+    io.print_int(io, bstat);
+    io.newline(io);
+    vec.drop(heap, sq);
+    vec.drop(heap, xy);
+    unbox_slice(heap, wide);
+    return 0;
+}
+
+fn serve[&h, &i](heap: &!h Heap, io: &!i Io) -> [heap, io_read, io_write] int {
+    let cap = 65536;
+    let xb = box_slice(heap, cap + 1, 0);
+    let yb = box_slice(heap, cap + 1, 0);
+    var tok = 0;
+    var inword = false;
+    var v = 0;
+    var n = 0;
+    var c = getchar(io);
+    borrow mut xb as &!xw in {
+        borrow mut yb as &!yw in {
+            let xs = contents(xw);
+            let ys = contents(yw);
+            while c >= 0 {
+                if c == ' ' || c == '\n' || c == '\r' || c == '\t' {
+                    if inword {
+                        if tok == 0 {
+                            n = v;
+                            if n > cap {
+                                n = 0;
+                            }
+                        } else if tok <= n {
+                            xs[tok - 1] = v;
+                        } else if tok <= 2 * n {
+                            ys[tok - n - 1] = v;
+                        }
+                        tok = tok + 1;
+                        inword = false;
+                        v = 0;
+                    }
+                    if c == '\n' {
+                        if tok > 0 {
+                            compute(heap, io, xs, ys, n);
+                        }
+                        tok = 0;
+                        n = 0;
+                    }
+                } else {
+                    inword = true;
+                    if tok == 0 {
+                        if v < 1000000 {
+                            v = v * 10 + (c - '0');
+                        }
+                    } else {
+                        v = v << 4 | hexval(c);
+                    }
+                }
+                c = getchar(io);
+            }
+        }
+    }
+    unbox_slice(heap, xb);
+    unbox_slice(heap, yb);
+    return 0;
+}
+
+fn main(world: World) -> [] int {
+    let Split { io, ffi, fs, heap, args, net, clock } = split(world);
+    release(ffi);
+    release(net);
+    release(fs);
+    release(clock);
+    release(args);
+    borrow mut heap as &!h in {
+        borrow mut io as &!w in {
+            serve(h, w);
+        }
+    }
+    release(heap);
+    release(io);
+    return 0;
+}

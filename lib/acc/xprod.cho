@@ -1,0 +1,35 @@
+edition 5;
+
+module acc.xprod;
+
+import std.math;
+
+// The exact product of two doubles as an unevaluated sum p + e (Dekker's TwoProduct with Veltkamp's split; the language has no fused multiply-add), and the range in
+// which the pair is exact (docs/numerics.md section 5, rule R). Outside R the pair can be inexact without any sign of it, so a caller that needs an exact sum refuses
+// a value outside R before it adds anything.
+
+// a with its low 27 bits cleared, so that hi * hi, hi * lo and lo * lo of two such halves are exact. Needs |a| < 2^996 or the scaling overflows.
+fn high_half(a: float) -> [] float {
+    let c = 134217729.0 * a;
+    return c - (c - a);
+}
+
+// (p, e) with p = fl(a * b) and, inside rule R for both factors, a * b = p + e exactly
+pub fn two_product(a: float, b: float) -> [] (float, float) {
+    let p = a * b;
+    let ah = high_half(a);
+    let al = a - ah;
+    let bh = high_half(b);
+    let bl = b - bh;
+    return (p, ah * bh - p + ah * bl + al * bh + al * bl);
+}
+
+// rule R: x is zero or 2^-485 <= |x| < 2^501. Then every product of two such values is below 2^1002 and has a lowest bit at or above 2^-970 - 104 + ... (the exact
+// boundary is measured in section 8.2, not assumed here)
+pub fn in_range(x: float) -> [] bool {
+    let ax = math.fabs(x);
+    if ax == 0.0 {
+        return true;
+    }
+    return ax >= math.ldexp(1.0, 0 - 485) && ax < math.ldexp(1.0, 501);
+}

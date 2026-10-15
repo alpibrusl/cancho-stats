@@ -1,0 +1,96 @@
+edition 5;
+
+module check.parrun;
+
+// The cases of a batch evaluated on `t` threads (docs/numerics.md section 6): the case list is cut into `t` contiguous blocks, each block is a copy owned by its thread (a thread gets
+// one payload and shares nothing, the pattern of linalg.par), each thread writes the result bits and the code of its cases into its own out slots, and the parent copies the slots back
+// at the block's position. Which thread ran which block is not visible in the result.
+
+import check.evalfn;
+
+res struct Job {
+    a: Box[[int]],
+    b: Box[[int]],
+    c: Box[[int]],
+    out: Box[[int]],
+    code: Box[[int]],
+    p: Box[[int]],
+}
+
+fn work[&r](job: &!r Job) -> [] int {
+    let f = contents(job.p)[0];
+    let n = contents(job.p)[1];
+    let av = contents(job.a);
+    let bv = contents(job.b);
+    let cv = contents(job.c);
+    let ov = contents(job.out);
+    let kv = contents(job.code);
+    var i = 0;
+    while i < n {
+        let (v, code) = evalfn.eval(f, evalfn.decode(av[i]), evalfn.decode(bv[i]), evalfn.decode(cv[i]));
+        ov[i] = bits_of(v);
+        kv[i] = code;
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn copy_ints[&d, &s](dst: &!d [int], src: &s [int], n: int) -> [] int {
+    let o = dst[0..n];
+    let i = src[0..n];
+    var k = 0;
+    while k < n {
+        o[k] = i[k];
+        k = k + 1;
+    }
+    return 0;
+}
+
+fn make_job[&h, &a, &b, &c](heap: &!h Heap, f: int, av: &a [int], bv: &b [int], cv: &c [int], lo: int, hi: int) -> [heap] Job {
+    let rows = hi - lo;
+    var job = Job { a: box_slice(heap, rows + 1, 0), b: box_slice(heap, rows + 1, 0), c: box_slice(heap, rows + 1, 0), out: box_slice(heap, rows + 1, 0), code: box_slice(heap, rows + 1, 0), p: box_slice(heap, 4, 0) };
+    borrow mut job as &!jk in {
+        let pp = contents(jk.p);
+        pp[0] = f;
+        pp[1] = rows;
+        copy_ints(contents(jk.a), av[lo..hi], rows);
+        copy_ints(contents(jk.b), bv[lo..hi], rows);
+        copy_ints(contents(jk.c), cv[lo..hi], rows);
+    }
+    return job;
+}
+
+fn fan[&h, &a, &b, &c, &o, &k](heap: &!h Heap, f: int, i: int, t: int, n: int, av: &a [int], bv: &b [int], cv: &c [int], ov: &!o [int], kv: &!k [int]) -> [heap, conc] int {
+    if i >= t {
+        return 0;
+    }
+    let lo = i * n / t;
+    let hi = (i + 1) * n / t;
+    var job = make_job(heap, f, av, bv, cv, lo, hi);
+    var rest = 0;
+    borrow mut job as &!jk in {
+        let body = work;
+        let th = spawn(jk, body);
+        rest = fan(heap, f, i + 1, t, n, av, bv, cv, ov, kv);
+        join(th);
+    }
+    let Job { a, b, c, out, code, p } = job;
+    borrow out as &ow in {
+        copy_ints(ov[lo..hi], contents(ow), hi - lo);
+    }
+    borrow code as &kw in {
+        copy_ints(kv[lo..hi], contents(kw), hi - lo);
+    }
+    unbox_slice(heap, a);
+    unbox_slice(heap, b);
+    unbox_slice(heap, c);
+    unbox_slice(heap, out);
+    unbox_slice(heap, code);
+    unbox_slice(heap, p);
+    return rest;
+}
+
+// evaluate function `f` on the n cases (a, b, c: the bits of the arguments) with `t` threads; out and code receive the bits of the result and the refusal code of each case
+pub fn run[&h, &a, &b, &c, &o, &k](heap: &!h Heap, t: int, f: int, n: int, av: &a [int], bv: &b [int], cv: &c [int], out: &!o [int], code: &!k [int]) -> [heap, conc] int {
+    return fan(heap, f, 0, t, n, av, bv, cv, out, code);
+}

@@ -78,6 +78,16 @@ def gamma_pq(a, x):
     x = mpf(x)
     if x == 0:
         return mpf(0), mpf(1)
+    if x < 1:
+        # the series for P converges at once for x < 1; Q = 1 - P is taken at a precision that keeps Q's digits (Q is about a |ln x| for small a)
+        extra = 0 if a >= mpf(10) ** -3 else int(-mp.log10(a)) + 10
+        with mp.workdps(_dps_for(a, x) + extra):
+            a = mpf(a)
+            x = mpf(x)
+            logpre = a * mp.log(x) - x - _lg(a + 1)
+            p = _gamma_series(a, x, logpre)
+            q = 1 - p
+        return +p, +q
     with mp.workdps(_dps_for(a, x)):
         a = mpf(a)
         x = mpf(x)
@@ -129,7 +139,13 @@ def beta_ix(a, b, x):
 
         y = 1 - x
         small = mpf(10) ** -20
-        if x < (a + 1) / (a + b + 2):
+
+        def cost(aa, bb, xx):
+            # terms of 2F1(aa+bb, 1; aa+1; xx): the turning point of the ratio plus the decay to 1e-100 at the rate ln(1/xx)
+            turn = max(mpf(0), (xx * (aa + bb) - aa - 1) / (1 - xx))
+            return turn + 240 / (-mp.log(xx))
+
+        if cost(a, b, x) <= cost(b, a, y):
             lo = side(a, b, x, y)
             hi = 1 - lo
             if hi < small:

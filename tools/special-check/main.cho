@@ -11,167 +11,10 @@ edition 5;
 
 import std.io;
 import std.math;
-import ml.fbits;
+import std.vec;
 import special.rules;
-import special.dist;
-import special.igam;
-import special.ibeta;
-
-fn same[&a, &b](x: &a [byte], y: &b [byte]) -> [] bool {
-    if len(x) != len(y) {
-        return false;
-    }
-    var i = 0;
-    while i < len(x) {
-        if x[i] != y[i] {
-            return false;
-        }
-        i = i + 1;
-    }
-    return true;
-}
-
-fn which[&s](name: &s [byte]) -> [] int {
-    if same(name, "lgamma") {
-        return 1;
-    }
-    if same(name, "erf") {
-        return 2;
-    }
-    if same(name, "erfc") {
-        return 3;
-    }
-    if same(name, "gamma_p") {
-        return 4;
-    }
-    if same(name, "gamma_q") {
-        return 5;
-    }
-    if same(name, "beta_lo") {
-        return 6;
-    }
-    if same(name, "beta_up") {
-        return 7;
-    }
-    if same(name, "norm_cdf") {
-        return 8;
-    }
-    if same(name, "norm_sf") {
-        return 9;
-    }
-    if same(name, "qnorm") {
-        return 10;
-    }
-    if same(name, "t_cdf") {
-        return 11;
-    }
-    if same(name, "t_sf") {
-        return 12;
-    }
-    if same(name, "chi2_cdf") {
-        return 13;
-    }
-    if same(name, "chi2_sf") {
-        return 14;
-    }
-    if same(name, "f_cdf") {
-        return 15;
-    }
-    if same(name, "f_sf") {
-        return 16;
-    }
-    if same(name, "binom_cdf") {
-        return 17;
-    }
-    if same(name, "binom_sf") {
-        return 18;
-    }
-    return 0;
-}
-
-fn hexval(c: int) -> [] int {
-    if c >= '0' && c <= '9' {
-        return c - '0';
-    }
-    if c >= 'a' && c <= 'f' {
-        return c - 'a' + 10;
-    }
-    if c >= 'A' && c <= 'F' {
-        return c - 'A' + 10;
-    }
-    return 0;
-}
-
-// the double whose bits are `bits`, every pattern: infinities and NaNs included (ml.fbits.decode answers NaN for both)
-fn decode(bits: int) -> [] float {
-    if (bits >> 52 & 2047) == 2047 {
-        if (bits & 4503599627370495) == 0 {
-            if bits < 0 {
-                return -1.0 / 0.0;
-            }
-            return 1.0 / 0.0;
-        }
-        return 0.0 / 0.0;
-    }
-    return fbits.decode(bits);
-}
-
-fn eval(f: int, x: float, y: float, z: float) -> [] (float, int) {
-    if f == 1 {
-        return dist.lgamma(x);
-    }
-    if f == 2 {
-        return dist.erf(x);
-    }
-    if f == 3 {
-        return dist.erfc(x);
-    }
-    if f == 4 || f == 5 {
-        let (p, q, code) = igam.gamma_pq(x, y);
-        if f == 4 {
-            return (p, code);
-        }
-        return (q, code);
-    }
-    if f == 6 || f == 7 {
-        let (lo, up, code) = ibeta.beta_ix(x, y, z);
-        if f == 6 {
-            return (lo, code);
-        }
-        return (up, code);
-    }
-    if f == 8 {
-        return dist.norm_cdf(x);
-    }
-    if f == 9 {
-        return dist.norm_sf(x);
-    }
-    if f == 10 {
-        return dist.qnorm(x);
-    }
-    if f == 11 {
-        return dist.t_cdf(x, y);
-    }
-    if f == 12 {
-        return dist.t_sf(x, y);
-    }
-    if f == 13 {
-        return dist.chi2_cdf(x, y);
-    }
-    if f == 14 {
-        return dist.chi2_sf(x, y);
-    }
-    if f == 15 {
-        return dist.f_cdf(x, y, z);
-    }
-    if f == 16 {
-        return dist.f_sf(x, y, z);
-    }
-    if f == 17 {
-        return dist.binom_cdf(x, y, z);
-    }
-    return dist.binom_sf(x, y, z);
-}
+import check.evalfn;
+import check.parrun;
 
 fn hex16[&i](io: &!i Io, bits: int) -> [io_write] int {
     var k = 0;
@@ -188,7 +31,7 @@ fn hex16[&i](io: &!i Io, bits: int) -> [io_write] int {
 }
 
 fn answer[&i](io: &!i Io, f: int, id: int, b0: int, b1: int, b2: int) -> [io_write] int {
-    let (v, code) = eval(f, decode(b0), decode(b1), decode(b2));
+    let (v, code) = evalfn.eval(f, evalfn.decode(b0), evalfn.decode(b1), evalfn.decode(b2));
     io.print_int(io, id);
     io.space(io);
     hex16(io, bits_of(v));
@@ -240,11 +83,142 @@ fn serve[&i](io: &!i Io, f: int) -> [io_read, io_write] int {
                     v = v * 10 + (c - '0');
                 }
             } else {
-                v = v << 4 | hexval(c);
+                v = v << 4 | evalfn.hexval(c);
             }
         }
         c = getchar(io);
     }
+    return 0;
+}
+
+fn copy_vec[&v, &d](src: &v vec.Vec[int], dst: &!d [int], n: int) -> [] int {
+    var j = 0;
+    while j < n {
+        dst[j] = vec.get(src, j);
+        j = j + 1;
+    }
+    return 0;
+}
+
+// the threaded path (`special-check FUNCTION --threads T`): read every case, evaluate them on T threads, print in input order
+fn serve_threads[&h, &i](heap: &!h Heap, io: &!i Io, f: int, t: int) -> [heap, io_read, io_write, conc] int {
+    var ids = vec.empty(heap, 64, 0);
+    var va = vec.empty(heap, 64, 0);
+    var vb = vec.empty(heap, 64, 0);
+    var vc = vec.empty(heap, 64, 0);
+    var tok = 0;
+    var inword = false;
+    var v = 0;
+    var id = 0;
+    var b0 = 0;
+    var b1 = 0;
+    var b2 = 0;
+    var c = getchar(io);
+    var n = 0;
+    while c >= 0 {
+        if c == ' ' || c == '\n' || c == '\r' || c == '\t' {
+            if inword {
+                if tok == 0 {
+                    id = v;
+                } else if tok == 1 {
+                    b0 = v;
+                } else if tok == 2 {
+                    b1 = v;
+                } else if tok == 3 {
+                    b2 = v;
+                }
+                tok = tok + 1;
+                inword = false;
+                v = 0;
+            }
+            if c == '\n' {
+                if tok > 0 {
+                    ids = vec.push(heap, ids, id);
+                    va = vec.push(heap, va, b0);
+                    vb = vec.push(heap, vb, b1);
+                    vc = vec.push(heap, vc, b2);
+                    n = n + 1;
+                }
+                tok = 0;
+                id = 0;
+                b0 = 0;
+                b1 = 0;
+                b2 = 0;
+            }
+        } else {
+            inword = true;
+            if tok == 0 {
+                if v < 100000000000 {
+                    v = v * 10 + (c - '0');
+                }
+            } else {
+                v = v << 4 | evalfn.hexval(c);
+            }
+        }
+        c = getchar(io);
+    }
+    let ab = box_slice(heap, n + 1, 0);
+    let bb = box_slice(heap, n + 1, 0);
+    let cb = box_slice(heap, n + 1, 0);
+    let ib = box_slice(heap, n + 1, 0);
+    let ob = box_slice(heap, n + 1, 0);
+    let kb = box_slice(heap, n + 1, 0);
+    borrow mut ab as &!aw in {
+        borrow va as &vr in {
+            copy_vec(vr, contents(aw), n);
+        }
+    }
+    borrow mut bb as &!bw in {
+        borrow vb as &vr in {
+            copy_vec(vr, contents(bw), n);
+        }
+    }
+    borrow mut cb as &!cw in {
+        borrow vc as &vr in {
+            copy_vec(vr, contents(cw), n);
+        }
+    }
+    borrow mut ib as &!iw in {
+        borrow ids as &vr in {
+            copy_vec(vr, contents(iw), n);
+        }
+    }
+    borrow ab as &ar in {
+        borrow bb as &br in {
+            borrow cb as &cr in {
+                borrow ib as &ir in {
+                    borrow mut ob as &!ow in {
+                        borrow mut kb as &!kw in {
+                            parrun.run(heap, t, f, n, contents(ar), contents(br), contents(cr), contents(ow), contents(kw));
+                            let idv = contents(ir);
+                            let outv = contents(ow);
+                            let codev = contents(kw);
+                            var m = 0;
+                            while m < n {
+                                io.print_int(io, idv[m]);
+                                io.space(io);
+                                hex16(io, outv[m]);
+                                io.space(io);
+                                io.print_int(io, codev[m]);
+                                io.newline(io);
+                                m = m + 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    unbox_slice(heap, ab);
+    unbox_slice(heap, bb);
+    unbox_slice(heap, cb);
+    unbox_slice(heap, ib);
+    unbox_slice(heap, ob);
+    unbox_slice(heap, kb);
+    vec.drop(heap, ids);
+    vec.drop(heap, va);
+    vec.drop(heap, vb);
+    vec.drop(heap, vc);
     return 0;
 }
 
@@ -260,33 +234,59 @@ fn tags[&i](io: &!i Io) -> [io_write] int {
     return 0;
 }
 
-fn main(world: World) -> [] int {
+// decimal digits only, at most 3 of them; anything else answers 0
+fn number_of[&s](text: &s [byte]) -> [] int {
+    if len(text) == 0 || len(text) > 3 {
+        return 0;
+    }
+    var n = 0;
+    var i = 0;
+    while i < len(text) {
+        let c = int_of(text[i]);
+        if c < '0' || c > '9' {
+            return 0;
+        }
+        n = n * 10 + (c - '0');
+        i = i + 1;
+    }
+    return n;
+}
+
+fn main(world: World) -> [conc] int {
     let Split { io, ffi, fs, heap, args, net, clock } = split(world);
     release(ffi);
     release(net);
     release(fs);
-    release(heap);
     release(clock);
     var f = 0;
     var show = false;
+    var threads = 0;
     borrow args as &g in {
         if arg_count(g) >= 2 {
-            f = which(arg(g, 1));
-            show = same(arg(g, 1), "tags");
+            f = evalfn.which(arg(g, 1));
+            show = evalfn.same(arg(g, 1), "tags");
+        }
+        if arg_count(g) >= 4 && evalfn.same(arg(g, 2), "--threads") {
+            threads = number_of(arg(g, 3));
         }
     }
     release(args);
     var status = 0;
-    borrow mut io as &!w in {
-        if show {
-            tags(w);
-        } else if f == 0 {
-            io.error_all(w, "usage: special-check FUNCTION | tags   (cases on standard input)\n");
-            status = 2;
-        } else {
-            serve(w, f);
+    borrow mut heap as &!h in {
+        borrow mut io as &!w in {
+            if show {
+                tags(w);
+            } else if f == 0 {
+                io.error_all(w, "usage: special-check FUNCTION [--threads T] | tags   (cases on standard input)\n");
+                status = 2;
+            } else if threads >= 1 && threads <= 64 {
+                serve_threads(h, w, f, threads);
+            } else {
+                serve(w, f);
+            }
         }
     }
+    release(heap);
     release(io);
     return status;
 }

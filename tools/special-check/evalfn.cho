@@ -1,0 +1,168 @@
+edition 5;
+
+module check.evalfn;
+
+// The functions of special-check by name and number, the decoding of a bit pattern (every pattern: infinities and NaNs included) and the evaluation of one case.
+
+import std.math;
+import ml.fbits;
+import special.dist;
+import special.igam;
+import special.ibeta;
+
+pub fn same[&a, &b](x: &a [byte], y: &b [byte]) -> [] bool {
+    if len(x) != len(y) {
+        return false;
+    }
+    var i = 0;
+    while i < len(x) {
+        if x[i] != y[i] {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+pub fn which[&s](name: &s [byte]) -> [] int {
+    if same(name, "lgamma") {
+        return 1;
+    }
+    if same(name, "erf") {
+        return 2;
+    }
+    if same(name, "erfc") {
+        return 3;
+    }
+    if same(name, "gamma_p") {
+        return 4;
+    }
+    if same(name, "gamma_q") {
+        return 5;
+    }
+    if same(name, "beta_lo") {
+        return 6;
+    }
+    if same(name, "beta_up") {
+        return 7;
+    }
+    if same(name, "norm_cdf") {
+        return 8;
+    }
+    if same(name, "norm_sf") {
+        return 9;
+    }
+    if same(name, "qnorm") {
+        return 10;
+    }
+    if same(name, "t_cdf") {
+        return 11;
+    }
+    if same(name, "t_sf") {
+        return 12;
+    }
+    if same(name, "chi2_cdf") {
+        return 13;
+    }
+    if same(name, "chi2_sf") {
+        return 14;
+    }
+    if same(name, "f_cdf") {
+        return 15;
+    }
+    if same(name, "f_sf") {
+        return 16;
+    }
+    if same(name, "binom_cdf") {
+        return 17;
+    }
+    if same(name, "binom_sf") {
+        return 18;
+    }
+    return 0;
+}
+
+pub fn hexval(c: int) -> [] int {
+    if c >= '0' && c <= '9' {
+        return c - '0';
+    }
+    if c >= 'a' && c <= 'f' {
+        return c - 'a' + 10;
+    }
+    if c >= 'A' && c <= 'F' {
+        return c - 'A' + 10;
+    }
+    return 0;
+}
+
+// the double whose bits are `bits`, every pattern: infinities and NaNs included (ml.fbits.decode answers NaN for both)
+pub fn decode(bits: int) -> [] float {
+    if (bits >> 52 & 2047) == 2047 {
+        if (bits & 4503599627370495) == 0 {
+            if bits < 0 {
+                return -1.0 / 0.0;
+            }
+            return 1.0 / 0.0;
+        }
+        return 0.0 / 0.0;
+    }
+    return fbits.decode(bits);
+}
+
+pub fn eval(f: int, x: float, y: float, z: float) -> [] (float, int) {
+    if f == 1 {
+        return dist.lgamma(x);
+    }
+    if f == 2 {
+        return dist.erf(x);
+    }
+    if f == 3 {
+        return dist.erfc(x);
+    }
+    if f == 4 || f == 5 {
+        let (p, q, code) = igam.gamma_pq(x, y);
+        if f == 4 {
+            return (p, code);
+        }
+        return (q, code);
+    }
+    if f == 6 || f == 7 {
+        let (lo, up, code) = ibeta.beta_ix(x, y, z);
+        if f == 6 {
+            return (lo, code);
+        }
+        return (up, code);
+    }
+    if f == 8 {
+        return dist.norm_cdf(x);
+    }
+    if f == 9 {
+        return dist.norm_sf(x);
+    }
+    if f == 10 {
+        return dist.qnorm(x);
+    }
+    if f == 11 {
+        return dist.t_cdf(x, y);
+    }
+    if f == 12 {
+        return dist.t_sf(x, y);
+    }
+    if f == 13 {
+        return dist.chi2_cdf(x, y);
+    }
+    if f == 14 {
+        return dist.chi2_sf(x, y);
+    }
+    if f == 15 {
+        return dist.f_cdf(x, y, z);
+    }
+    if f == 16 {
+        return dist.f_sf(x, y, z);
+    }
+    if f == 17 {
+        return dist.binom_cdf(x, y, z);
+    }
+    return dist.binom_sf(x, y, z);
+}
+
