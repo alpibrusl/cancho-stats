@@ -391,3 +391,43 @@ next to the name). 7 are the controls of G2 (`control-*`): a Stirling coefficien
 * The exact numerator of variance and covariance (a big-integer product), the `stats.sum-overflow` and `stats.range-product` refusals and the row limit are rules of 8.2, not code.
 * Threads: the functions are pure, so the thread test shows what it shows (block copies and ordered write-back); the accumulators are sequential.
 * The 11 explained survivors are judgments: a reviewer may prefer a sweep that kills them.
+
+## 9. S0b: quantile functions (design, written before the code of this slice; issue #14)
+
+The inverses the intervals, tests and power need: gamma, chi-square, beta, Student t and F. Tags as in section 3: **[choice]** a decision, **[read]** read from a source, **[open]**, **[measured]** printed by a script. The bounds below are written first; as in S0 they are corrected IN PLACE, with the measurement that forced the correction, if a gate shows one is wrong.
+
+### 9.1 What is implemented
+
+| function | public name | method |
+|---|---|---|
+| gamma quantile, lower tail `p` or upper tail `q` | `special.gamma_quantile(p, a)`, `special.gamma_quantile_upper(q, a)` | a safeguarded Newton iteration on `ln tail(x) - ln tau`, with `x` kept as a double and updated by `x <- x exp(step)` (a multiplicative update keeps the relative precision of `x`; going through `ln x` would lose `ulp(ln x)`, 1e-13 at `x = 1e-300`), bracket `[xl, xh]` kept from the signs of the residual, bisection by geometric mean when a step leaves the bracket; the residual is the forward `gamma_pq` of S0 (both tails, so a probability above 1/2 loses nothing), the derivative is `x pdf / tail` from `exp((a-1) ln x - x - lgamma(a))`, whose rounding only slows convergence and never decides the answer |
+| chi-square quantile | `special.chi2_quantile(p, nu)`, `special.chi2_quantile_upper(q, nu)` | `2 gamma_quantile(p, nu/2)`; the factor 2 is exact |
+| beta quantile | `special.beta_quantile(p, a, b)` answers `x`, `special.beta_quantile_comp(p, a, b)` answers `y = 1 - x`, `special.beta_quantile_upper(q, a, b)` answers `x` for the upper tail | the same iteration with the state `(s, side)`: `s` is the smaller of `x` and `y`, stored as a double, so that neither is rounded; a step `dv` in the logit `v = ln(x/y)` is applied as `s' = s E / (1 - s + s E)` with `E = exp(dv)` (a rational function of `s`: relative precision kept), and the other value is `1 - s`, which is exact enough because `s <= 1/2`; the residual is the forward `beta_xy` of S0 on the pair |
+| Student t quantile | `special.t_quantile(p, nu)`, `special.t_quantile_upper(q, nu)` | `p = 1/2` is 0; `p > 1/2` is `-t_quantile(1 - p)` (the subtraction is exact for `p >= 1/2`, as in `qnorm`); for `p < 1/2` a beta quantile of the two-sided tail `2p` with `a = nu/2`, `b = 1/2` gives the pair `(x, y)` and `t = sqrt(nu y / x)` (no rounding of `1 - x`) |
+| F quantile | `special.f_quantile(p, d1, d2)`, `special.f_quantile_upper(q, d1, d2)` | the beta quantile with `a = d1/2`, `b = d2/2` gives `(x, y)`; `f = d2 x / (d1 y)` |
+
+All answer `(value, code)` like the rest of `special`; the normal quantile `qnorm` of S0 stays as it is.
+
+### 9.2 Accuracy target (the bound the gates enforce) **[choice, to be corrected in place if measured wrong]**
+
+The quantile `x_hat` against the true quantile `x*` of the DOUBLE `p` given (the reference solves the equation at 50 digits): `|x_hat - x*| <= kappa (B0 + B1 |ln tau|) x*` plus the underflow allowance `2e-323` (as in 3.3), where `tau` is the tail probability asked for (`p` or `q`) and
+
+* `kappa = 1 / min(1, a)` for gamma (`a` the shape), `1 / min(1, nu/2)` for chi-square, `1 / min(1, a, b)` for beta with the two parameters, `1 / min(1, nu/2, 1/2)` for Student t and `1 / min(1, d1/2, d2/2)` for F: the relative sensitivity of a quantile to the relative error of the forward function is the reciprocal of the elasticity `x pdf / tail`, which tends to the smaller shape parameter for a small tail (`F(x) ~ x^a / (a B)`), so a small shape amplifies the forward error by that factor and the bound says so instead of hiding it;
+* `B0 = 2e-12`, `B1 = 1e-14` (the forward bounds of 3.2 are `2e-13` to `1e-11` with `B1 = 4e-16` to `1.5e-15`; the quantile adds the amplification above and the rounding of the product `x exp(step)`);
+* `t_quantile(p) = -t_quantile(1 - p)` bit for bit for `p` in `[1/2, 1)`; `t_quantile(1/2) = 0` exactly; for `f` and `chi2` and `gamma` the answer is positive; `beta` answers `x` and `y` with `x + y = 1` to the rounding of the smaller.
+* **Round trip, as a second view [choice].** The forward function at `x_hat` equals `tau` within `(forward bound) + (elasticity) * B(tau)`: a check that needs no reference, run on the sweeps and on the fuzz; the reference gate is the one that decides.
+
+Ranges of the INPUTS: `tau` in `[1e-300, 1)` on both sides (`p` or `q`; a `p` within a few ulps of 1 is a tail of `1e-16` and is in range); gamma `a` in `[1e-2, 1e6]`; chi-square `nu` in `[1e-2, 2e6]`; beta `a`, `b` in `[1e-2, 1e5]`; t `nu` in `[0.1, 1e6]` and `1e8`; F `d1`, `d2` in `[0.1, 1e5]`. Beyond these the functions answer and the bound is not claimed (the refusal limits of 3.4 apply).
+
+### 9.3 Edges, refusals **[choice]**
+
+`p` or `q` NaN is `stats.domain-nan`; `p` or `q` outside `(0, 1)` is `stats.domain-prob` (the quantile of 0 and 1 is a refusal, not an infinity, as `qnorm`); a shape not positive or infinite is `stats.domain-param`; shapes beyond the limits of 3.4 are `stats.domain-range`. A true quantile below the smallest subnormal answers 0 (as the forward functions answer 0 for a tail below `2.5e-324`); a t or F quantile above the largest double (`nu` or `d` tiny and `tau` tiny) is `stats.domain-range`, not an infinity. Reaching the iteration cap (200) is `stats.noconverge`, and the sweeps record the largest iteration count they reach, so that the cap is a measured margin and not a hope.
+
+### 9.4 Gates (written before the code; each can fail)
+
+1. **Reference.** `scripts/special_ref.py` gets the five quantile functions: at 50 digits, a Newton iteration on the 100-digit forward reference of S0 from the double the driver answered, with a bracket check (the reference function at `x_hat (1 +- 1e-6)` must straddle `tau`, else the reported error is the distance to the bracketing point found by doubling). Its self-check: the quantile of the forward value of a known `x` returns `x` to 1e-30.
+2. **Sweeps** (`scripts/gate_special.py` ranges for the quantiles, seed 1, the same machinery and `--fast`/`--n-scale`): `tau` log-uniform over `[1e-300, 1)` with both sides, parameters log-uniform over the ranges of 9.2, plus the boundaries of every branch (the Newton start switch, the side swap `x = 1/2`, shapes 1 and 1/2 and 2, `tau` = 1/2 and its neighbours); each with the bound of 9.2.
+3. **Round trip** and **symmetry** (`t_quantile(p) = -t_quantile(1-p)`; `chi2` against `2 gamma`; `f_quantile(p, d1, d2) = 1 / f_quantile_upper(p, d2, d1)` within the bound; the median of the symmetric beta `a = b` is 1/2): reported with their measured maxima.
+4. **Domain, edges and fuzz** (`scripts/gate_domain.py` extended): every refusal tag of 9.3 reached by a case, no input a trap or a hang, every probability from `5e-324` to `1 - 2^-53`.
+5. **Determinism** (`scripts/xplat_fp.py`): the quantile sweeps join the fingerprint; the same bytes on the platforms of the workflow and at 1 to 16 threads of `special-check`.
+6. **Mutants** (`scripts/mutants_special.py`): the update rule, the bracket logic, the side swap, the starts, the symmetry, the `kappa` conditions, the caps; killed, or each survivor explained. With the control of `mutants-need-a-control`.
