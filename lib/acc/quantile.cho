@@ -1,0 +1,196 @@
+edition 5;
+
+module acc.quantile;
+
+import acc.bigint;
+import acc.central;
+
+// The nine quantile definitions of Hyndman and Fan (1996) on SORTED keys (docs/describe.md section 2), with the probability an exact decimal rational p = pnum / 10^pk (pk at most 9) and the
+// arithmetic exact: types 1 to 3 pick an order statistic; types 4 to 9 are (1 - h) x[j] + h x[j + 1] with j = floor(n p + m) and h the fractional part, evaluated as one exact rational over
+// 24 10^pk and rounded ONCE to a double. A key is the order-preserving integer of a finite double (metrics.rank.key_of / flt.key_of); x[0] is x[1] and x[n + 1] is x[n].
+// Types 4 to 9 are written with the (a, b) pair of the same definitions in the form nppm = a + p (n + 1 - a - b): (0, 1), (1/2, 1/2), (0, 0), (1, 1), (1/3, 1/3), (3/8, 3/8).
+
+pub fn pow10(k: int) -> [] int {
+    var v = 1;
+    var i = 0;
+    while i < k {
+        v = v * 10;
+        i = i + 1;
+    }
+    return v;
+}
+
+fn bits_of_key(k: int) -> [] int {
+    if k < 0 {
+        return k ^ 0x7fffffffffffffff;
+    }
+    return k;
+}
+
+// the key at the 1-based rank r, clamped to 1..n
+fn at_rank[&a](keys: &a [int], n: int, r: int) -> [] int {
+    var i = r;
+    if i < 1 {
+        i = 1;
+    }
+    if i > n {
+        i = n;
+    }
+    return keys[i - 1];
+}
+
+// a double as (negative, the integer mantissa m, the exponent f): x = +- m 2^(f - 1074)
+fn parts(bits: int) -> [] (bool, int, int) {
+    let ef = bits >> 52 & 2047;
+    var m = bits & 4503599627370495;
+    var f = 0;
+    if ef != 0 {
+        m = m | 4503599627370496;
+        f = ef - 1;
+    }
+    return (bits < 0, m, f);
+}
+
+fn add_signed[&p, &q, &m](pos: &!p [int], neg: &!q [int], len: int, mag: &m [int], nm: int, negative: bool) -> [] int {
+    if negative {
+        bigint.add_in(neg, len, mag, nm);
+    } else {
+        bigint.add_in(pos, len, mag, nm);
+    }
+    return 0;
+}
+
+// (wlo * lo + whi * hi) / den exactly, rounded once; wlo + whi = den, both below 2^52, den below 2^52
+fn blend[&h](heap: &!h Heap, klo: int, khi: int, wlo: int, whi: int, den: int) -> [heap] (int, int) {
+    if klo == khi {
+        return (bits_of_key(klo), 0);
+    }
+    let (nl, ml, fl) = parts(bits_of_key(klo));
+    let (nh, mh, fh) = parts(bits_of_key(khi));
+    var emin = fl;
+    if fh < emin {
+        emin = fh;
+    }
+    let len = 100;
+    let pos = box_slice(heap, len, 0);
+    let neg = box_slice(heap, len, 0);
+    let w = box_slice(heap, 8, 0);
+    let m = box_slice(heap, 8, 0);
+    let t = box_slice(heap, 12, 0);
+    let sh = box_slice(heap, len, 0);
+    let d = box_slice(heap, 8, 0);
+    let out = box_slice(heap, len, 0);
+    var bits = 0;
+    var code = 0;
+    borrow mut pos as &!wp in {
+        borrow mut neg as &!wn in {
+            borrow mut w as &!ww in {
+                borrow mut m as &!wm in {
+                    borrow mut t as &!wt in {
+                        borrow mut sh as &!ws in {
+                            borrow mut d as &!wd in {
+                                borrow mut out as &!wo in {
+                                    // wlo * ml * 2^(fl - emin)
+                                    central.limbs_of(wlo, contents(ww));
+                                    central.limbs_of(ml, contents(wm));
+                                    bigint.mul(contents(wt), contents(ww), 2, contents(wm), 3);
+                                    bigint.shl_bits(contents(ws), len, contents(wt), 5, fl - emin);
+                                    add_signed(contents(wp), contents(wn), len, contents(ws), len, nl);
+                                    central.limbs_of(whi, contents(ww));
+                                    central.limbs_of(mh, contents(wm));
+                                    bigint.mul(contents(wt), contents(ww), 2, contents(wm), 3);
+                                    bigint.shl_bits(contents(ws), len, contents(wt), 5, fh - emin);
+                                    add_signed(contents(wp), contents(wn), len, contents(ws), len, nh);
+                                    // |pos - neg| and its sign
+                                    var negative = false;
+                                    let c = bigint.compare(contents(wp), len, contents(wn), len);
+                                    if c >= 0 {
+                                        bigint.copy(contents(wo), contents(wp), len);
+                                        bigint.sub_in(contents(wo), len, contents(wn), len);
+                                    } else {
+                                        bigint.copy(contents(wo), contents(wn), len);
+                                        bigint.sub_in(contents(wo), len, contents(wp), len);
+                                        negative = true;
+                                    }
+                                    central.limbs_of(den, contents(wd));
+                                    let (b, cd) = central.ratio_bits(heap, contents(wo), len, contents(wd), 3, emin - 1074, negative);
+                                    bits = b;
+                                    code = cd;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    unbox_slice(heap, pos);
+    unbox_slice(heap, neg);
+    unbox_slice(heap, w);
+    unbox_slice(heap, m);
+    unbox_slice(heap, t);
+    unbox_slice(heap, sh);
+    unbox_slice(heap, d);
+    unbox_slice(heap, out);
+    return (bits, code);
+}
+
+// The quantile of type `qtype` (1 to 9) at p = pnum / 10^pk of the n >= 1 sorted keys, as the BITS of the double, and a code (0). pnum <= 10^pk, pk <= 9, n <= 10^7.
+pub fn at[&h, &a](heap: &!h Heap, keys: &a [int], n: int, qtype: int, pnum: int, pk: int) -> [heap] (int, int) {
+    let tenk = pow10(pk);
+    if qtype <= 3 {
+        let np = n * pnum;
+        let jn = np / tenk;
+        let g = np - jn * tenk;
+        if qtype == 1 {
+            var idx = jn + 1;
+            if g == 0 {
+                idx = jn;
+            }
+            return (bits_of_key(at_rank(keys, n, idx)), 0);
+        }
+        if qtype == 2 {
+            if g == 0 {
+                return blend(heap, at_rank(keys, n, jn), at_rank(keys, n, jn + 1), 1, 1, 2);
+            }
+            return (bits_of_key(at_rank(keys, n, jn + 1)), 0);
+        }
+        // type 3: j = floor(n p - 1/2), the lower of the two unless n p - 1/2 is an even integer
+        let v2 = 2 * np - tenk;
+        if v2 < 0 {
+            return (bits_of_key(at_rank(keys, n, 0)), 0);
+        }
+        let j = v2 / (2 * tenk);
+        var idx = j + 1;
+        if v2 == j * 2 * tenk && j % 2 == 0 {
+            idx = j;
+        }
+        return (bits_of_key(at_rank(keys, n, idx)), 0);
+    }
+    var a24 = 0;
+    var b24 = 0;
+    if qtype == 4 {
+        b24 = 24;
+    } else if qtype == 5 {
+        a24 = 12;
+        b24 = 12;
+    } else if qtype == 7 {
+        a24 = 24;
+        b24 = 24;
+    } else if qtype == 8 {
+        a24 = 8;
+        b24 = 8;
+    } else if qtype == 9 {
+        a24 = 9;
+        b24 = 9;
+    }
+    // nppm * 24 * 10^pk
+    let nn = a24 * tenk + pnum * (24 * (n + 1) - a24 - b24);
+    let den = 24 * tenk;
+    let j = nn / den;
+    let hn = nn - j * den;
+    if hn == 0 {
+        return (bits_of_key(at_rank(keys, n, j)), 0);
+    }
+    return blend(heap, at_rank(keys, n, j), at_rank(keys, n, j + 1), den - hn, hn, den);
+}

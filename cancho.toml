@@ -227,3 +227,10 @@ name = "stats"
 sources = ["lib/acc", "tools/stats", "generated/stats"]
 std = true
 out = "build/stats"
+
+# S1: the quantile definitions of acc.quantile on data from standard input (scripts/gate_quantile.py).
+[[bin]]
+name = "quantile-check"
+sources = ["lib/acc", "tools/quantile-check"]
+std = true
+out = "build/quantile-check"

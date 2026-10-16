@@ -3,7 +3,7 @@
 
     python3 scripts/gate_describe_refusals.py [--bin build/stats] [--fuzz 1500] [--seed 1]
 
-Part 1, a table of 25 cases (argument errors, paths, limits, malformed CSV): each must exit with the code of its rule and print a document whose `error.rule` is exactly the stated tag, `ok` false.
+Part 1, a table of 33 cases (argument errors, paths, limits, malformed CSV): each must exit with the code of its rule and print a document whose `error.rule` is exactly the stated tag, `ok` false.
 Part 2, fuzz: random files made of the bytes that matter to a CSV reader (delimiters, quotes, CR, LF, NUL, digits, signs, e, dots, high bytes, long runs), and random argument vectors: the program must exit
 (no hang within 60 s, no signal), print one line of valid JSON, with `ok` true and exit 0, or `ok` false, an `error.rule` that is one of the tags in `stats introspect`, and the exit code of that rule.
 Exit 0: all of it holds. Exit 1: a violation. Exit 2: the harness failed.
@@ -45,6 +45,14 @@ CASES = [
     ("too many columns", b"a,b,c\n1,2,3\n", ["describe", "--max-cols", "2", "f.csv"], "limit.too-many-columns", 8),
     ("line too long", b"a\n" + b"1" * 200 + b"\n", ["describe", "--max-line-bytes", "100", "f.csv"], "limit.line-too-long", 8),
     ("header continues", b'"a\nb",c\n1,2\n', ["describe", "f.csv"], "stats.csv-multiline", 8),
+    ("quantile type 0", b"a\n1\n", ["describe", "--quantile-type", "0", "f.csv"], "args.bad-value", 2),
+    ("quantile type 10", b"a\n1\n", ["describe", "--quantile-type", "10", "f.csv"], "args.bad-value", 2),
+    ("quantile not a number", b"a\n1\n", ["describe", "--quantiles", "0.1,x", "f.csv"], "args.bad-value", 2),
+    ("quantile above 1", b"a\n1\n", ["describe", "--quantiles", "1.5", "f.csv"], "args.bad-value", 2),
+    ("quantile with 10 decimals", b"a\n1\n", ["describe", "--quantiles", "0.1234567891", "f.csv"], "args.bad-value", 2),
+    ("quantile empty item", b"a\n1\n", ["describe", "--quantiles", "0.1,,0.2", "f.csv"], "args.bad-value", 2),
+    ("too many cells", b"a,b\n1,2\n3,4\n", ["describe", "--max-cells", "3", "f.csv"], "limit.too-many-cells", 8),
+    ("max-cells zero", b"a\n1\n", ["describe", "--max-cells", "0", "f.csv"], "args.bad-value", 2),
     ("file with only a header", b"a,b\n", None, None, 0),
 ]
 
