@@ -36,7 +36,7 @@ M = [
     ("default-type", "tools/stats/main.cho", "|none|7|which of the nine", "|none|6|which of the nine"),
 ]
 
-EXPLAINED = {"blend-equal-keys": "equivalent: the shortcut for two equal keys returns the key, and the general path computes (wlo + whi) x / den = x exactly"}
+EXPLAINED = {}
 
 
 import re
