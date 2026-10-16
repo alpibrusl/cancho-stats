@@ -1,0 +1,326 @@
+edition 5;
+
+module acc.central;
+
+import acc.bigint;
+import acc.psum;
+
+// The exact variance, skewness and kurtosis of docs/describe.md from the power sums S1..S4 of acc.psum. With n the count and C_k the sum of (x - mean)^k, the integers
+//     L2 = n C2          = n S2 - S1^2
+//     K3 = n^2 C3        = n^2 S3 - 3 n S1 S2 + 2 S1^3
+//     K4 = n^3 C4        = n^3 S4 - 4 n^2 S1 S3 + 6 n S1^2 S2 - 3 S1^4
+// are exact combinations of the sums (units 2^-2148, 2^-3222 and 2^-4296 of the sums' own), and
+//     variance = L2 / (n (n - ddof))     excess kurtosis = (K4 - 3 L2^2) / L2^2     skewness = K3 / L2^(3/2) = sign(K3) sqrt(K3^2 / L2^3)
+// are each ONE rounding of an exact rational (the skewness through an exact integer square root with a sticky bit). Signed sums are kept as a positive and a negative magnitude and subtracted once.
+
+fn cap() -> [] int {
+    return 1100;
+}
+
+fn mag_len[&a](a: &a [int], n: int) -> [] int {
+    let b = bigint.bit_length(a, n);
+    if b == 0 {
+        return 1;
+    }
+    return (b + 25) / 26;
+}
+
+// v < 2^78 as three limbs
+pub fn limbs_of[&o](v: int, out: &!o [int]) -> [] int {
+    out[0] = v & 67108863;
+    out[1] = v >> 26 & 67108863;
+    out[2] = v >> 52;
+    return 0;
+}
+
+// (num * 2^e) / den as the BITS of the nearest double (one rounding), the sign `neg`, and 1 in the second place beyond the largest double
+pub fn ratio_bits[&h, &n, &d](heap: &!h Heap, num: &n [int], nn: int, den: &d [int], nd: int, e: int, neg: bool) -> [heap] (int, int) {
+    let bn = bigint.bit_length(num, nn);
+    if bn == 0 {
+        return (0, 0);
+    }
+    let bd = bigint.bit_length(den, nd);
+    var k = 66 + bd - bn;
+    if k < 0 {
+        k = 0;
+    }
+    let nq = (bn + k) / 26 + 3;
+    let q = box_slice(heap, nq, 0);
+    let r = box_slice(heap, nd + 2, 0);
+    var bits = 0;
+    var code = 0;
+    borrow mut q as &!qw in {
+        borrow mut r as &!rw in {
+            let sticky = bigint.div_shifted(num, nn, den, nd, k, contents(qw), contents(rw));
+            let (b, c) = bigint.round_bits(contents(qw), nq, e - k, sticky);
+            bits = b;
+            code = c;
+        }
+    }
+    unbox_slice(heap, q);
+    unbox_slice(heap, r);
+    if neg && code == 0 {
+        bits = bits | 0 - 9223372036854775807 - 1;
+    }
+    return (bits, code);
+}
+
+// sqrt(num / den) as the BITS of the nearest double, one rounding: the integer part s of sqrt(num * 4^k / den) with k chosen for 66 or more bits, found bit by bit, and a sticky bit when s^2 den differs from num 4^k
+pub fn sqrt_ratio_bits[&h, &n, &d](heap: &!h Heap, num: &n [int], nn: int, den: &d [int], nd: int) -> [heap] (int, int) {
+    let bn = bigint.bit_length(num, nn);
+    if bn == 0 {
+        return (0, 0);
+    }
+    let bd = bigint.bit_length(den, nd);
+    var k = (132 + bd - bn + 1) / 2;
+    if k < 0 {
+        k = 0;
+    }
+    // the shifted numerator num * 4^k
+    let ns = nn + 2 * k / 26 + 3;
+    let big = box_slice(heap, ns, 0);
+    let cc = box_slice(heap, 12, 0);
+    let pr = box_slice(heap, nd + 20, 0);
+    let s = box_slice(heap, 8, 0);
+    var top = (bn + 2 * k - bd) / 2 + 2;
+    var bits = 0;
+    var code = 0;
+    var sticky = 0;
+    borrow mut big as &!bw in {
+        borrow mut cc as &!cw in {
+            borrow mut pr as &!pw in {
+                borrow mut s as &!sw in {
+                    bigint.shl_bits(contents(bw), ns, num, nn, 2 * k);
+                    var bit = top;
+                    while bit >= 0 {
+                        // candidate c = s | 2^bit; keep it when c^2 den <= num 4^k
+                        bigint.copy(contents(cw), contents(sw), 8);
+                        bigint.set_bit(contents(cw), bit);
+                        let sq = box_slice(heap, 20, 0);
+                        borrow mut sq as &!qw in {
+                            bigint.mul(contents(qw), contents(cw), 8, contents(cw), 8);
+                            bigint.mul(contents(pw), contents(qw), 16, den, nd);
+                            if bigint.compare(contents(pw), nd + 16, contents(bw), ns) <= 0 {
+                                bigint.set_bit(contents(sw), bit);
+                            }
+                        }
+                        unbox_slice(heap, sq);
+                        bit = bit - 1;
+                    }
+                    // sticky: s^2 den != num 4^k
+                    let sq2 = box_slice(heap, 20, 0);
+                    borrow mut sq2 as &!q2 in {
+                        bigint.mul(contents(q2), contents(sw), 8, contents(sw), 8);
+                        bigint.mul(contents(pw), contents(q2), 16, den, nd);
+                        if bigint.compare(contents(pw), nd + 16, contents(bw), ns) != 0 {
+                            sticky = 1;
+                        }
+                    }
+                    unbox_slice(heap, sq2);
+                    let (b, c) = bigint.round_bits(contents(sw), 8, 0 - k, sticky);
+                    bits = b;
+                    code = c;
+                }
+            }
+        }
+    }
+    unbox_slice(heap, big);
+    unbox_slice(heap, cc);
+    unbox_slice(heap, pr);
+    unbox_slice(heap, s);
+    return (bits, code);
+}
+
+// add the magnitude m (nm limbs) into the positive or the negative accumulator
+fn put[&p, &q, &m](pos: &!p [int], neg: &!q [int], m: &m [int], nm: int, negative: bool) -> [] int {
+    if negative {
+        bigint.add_in(neg, cap(), m, nm);
+    } else {
+        bigint.add_in(pos, cap(), m, nm);
+    }
+    return 0;
+}
+
+// out = |pos - neg|; answers the sign (1, 0, -1)
+fn settle[&p, &q, &o](pos: &p [int], neg: &q [int], out: &!o [int]) -> [] int {
+    let c = bigint.compare(pos, cap(), neg, cap());
+    if c == 0 {
+        bigint.clear(out, cap());
+        return 0;
+    }
+    if c > 0 {
+        bigint.copy(out, pos, cap());
+        bigint.sub_in(out, cap(), neg, cap());
+        return 1;
+    }
+    bigint.copy(out, neg, cap());
+    bigint.sub_in(out, cap(), pos, cap());
+    return -1;
+}
+
+// Answers (skewness bits, its code, excess kurtosis bits, its code, status): status 0 when both are answered, 1 when the variance is zero (they are not defined).
+// `accs` holds the accumulators of k = 1 to 4 laid one after another (psum.size(1), size(2), size(3), size(4)), `n` is the number of values.
+pub fn skew_kurt[&h, &a](heap: &!h Heap, accs: &a [int], n: int) -> [heap] (int, int, int, int, int) {
+    let o1 = 0;
+    let o2 = psum.size(1);
+    let o3 = o2 + psum.size(2);
+    let o4 = o3 + psum.size(3);
+    let l1 = psum.limbs(1);
+    let l2 = psum.limbs(2);
+    let l3 = psum.limbs(3);
+    let l4 = psum.limbs(4);
+    let c = cap();
+    // magnitudes of S1..S4, and the sign of S1 and S3 (S2 and S4 are not negative)
+    let m1 = box_slice(heap, c, 0);
+    let m2 = box_slice(heap, c, 0);
+    let m3 = box_slice(heap, c, 0);
+    let m4 = box_slice(heap, c, 0);
+    let t1 = box_slice(heap, c, 0);
+    let t2 = box_slice(heap, c, 0);
+    let t3 = box_slice(heap, c, 0);
+    let pos = box_slice(heap, c, 0);
+    let neg = box_slice(heap, c, 0);
+    let f = box_slice(heap, 8, 0);
+    let l2m = box_slice(heap, c, 0);
+    let k3m = box_slice(heap, c, 0);
+    let k4m = box_slice(heap, c, 0);
+    let x1 = box_slice(heap, c, 0);
+    let x2 = box_slice(heap, c, 0);
+    var sb = 0;
+    var sc = 0;
+    var kb = 0;
+    var kc = 0;
+    var status = 0;
+    borrow mut m1 as &!w1 in {
+        borrow mut m2 as &!w2 in {
+            borrow mut m3 as &!w3 in {
+                borrow mut m4 as &!w4 in {
+                    borrow mut t1 as &!a1 in {
+                        borrow mut t2 as &!a2 in {
+                            borrow mut t3 as &!a3 in {
+                                borrow mut pos as &!wp in {
+                                    borrow mut neg as &!wn in {
+                                        borrow mut f as &!wf in {
+                                            borrow mut l2m as &!wl in {
+                                                borrow mut k3m as &!w31 in {
+                                                    borrow mut k4m as &!w41 in {
+                                                        borrow mut x1 as &!wx1 in {
+                                                            borrow mut x2 as &!wx2 in {
+                                                                let s1 = psum.magnitude(accs[o1..o2], 1, contents(w1));
+                                                                psum.magnitude(accs[o2..o3], 2, contents(w2));
+                                                                let s3 = psum.magnitude(accs[o3..o4], 3, contents(w3));
+                                                                psum.magnitude(accs[o4..o4 + psum.size(4)], 4, contents(w4));
+                                                                let nl = box_slice(heap, 8, 0);
+                                                                borrow mut nl as &!wnl in {
+                                                                    limbs_of(n, contents(wnl));
+                                                                    // L2 = n S2 - S1^2
+                                                                    bigint.clear(contents(wp), c);
+                                                                    bigint.clear(contents(wn), c);
+                                                                    bigint.mul(contents(a1), contents(w2), l2, contents(wnl), 3);
+                                                                    put(contents(wp), contents(wn), contents(a1), l2 + 3, false);
+                                                                    bigint.mul(contents(a1), contents(w1), l1, contents(w1), l1);
+                                                                    put(contents(wp), contents(wn), contents(a1), 2 * l1, true);
+                                                                    settle(contents(wp), contents(wn), contents(wl));
+                                                                    if bigint.is_zero(contents(wl), c) {
+                                                                        status = 1;
+                                                                    } else {
+                                                                        // K3 = n^2 S3 - 3 n S1 S2 + 2 S1^3
+                                                                        bigint.clear(contents(wp), c);
+                                                                        bigint.clear(contents(wn), c);
+                                                                        limbs_of(n * n, contents(wf));
+                                                                        bigint.mul(contents(a1), contents(w3), l3, contents(wf), 3);
+                                                                        put(contents(wp), contents(wn), contents(a1), l3 + 3, s3 < 0);
+                                                                        limbs_of(3 * n, contents(wf));
+                                                                        bigint.mul(contents(a1), contents(w1), l1, contents(wf), 3);
+                                                                        bigint.mul(contents(a2), contents(a1), l1 + 3, contents(w2), l2);
+                                                                        put(contents(wp), contents(wn), contents(a2), l1 + 3 + l2, s1 >= 0);
+                                                                        bigint.mul(contents(a1), contents(w1), l1, contents(w1), l1);
+                                                                        bigint.mul(contents(a2), contents(a1), 2 * l1, contents(w1), l1);
+                                                                        limbs_of(2, contents(wf));
+                                                                        bigint.mul(contents(a3), contents(a2), 3 * l1, contents(wf), 3);
+                                                                        put(contents(wp), contents(wn), contents(a3), 3 * l1 + 3, s1 < 0);
+                                                                        let sk3 = settle(contents(wp), contents(wn), contents(w31));
+                                                                        // K4 = n^3 S4 - 4 n^2 S1 S3 + 6 n S1^2 S2 - 3 S1^4
+                                                                        bigint.clear(contents(wp), c);
+                                                                        bigint.clear(contents(wn), c);
+                                                                        limbs_of(n * n, contents(wf));
+                                                                        bigint.mul(contents(a1), contents(wf), 3, contents(wnl), 3);
+                                                                        bigint.mul(contents(a2), contents(w4), l4, contents(a1), 6);
+                                                                        put(contents(wp), contents(wn), contents(a2), l4 + 6, false);
+                                                                        limbs_of(4 * n * n, contents(wf));
+                                                                        bigint.mul(contents(a1), contents(w1), l1, contents(w3), l3);
+                                                                        bigint.mul(contents(a2), contents(a1), l1 + l3, contents(wf), 3);
+                                                                        // sign of -4 n^2 S1 S3 is minus the sign of S1 S3
+                                                                        put(contents(wp), contents(wn), contents(a2), l1 + l3 + 3, s1 < 0 == s3 < 0);
+                                                                        limbs_of(6 * n, contents(wf));
+                                                                        bigint.mul(contents(a1), contents(w1), l1, contents(w1), l1);
+                                                                        bigint.mul(contents(a2), contents(a1), 2 * l1, contents(w2), l2);
+                                                                        bigint.mul(contents(a3), contents(a2), 2 * l1 + l2, contents(wf), 3);
+                                                                        put(contents(wp), contents(wn), contents(a3), 2 * l1 + l2 + 3, false);
+                                                                        bigint.mul(contents(a1), contents(w1), l1, contents(w1), l1);
+                                                                        bigint.mul(contents(a2), contents(a1), 2 * l1, contents(a1), 2 * l1);
+                                                                        limbs_of(3, contents(wf));
+                                                                        bigint.mul(contents(a3), contents(a2), 4 * l1, contents(wf), 3);
+                                                                        put(contents(wp), contents(wn), contents(a3), 4 * l1 + 3, true);
+                                                                        let sk4 = settle(contents(wp), contents(wn), contents(w41));
+                                                                        let nl2 = mag_len(contents(wl), c);
+                                                                        // excess kurtosis = (K4 - 3 L2^2) / L2^2
+                                                                        bigint.mul(contents(a1), contents(wl), nl2, contents(wl), nl2);
+                                                                        bigint.clear(contents(wp), c);
+                                                                        bigint.clear(contents(wn), c);
+                                                                        put(contents(wp), contents(wn), contents(w41), mag_len(contents(w41), c), sk4 < 0);
+                                                                        limbs_of(3, contents(wf));
+                                                                        bigint.mul(contents(a2), contents(a1), 2 * nl2, contents(wf), 3);
+                                                                        put(contents(wp), contents(wn), contents(a2), 2 * nl2 + 3, true);
+                                                                        let sg = settle(contents(wp), contents(wn), contents(wx1));
+                                                                        let (b2, c2) = ratio_bits(heap, contents(wx1), c, contents(a1), 2 * nl2, 0, sg < 0);
+                                                                        kb = b2;
+                                                                        kc = c2;
+                                                                        // skewness = sign(K3) sqrt(K3^2 / L2^3)
+                                                                        let nk3 = mag_len(contents(w31), c);
+                                                                        bigint.mul(contents(a2), contents(w31), nk3, contents(w31), nk3);
+                                                                        bigint.mul(contents(a3), contents(a1), 2 * nl2, contents(wl), nl2);
+                                                                        let (b1, c1) = sqrt_ratio_bits(heap, contents(a2), 2 * nk3, contents(a3), 3 * nl2);
+                                                                        sb = b1;
+                                                                        sc = c1;
+                                                                        if sk3 < 0 && c1 == 0 {
+                                                                            sb = sb | 0 - 9223372036854775807 - 1;
+                                                                        }
+                                                                        if sk3 == 0 {
+                                                                            sb = 0;
+                                                                        }
+                                                                    }
+                                                                }
+                                                                unbox_slice(heap, nl);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    unbox_slice(heap, m1);
+    unbox_slice(heap, m2);
+    unbox_slice(heap, m3);
+    unbox_slice(heap, m4);
+    unbox_slice(heap, t1);
+    unbox_slice(heap, t2);
+    unbox_slice(heap, t3);
+    unbox_slice(heap, pos);
+    unbox_slice(heap, neg);
+    unbox_slice(heap, f);
+    unbox_slice(heap, l2m);
+    unbox_slice(heap, k3m);
+    unbox_slice(heap, k4m);
+    unbox_slice(heap, x1);
+    unbox_slice(heap, x2);
+    return (sb, sc, kb, kc, status);
+}
