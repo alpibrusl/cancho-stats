@@ -10,6 +10,7 @@ import special.dist;
 import special.lgam;
 import special.igam;
 import special.ibeta;
+import special.quantile;
 
 pub fn same[&a, &b](x: &a [byte], y: &b [byte]) -> [] bool {
     if len(x) != len(y) {
@@ -82,6 +83,45 @@ pub fn which[&s](name: &s [byte]) -> [] int {
     }
     if same(name, "lgamma1p") {
         return 19;
+    }
+    if same(name, "gamma_quantile") {
+        return 20;
+    }
+    if same(name, "gamma_quantile_upper") {
+        return 21;
+    }
+    if same(name, "chi2_quantile") {
+        return 22;
+    }
+    if same(name, "chi2_quantile_upper") {
+        return 23;
+    }
+    if same(name, "beta_quantile") {
+        return 24;
+    }
+    if same(name, "beta_quantile_comp") {
+        return 25;
+    }
+    if same(name, "beta_quantile_upper") {
+        return 26;
+    }
+    if same(name, "t_quantile") {
+        return 27;
+    }
+    if same(name, "t_quantile_upper") {
+        return 28;
+    }
+    if same(name, "f_quantile") {
+        return 29;
+    }
+    if same(name, "f_quantile_upper") {
+        return 30;
+    }
+    if same(name, "gamma_iterations") {
+        return 31;
+    }
+    if same(name, "beta_iterations") {
+        return 32;
     }
     return 0;
 }
@@ -172,6 +212,45 @@ pub fn eval(f: int, x: float, y: float, z: float) -> [] (float, int) {
             return (0.0 / 0.0, 2);
         }
         return (lgam.lgamma1p(x), 0);
+    }
+    if f == 20 {
+        return quantile.gamma_quantile(x, y);
+    }
+    if f == 21 {
+        return quantile.gamma_quantile_upper(x, y);
+    }
+    if f == 22 {
+        return quantile.chi2_quantile(x, y);
+    }
+    if f == 23 {
+        return quantile.chi2_quantile_upper(x, y);
+    }
+    if f == 24 {
+        return quantile.beta_quantile(x, y, z);
+    }
+    if f == 25 {
+        return quantile.beta_quantile_comp(x, y, z);
+    }
+    if f == 26 {
+        return quantile.beta_quantile_upper(x, y, z);
+    }
+    if f == 27 {
+        return quantile.t_quantile(x, y);
+    }
+    if f == 28 {
+        return quantile.t_quantile_upper(x, y);
+    }
+    if f == 29 {
+        return quantile.f_quantile(x, y, z);
+    }
+    if f == 30 {
+        return quantile.f_quantile_upper(x, y, z);
+    }
+    if f == 31 {
+        return quantile.gamma_iterations(x, y);
+    }
+    if f == 32 {
+        return quantile.beta_iterations(x, y, z);
     }
     return dist.binom_sf(x, y, z);
 }

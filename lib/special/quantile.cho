@@ -1,0 +1,588 @@
+edition 5;
+
+module special.quantile;
+
+import std.math;
+import special.dist;
+import special.lgam;
+import special.igam;
+import special.ibeta;
+import special.rules;
+
+// The quantile functions (docs/numerics.md section 9): gamma, chi-square, beta, Student t and F, lower tail `p` or upper tail `q`. Each answers (value, code): code 0 is an answer, any other is a refusal
+// (rules.tag) and the value is NaN. The solver is a safeguarded Newton iteration on g(x) = ln tail(x) - ln tau (increasing in x for both tails, so the sign of g says which side of the root x is), kept
+// as a bracket; the unknown is stored as a double and updated MULTIPLICATIVELY (x <- x exp(step); for the beta the pair (x, y = 1 - x) with x' = x E / (y + x E), y' = y / (y + x E)), so that the
+// relative precision of a tiny answer is not lost to the rounding of its logarithm. The derivative is approximate (its rounding only slows the iteration); the residual is the forward function of S0.
+
+fn nan() -> [] float {
+    return 0.0 / 0.0;
+}
+
+fn is_inf(x: float) -> [] bool {
+    return x > 1.7976931348623157e308 || x < -1.7976931348623157e308;
+}
+
+pub fn max_iter() -> [] int {
+    return 200;
+}
+
+fn tiny() -> [] float {
+    return 5.0e-324;
+}
+
+fn fabs(x: float) -> [] float {
+    if x < 0.0 {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+// ---------------------------------------------------------------------------------------------------------------- gamma
+
+// (g, ln tail, code) at x for the gamma of shape a: g < 0 when x is below the root, g > 0 above. A tail that underflows to 0 is -1e300 (lower: x too small) or +1e300 (upper: x too large).
+fn gamma_g(a: float, x: float, lt: float, upper: bool) -> [] (float, float, int) {
+    let (p, q, code) = igam.gamma_pq(a, x);
+    if code != 0 {
+        return (nan(), nan(), code);
+    }
+    var t = p;
+    if upper {
+        t = q;
+    }
+    if t <= 0.0 {
+        if upper {
+            return (1.0e300, 0.0 - 1.0e300, 0);
+        }
+        return (0.0 - 1.0e300, 0.0 - 1.0e300, 0);
+    }
+    let lnt = math.log(t);
+    if upper {
+        return (lt - lnt, lnt, 0);
+    }
+    return (lnt - lt, lnt, 0);
+}
+
+// the starting point: Wilson-Hilferty for a >= 1, the small-x form of the lower tail x^a / Gamma(a + 1) = tail below
+fn gamma_start(tau: float, a: float, upper: bool) -> [] float {
+    var zl = 0.0;
+    var ell = tau;
+    let (z, zc) = dist.qnorm(tau);
+    zl = z;
+    if upper {
+        zl = 0.0 - z;
+        ell = 1.0 - tau;
+    }
+    var x = 0.0;
+    if a >= 1.0 {
+        let w = 1.0 - 1.0 / (9.0 * a) + zl / (3.0 * sqrt(a));
+        if w > 0.1 {
+            x = a * w * w * w;
+        }
+    }
+    if !(x > 0.0) {
+        if ell <= 0.5 {
+            x = math.exp((math.log(ell) + lgam.lgamma_pos(a + 1.0)) / a);
+        }
+    }
+    if !(x > 0.0) || x < tiny() {
+        x = a;
+    }
+    if x > 1.0e300 {
+        x = 1.0e300;
+    }
+    return x;
+}
+
+// the root x of tail(x) = tau; (x, code, iterations)
+pub fn gamma_solve(tau0: float, a: float, upper0: bool) -> [] (float, int, int) {
+    // solve on the SMALLER tail: tau above 1/2 asks for the other tail, 1 - tau, which is exact there (Sterbenz) and is computed on its own by the forward function
+    var tau = tau0;
+    var upper = upper0;
+    if tau > 0.5 {
+        tau = 1.0 - tau;
+        upper = !upper;
+    }
+    let lt = math.log(tau);
+    let lg = lgam.lgamma_pos(a);
+    var x = gamma_start(tau, a, upper);
+    // a root below the smallest subnormal answers 0
+    let (glo, llo, clo) = gamma_g(a, tiny(), lt, upper);
+    if clo != 0 {
+        return (nan(), clo, 0);
+    }
+    if glo >= 0.0 {
+        return (0.0, 0, 1);
+    }
+    var xl = tiny();
+    var xh = 1.7e308;
+    var it = 0;
+    var done = false;
+    var result = x;
+    while !done && it < max_iter() {
+        let (g, lnt, code) = gamma_g(a, x, lt, upper);
+        if code != 0 {
+            return (nan(), code, it);
+        }
+        if g == 0.0 {
+            result = x;
+            done = true;
+        } else {
+            if g < 0.0 {
+                xl = x;
+            } else {
+                xh = x;
+            }
+            var step = 0.0;
+            var sure = true;
+            if xl > tiny() && xh < 1.7e308 && xh - xl <= 1.0e-13 * xl {
+                // the bracket has closed on a jump or on noise of the forward function (a tail near the smallest subnormal moves in steps): its middle is the answer to the resolution there is
+                result = sqrt(xl) * sqrt(xh);
+                done = true;
+                step = 0.0;
+            } else if g < -1.0e299 {
+                step = 40.0;
+                sure = false;
+            } else if g > 1.0e299 {
+                step = -40.0;
+                sure = false;
+            } else {
+                let slope = math.exp(a * math.log(x) - x - lg - lnt);
+                if slope > 0.0 && slope < 1.0e300 {
+                    step = 0.0 - g / slope;
+                    if step > 40.0 {
+                        step = 40.0;
+                        sure = false;
+                    }
+                    if step < -40.0 {
+                        step = -40.0;
+                        sure = false;
+                    }
+                } else {
+                    step = 1.0;
+                    if g > 0.0 {
+                        step = -1.0;
+                    }
+                    sure = false;
+                }
+            }
+            var xn = x * math.exp(step);
+            if done {
+                xn = x;
+            } else if xn == x {
+                // the step is smaller than the spacing of the doubles (a root among the subnormals: the spacing there is 2e-3 relative and more): x is the nearest double to the root
+                result = x;
+                done = true;
+            } else if sure && fabs(step) < 1.0e-9 {
+                // a step this small is the last one (quadratic convergence: the next would change nothing), and it may land on the edge of the bracket the residual's own sign made
+                result = xn;
+                done = true;
+            } else if is_nan(xn) || !(xn > xl) || !(xn < xh) {
+                sure = false;
+                if xl > tiny() && xh < 1.7e308 {
+                    xn = sqrt(xl) * sqrt(xh);
+                } else if xh < 1.7e308 {
+                    xn = xh / 2.0;
+                } else {
+                    xn = xl * 2.0;
+                }
+            }
+            x = xn;
+        }
+        it = it + 1;
+    }
+    if !done {
+        return (nan(), rules.noconverge(), it);
+    }
+    return (result, 0, it);
+}
+
+// ---------------------------------------------------------------------------------------------------------------- beta
+
+fn betaln(a: float, b: float) -> [] float {
+    return lgam.lgamma_pos(a) + lgam.lgamma_pos(b) - lgam.lgamma_pos(a + b);
+}
+
+// (g, ln tail, code) at the pair (x, y): g < 0 below the root
+fn beta_g(a: float, b: float, x: float, y: float, lt: float, upper: bool) -> [] (float, float, int) {
+    let (lo, up, code) = ibeta.beta_xy(a, b, x, y);
+    if code != 0 {
+        return (nan(), nan(), code);
+    }
+    var t = lo;
+    if upper {
+        t = up;
+    }
+    if t <= 0.0 {
+        if upper {
+            return (1.0e300, 0.0 - 1.0e300, 0);
+        }
+        return (0.0 - 1.0e300, 0.0 - 1.0e300, 0);
+    }
+    let lnt = math.log(t);
+    if upper {
+        return (lt - lnt, lnt, 0);
+    }
+    return (lnt - lt, lnt, 0);
+}
+
+// the starting pair: the normal approximation of the beta for a, b > 1, else the small-tail form x^a / (a B(a, b)) = tail (or its mirror for y)
+fn beta_start(tau: float, a: float, b: float, upper: bool) -> [] (float, float) {
+    var tl = tau;
+    var tu = 1.0 - tau;
+    if upper {
+        tl = 1.0 - tau;
+        tu = tau;
+    }
+    let lb = betaln(a, b);
+    if a > 1.0 && b > 1.0 {
+        let mu = a / (a + b);
+        let sd = sqrt(a * b / ((a + b) * (a + b) * (a + b + 1.0)));
+        let (z, zc) = dist.qnorm(tau);
+        var zl = z;
+        if upper {
+            zl = 0.0 - z;
+        }
+        let x0 = mu + zl * sd;
+        if x0 > 1.0e-3 * mu && x0 < 1.0 - 1.0e-3 * (1.0 - mu) {
+            return (x0, 1.0 - x0);
+        }
+    }
+    if tl <= tu {
+        var x0 = math.exp((math.log(tl) + math.log(a) + lb) / a);
+        if !(x0 > tiny()) {
+            x0 = tiny();
+        }
+        if x0 > 0.5 {
+            x0 = 0.5;
+        }
+        return (x0, 1.0 - x0);
+    }
+    var y0 = math.exp((math.log(tu) + math.log(b) + lb) / b);
+    if !(y0 > tiny()) {
+        y0 = tiny();
+    }
+    if y0 > 0.5 {
+        y0 = 0.5;
+    }
+    return (1.0 - y0, y0);
+}
+
+// the root pair (x, y) of tail = tau; (x, y, code, iterations)
+pub fn beta_solve(tau0: float, a: float, b: float, upper0: bool) -> [] (float, float, int, int) {
+    // the smaller tail, as in gamma_solve
+    var tau = tau0;
+    var upper = upper0;
+    if tau > 0.5 {
+        tau = 1.0 - tau;
+        upper = !upper;
+    }
+    let lt = math.log(tau);
+    let lb = betaln(a, b);
+    // a root below the smallest subnormal (x = 0) or above 1 - the smallest subnormal (y = 0)
+    let (glo, llo, clo) = beta_g(a, b, tiny(), 1.0, lt, upper);
+    if clo != 0 {
+        return (nan(), nan(), clo, 0);
+    }
+    if glo >= 0.0 {
+        return (0.0, 1.0, 0, 1);
+    }
+    let (ghi, lhi, chi) = beta_g(a, b, 1.0, tiny(), lt, upper);
+    if chi != 0 {
+        return (nan(), nan(), chi, 1);
+    }
+    if ghi <= 0.0 {
+        return (1.0, 0.0, 0, 2);
+    }
+    let (sx, sy) = beta_start(tau, a, b, upper);
+    var x = sx;
+    var y = sy;
+    var vl = -745.0;
+    var vh = 745.0;
+    var it = 0;
+    var done = false;
+    var rx = x;
+    var ry = y;
+    while !done && it < max_iter() {
+        let (g, lnt, code) = beta_g(a, b, x, y, lt, upper);
+        if code != 0 {
+            return (nan(), nan(), code, it);
+        }
+        if g == 0.0 {
+            rx = x;
+            ry = y;
+            done = true;
+        } else {
+            let v = math.log(x) - math.log(y);
+            if g < 0.0 {
+                vl = v;
+            } else {
+                vh = v;
+            }
+            var dv = 0.0;
+            var sure = true;
+            var closed = false;
+            if vl > -745.0 && vh < 745.0 && vh - vl <= 1.0e-13 * (1.0 + fabs(v)) {
+                // the bracket has closed on a jump or on noise of the forward function: its middle is the answer to the resolution there is
+                closed = true;
+                sure = false;
+                dv = (vl + vh) / 2.0 - v;
+            } else if g < -1.0e299 {
+                dv = 40.0;
+                sure = false;
+            } else if g > 1.0e299 {
+                dv = -40.0;
+                sure = false;
+            } else {
+                let slope = math.exp(a * math.log(x) + b * math.log(y) - lb - lnt);
+                if slope > 0.0 && slope < 1.0e300 {
+                    dv = 0.0 - g / slope;
+                    if dv > 40.0 {
+                        dv = 40.0;
+                        sure = false;
+                    }
+                    if dv < -40.0 {
+                        dv = -40.0;
+                        sure = false;
+                    }
+                } else {
+                    dv = 1.0;
+                    if g > 0.0 {
+                        dv = -1.0;
+                    }
+                    sure = false;
+                }
+            }
+            if !closed && !(sure && fabs(dv) < 1.0e-9) && (!(v + dv > vl) || !(v + dv < vh)) {
+                sure = false;
+                dv = (vl + vh) / 2.0 - v;
+            }
+            let e = math.exp(dv);
+            let den = y + x * e;
+            var xn = x * e / den;
+            var yn = y / den;
+            if !(xn > 0.0) || !(yn > 0.0) {
+                sure = false;
+                let e2 = math.exp((vl + vh) / 4.0 - v / 2.0);
+                let den2 = y + x * e2;
+                xn = x * e2 / den2;
+                yn = y / den2;
+            }
+            if closed || sure && fabs(dv) < 1.0e-9 || xn == x && yn == y {
+                rx = xn;
+                ry = yn;
+                done = true;
+            }
+            x = xn;
+            y = yn;
+        }
+        it = it + 1;
+    }
+    if !done {
+        return (nan(), nan(), rules.noconverge(), it);
+    }
+    return (rx, ry, 0, it);
+}
+
+// ---------------------------------------------------------------------------------------------------------------- the public functions
+
+fn check_prob(p: float) -> [] int {
+    if is_nan(p) {
+        return rules.domain_nan();
+    }
+    if p <= 0.0 || p >= 1.0 {
+        return rules.domain_prob();
+    }
+    return 0;
+}
+
+fn check_shape(a: float, limit: float) -> [] int {
+    if is_nan(a) {
+        return rules.domain_nan();
+    }
+    if a <= 0.0 || is_inf(a) {
+        return rules.domain_param();
+    }
+    if a > limit {
+        return rules.domain_range();
+    }
+    return 0;
+}
+
+// the first refusal among the probability and the shapes, or 0
+fn check1(p: float, a: float, limit: float) -> [] int {
+    if is_nan(p) || is_nan(a) {
+        return rules.domain_nan();
+    }
+    let c = check_shape(a, limit);
+    if c != 0 {
+        return c;
+    }
+    return check_prob(p);
+}
+
+fn gamma_any(p: float, a: float, upper: bool) -> [] (float, int, int) {
+    let c = check1(p, a, 1.0e8);
+    if c != 0 {
+        return (nan(), c, 0);
+    }
+    return gamma_solve(p, a, upper);
+}
+
+pub fn gamma_quantile(p: float, a: float) -> [] (float, int) {
+    let (x, c, it) = gamma_any(p, a, false);
+    return (x, c);
+}
+
+pub fn gamma_quantile_upper(q: float, a: float) -> [] (float, int) {
+    let (x, c, it) = gamma_any(q, a, true);
+    return (x, c);
+}
+
+// the number of iterations (a float), for the gates that measure the margin of the cap
+pub fn gamma_iterations(p: float, a: float) -> [] (float, int) {
+    let (x, c, it) = gamma_any(p, a, false);
+    if c != 0 {
+        return (nan(), c);
+    }
+    return (float_of(it), c);
+}
+
+fn chi2_any(p: float, nu: float, upper: bool) -> [] (float, int) {
+    let c = check1(p, nu, 2.0e8);
+    if c != 0 {
+        return (nan(), c);
+    }
+    let (x, code, it) = gamma_solve(p, nu / 2.0, upper);
+    return (2.0 * x, code);
+}
+
+pub fn chi2_quantile(p: float, nu: float) -> [] (float, int) {
+    return chi2_any(p, nu, false);
+}
+
+pub fn chi2_quantile_upper(q: float, nu: float) -> [] (float, int) {
+    return chi2_any(q, nu, true);
+}
+
+fn beta_any(p: float, a: float, b: float, upper: bool) -> [] (float, float, int, int) {
+    if is_nan(p) || is_nan(a) || is_nan(b) {
+        return (nan(), nan(), rules.domain_nan(), 0);
+    }
+    let ca = check_shape(a, 1.0e8);
+    if ca != 0 {
+        return (nan(), nan(), ca, 0);
+    }
+    let cb = check_shape(b, 1.0e8);
+    if cb != 0 {
+        return (nan(), nan(), cb, 0);
+    }
+    let cp = check_prob(p);
+    if cp != 0 {
+        return (nan(), nan(), cp, 0);
+    }
+    return beta_solve(p, a, b, upper);
+}
+
+pub fn beta_quantile(p: float, a: float, b: float) -> [] (float, int) {
+    let (x, y, c, it) = beta_any(p, a, b, false);
+    return (x, c);
+}
+
+pub fn beta_quantile_comp(p: float, a: float, b: float) -> [] (float, int) {
+    let (x, y, c, it) = beta_any(p, a, b, false);
+    return (y, c);
+}
+
+pub fn beta_quantile_upper(q: float, a: float, b: float) -> [] (float, int) {
+    let (x, y, c, it) = beta_any(q, a, b, true);
+    return (x, c);
+}
+
+pub fn beta_iterations(p: float, a: float, b: float) -> [] (float, int) {
+    let (x, y, c, it) = beta_any(p, a, b, false);
+    if c != 0 {
+        return (nan(), c);
+    }
+    return (float_of(it), c);
+}
+
+// the positive t with sf(t) = tau for tau in (0, 1/2): the two-sided tail 2 tau is the beta tail I_x(nu/2, 1/2) with x = nu / (nu + t^2), t = sqrt(nu y / x)
+fn t_positive(tau: float, nu: float) -> [] (float, int) {
+    let (x, y, c, it) = beta_solve(2.0 * tau, nu / 2.0, 0.5, false);
+    if c != 0 {
+        return (nan(), c);
+    }
+    if !(x > 0.0) {
+        return (nan(), rules.domain_range());
+    }
+    let t = sqrt(nu) * (sqrt(y) / sqrt(x));
+    if is_inf(t) || is_nan(t) {
+        return (nan(), rules.domain_range());
+    }
+    return (t, 0);
+}
+
+pub fn t_quantile(p: float, nu: float) -> [] (float, int) {
+    let c = check1(p, nu, 2.0e8);
+    if c != 0 {
+        return (nan(), c);
+    }
+    if p == 0.5 {
+        return (0.0, 0);
+    }
+    if p > 0.5 {
+        let (t, code) = t_positive(1.0 - p, nu);
+        return (t, code);
+    }
+    let (t, code) = t_positive(p, nu);
+    if code != 0 {
+        return (t, code);
+    }
+    return (0.0 - t, 0);
+}
+
+pub fn t_quantile_upper(q: float, nu: float) -> [] (float, int) {
+    let (t, code) = t_quantile(q, nu);
+    if code != 0 || t == 0.0 {
+        return (t, code);
+    }
+    return (0.0 - t, 0);
+}
+
+fn f_any(p: float, d1: float, d2: float, upper: bool) -> [] (float, int) {
+    if is_nan(p) || is_nan(d1) || is_nan(d2) {
+        return (nan(), rules.domain_nan());
+    }
+    let c1 = check_shape(d1, 2.0e8);
+    if c1 != 0 {
+        return (nan(), c1);
+    }
+    let c2 = check_shape(d2, 2.0e8);
+    if c2 != 0 {
+        return (nan(), c2);
+    }
+    let cp = check_prob(p);
+    if cp != 0 {
+        return (nan(), cp);
+    }
+    let (x, y, c, it) = beta_solve(p, d1 / 2.0, d2 / 2.0, upper);
+    if c != 0 {
+        return (nan(), c);
+    }
+    if !(y > 0.0) {
+        return (nan(), rules.domain_range());
+    }
+    let f = d2 / d1 * (x / y);
+    if is_inf(f) || is_nan(f) {
+        return (nan(), rules.domain_range());
+    }
+    return (f, 0);
+}
+
+pub fn f_quantile(p: float, d1: float, d2: float) -> [] (float, int) {
+    return f_any(p, d1, d2, false);
+}
+
+pub fn f_quantile_upper(q: float, d1: float, d2: float) -> [] (float, int) {
+    return f_any(q, d1, d2, true);
+}

@@ -288,6 +288,65 @@ def g_binom(r, i):
     return (k, n, p)
 
 
+
+def _tau(r, i):
+    """a tail probability: far tails, the middle, close to 1, the neighbours of 1/2 and the usual levels"""
+    m = i % 6
+    if m == 0:
+        return r.logu(1e-300, 1e-5)
+    if m == 1:
+        return r.logu(1e-5, 0.5)
+    if m == 2:
+        return r.uni(0.01, 0.99)
+    if m == 3:
+        return 1.0 - r.logu(1e-16, 1e-2)
+    if m == 4:
+        return r.pick(around(0.5))
+    return r.pick([0.5, 0.025, 0.975, 0.05, 0.95, 0.01, 0.99, 0.001, 0.999, 1e-10, 1.0 - 1e-10])
+
+
+def g_q_gamma(r, i):
+    a = r.logu(1e-2, 1e4)
+    if i % 9 == 8:
+        a = r.pick([1.0, 0.5, 2.0, 15.0, nb(15.0, 1), 10.0, 100.0])
+    return (_tau(r, i), a)
+
+
+def g_q_gamma_big(r, i):
+    return (_tau(r, i), r.logu(1e4, 1e6))
+
+
+def g_q_beta(r, i):
+    a = r.logu(1e-2, 1e3)
+    b = r.logu(1e-2, 1e3)
+    if i % 9 == 8:
+        a = r.pick([1.0, 0.5, 2.0, 10.0, nb(10.0, 1)])
+        b = r.pick([1.0, 0.5, 2.0, 10.0, a])
+    return (_tau(r, i), a, b)
+
+
+def g_q_beta_big(r, i):
+    big = r.logu(1e3, 1e5)
+    other = r.logu(1e-2, 1e5)
+    a, b = (big, other) if (i & 1) == 0 else (other, big)
+    return (_tau(r, i), a, b)
+
+
+def g_q_t(r, i):
+    nu = r.logu(0.1, 1e6)
+    if i % 10 == 9:
+        nu = 1e8
+    return (_tau(r, i), nu)
+
+
+def g_q_chi2(r, i):
+    return (_tau(r, i), r.logu(1e-2, 2e6) if i % 7 == 6 else r.logu(1e-2, 1e4))
+
+
+def g_q_f(r, i):
+    return (_tau(r, i), r.logu(0.1, 1e5), r.logu(0.1, 1e5))
+
+
 # (name, fn, n cases, generator, kind, B0, slow)
 RANGES = [
     ("lgamma", "lgamma", 20000, g_lgamma, "lgamma", 1e-14, False),
@@ -317,11 +376,29 @@ RANGES = [
     ("f_sf", "f_sf", 20000, g_f, "rel", 1e-12, False),
     ("binom_cdf", "binom_cdf", 20000, g_binom, "rel", 5e-12, False),
     ("binom_sf", "binom_sf", 20000, g_binom, "rel", 5e-12, False),
+    ("gamma q", "gamma_quantile", 1500, g_q_gamma, "q_gamma", 1e-13, False),
+    ("gamma q_upper", "gamma_quantile_upper", 1500, g_q_gamma, "q_gamma", 1e-13, False),
+    ("gamma q big", "gamma_quantile", 300, g_q_gamma_big, "q_gamma", 1e-13, True),
+    ("gamma q_upper big", "gamma_quantile_upper", 300, g_q_gamma_big, "q_gamma", 1e-13, True),
+    ("chi2 q", "chi2_quantile", 1500, g_q_chi2, "q_chi2", 1e-13, False),
+    ("chi2 q_upper", "chi2_quantile_upper", 1500, g_q_chi2, "q_chi2", 1e-13, False),
+    ("beta q", "beta_quantile", 1500, g_q_beta, "q_beta", 1e-13, False),
+    ("beta q_comp", "beta_quantile_comp", 1500, g_q_beta, "q_beta", 1e-13, False),
+    ("beta q_upper", "beta_quantile_upper", 1500, g_q_beta, "q_beta", 1e-13, False),
+    ("beta q big", "beta_quantile", 300, g_q_beta_big, "q_beta", 1e-13, True),
+    ("beta q_upper big", "beta_quantile_upper", 300, g_q_beta_big, "q_beta", 1e-13, True),
+    ("t q", "t_quantile", 1500, g_q_t, "q_t", 1e-13, False),
+    ("t q_upper", "t_quantile_upper", 1500, g_q_t, "q_t", 1e-13, False),
+    ("f q", "f_quantile", 1500, g_q_f, "q_f", 1e-13, False),
+    ("f q_upper", "f_quantile_upper", 1500, g_q_f, "q_f", 1e-13, False),
 ]
 
 B1 = 4e-16
 # the far-tail coefficient of the incomplete gamma and chi-square for a in [15, 1e4]: Loader's exponent x ln(x/np) + np - x has terms near 3000 that cancel to 600, so a 1-ulp log costs 5e-13 (measured, docs/numerics.md 8.3)
+Q_B1 = 1e-15
 B1_OF = {"gamma_p mid": 1.5e-15, "gamma_q mid": 1.5e-15, "chi2_cdf mid": 1.5e-15, "chi2_sf mid": 1.5e-15}
+B1_OF.update({spec[0]: Q_B1 for spec in RANGES if spec[4].startswith("q_")})
+MAXF = 1.7976931348623157e308
 SMALLEST_NORMAL = 2.2250738585072014e-308
 
 
@@ -330,6 +407,8 @@ def cases_of(rng_spec, seed, scale, fast):
     n = max(1, int(n * scale))
     if fast:
         n = 600 if not slow else 200
+        if kind.startswith("q_"):
+            n = 120 if not slow else 60
     h = int.from_bytes(hashlib.sha256(("%s/%d" % (name, seed)).encode()).digest()[:8], "little")
     r = SM64(h)
     return [gen(r, i) for i in range(n)]
@@ -395,13 +474,31 @@ def run_driver(driver, fn, cases, timeout=900, threads=None):
     return out
 
 
-def judge(kind, b0, y, code, tag, f, b1=B1):
+def kappa_of(kind, args):
+    """the amplification of the bound of a quantile (docs/numerics.md 9.2): the reciprocal of the smaller shape parameter, capped below at 1"""
+    if kind == "q_gamma":
+        m = min(1.0, args[1])
+    elif kind == "q_chi2":
+        m = min(1.0, args[1] / 2)
+    elif kind == "q_beta":
+        m = min(1.0, args[1], args[2])
+    elif kind == "q_t":
+        m = min(1.0, args[1] / 2, 0.5)
+    else:
+        m = min(1.0, args[1] / 2, args[2] / 2)
+    return 1.0 / m
+
+
+def judge(kind, b0, y, code, tag, f, b1=B1, args=None):
     """(ok, ratio of error to bound, absolute error) for a double y against the reference f (mpf)."""
     from mpmath import mp, mpf
 
+    mp.dps = 60
+    if kind.startswith("q_") and abs(f) >= mpf(MAXF):
+        # the true quantile is beyond the largest double: the function refuses (stats.domain-range, code 4)
+        return code == 4, (0.0 if code == 4 else float("inf")), 0.0
     if code != 0 or y != y or abs(y) == math.inf:
         return False, float("inf"), float("inf")
-    mp.dps = 60
     err = abs(mpf(y) - f)
     af = abs(f)
     if af == 0 and kind not in ("lgamma", "qnorm"):
@@ -412,6 +509,17 @@ def judge(kind, b0, y, code, tag, f, b1=B1):
         bound = mpf("1e-15") + mpf("1e-13") * af
     elif kind == "relflat":
         bound = mpf(b0) * af + mpf("2e-323")
+    elif kind.startswith("q_"):
+        tau = args[0]
+        bound = mpf(kappa_of(kind, args)) * (mpf(b0) + mpf(b1) * abs(mp.log(mpf(tau)))) * af + mpf("2e-323")
+        # t and F are computed from the beta variable x, which is a double: where x* is below the smallest normal it has fewer bits (a subnormal has 1 to 52), and the quantile is only as exact as x is
+        # (docs/numerics.md 9.2): t = sqrt(nu (1 - x) / x) carries half of the relative error of x, F = d2 x / (d1 (1 - x)) all of it
+        if kind == "q_t" and af > 0:
+            xs = mpf(args[1]) / (mpf(args[1]) + af * af)
+            bound += af * mpf("1e-323") / xs
+        elif kind == "q_f" and af > 0:
+            xs = mpf(args[1]) * af / (mpf(args[1]) * af + mpf(args[2]))
+            bound += af * mpf("2e-323") / xs
     else:
         # relative bound with the stated far-tail term, plus 4 units of the smallest subnormal: below the smallest normal double a result has fewer bits, and the unit is what is left
         bound = (mpf(b0) + mpf(b1) * abs(mp.log(af))) * af + mpf("2e-323")
@@ -440,7 +548,7 @@ def evaluate(driver, specs, seed, scale, fast, workers, cache, quiet=False):
                 continue
             f = mpf(rv)
             y = unhx(o[1])
-            ok, ratio, rel = judge(kind, b0, y, int(o[2]), None, f, B1_OF.get(name, B1))
+            ok, ratio, rel = judge(kind, b0, y, int(o[2]), None, f, B1_OF.get(name, B1), c)
             if not ok:
                 bad += 1
                 if first_bad is None or ratio > first_bad[0]:

@@ -16,6 +16,7 @@ step "references"; $PY scripts/special_ref.py --selfcheck
 step "build"; $CANCHO install >/dev/null; $CANCHO build --bin special-check; $CANCHO build --bin acc-check; $CANCHO build --bin bigint-check; $CANCHO build --bin psum-check; $CANCHO build --bin stats; $CANCHO build --bin quantile-check
 step "consumption"; $PY scripts/consume.py --mutants | tail -2
 step "domain and fuzz"; $PY scripts/gate_domain.py --fuzz 50000 | grep -v "first case with"
+step "quantile properties"; $PY scripts/gate_qprops.py --n 2000
 step "big integers"; $PY scripts/gate_bigint.py --n 3000
 step "quantiles"; $PY scripts/gate_quantile.py --cases 3000
 step "stats describe"; $PY scripts/gate_describe.py --files 200; $PY scripts/gate_describe_refusals.py --fuzz 1000; $PY scripts/manifest.py --check; $PY scripts/update_replay.py --check
