@@ -42,6 +42,14 @@ def occurrences(t, o):
     return len(re.findall(pattern(o), t))
 
 
+def control():
+    """the same two gates on the UNMUTATED build must pass, or every kill below would be a gate that cannot run (a flag it does not know exits non-zero too)"""
+    b = str(ROOT / "build" / "stats")
+    g = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe.py"), "--bin", b, "--files", "80"], capture_output=True, text=True, timeout=600)
+    g2 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe_refusals.py"), "--bin", b, "--fuzz", "150"], capture_output=True, text=True, timeout=600)
+    return g.returncode == 0 and g2.returncode == 0
+
+
 def main():
     for n, fl, o, w in M:
         t = (ROOT / fl).read_text()
@@ -50,6 +58,10 @@ def main():
             return 1
     if "--check" in sys.argv:
         print("mutants_histogram: %d mutants, every pattern applies once" % len(M)); return 0
+    if not control():
+        print("mutants_histogram: the unmutated build fails the gates: refusing to count kills")
+        return 1
+    print("control (unmutated) passes both gates")
     bad, killed = [], 0
     for n, fl, o, w in M:
         with tempfile.TemporaryDirectory() as d:
@@ -62,7 +74,7 @@ def main():
             if r.returncode != 0:
                 bad.append(n); print("%-28s INVALID: %s" % (n, r.stderr[-120:].replace("\n", " "))); continue
             try:
-                g = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe.py"), "--driver", str(d / "build" / "stats"), "--files", "80"], capture_output=True, text=True, timeout=300)
+                g = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe.py"), "--bin", str(d / "build" / "stats"), "--files", "80"], capture_output=True, text=True, timeout=300)
                 dead = g.returncode != 0
                 if not dead:
                     g2 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe_refusals.py"), "--bin", str(d / "build" / "stats"), "--fuzz", "150"], capture_output=True, text=True, timeout=600)

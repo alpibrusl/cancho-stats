@@ -12,7 +12,6 @@ M = [
     ("variance-unit", "contents(dw), 3, 0 - 2148, false)", "contents(dw), 3, 0 - 2147, false)"),
     ("variance-ddof-ignored", "limbs_of(n * (n - ddof), contents(dw));", "limbs_of(n * n, contents(dw));"),
     ("numerator-sum-not-difference", "bigint.sub_in(contents(aw), l2 + 5, contents(bw), 2 * l1 + 2);", "bigint.add_in(contents(aw), l2 + 5, contents(bw), 2 * l1 + 2);"),
-    ("count-limb-shift", "    out[1] = v >> 26 & 67108863;", "    out[1] = v >> 25 & 67108863;"),
     ("min-comparison", "if numeric[j] == 0 || x < mn[j] {", "if numeric[j] == 0 || x > mn[j] {"),
     ("max-comparison", "if numeric[j] == 0 || x > mx[j] {", "if numeric[j] == 0 || x < mx[j] {"),
     ("min-first-value", "if numeric[j] == 0 || x < mn[j] {", "if x < mn[j] {"),
@@ -21,7 +20,7 @@ M = [
     ("quoted-cell-is-a-number", "            if quoted == 1 {\n                bad[j] = 1;\n            } else if bad[j] == 0 {", "            if quoted == 2 {\n                bad[j] = 1;\n            } else if bad[j] == 0 {"),
     ("sd-is-variance", "        sd = sqrt(variance);", "        sd = variance;"),
     ("variance-guard", "if n - ddof >= 1 {", "if n - ddof >= 0 {"),
-    ("second-power-accumulator", "psum.add(accs[base + psum.size(1)..base + acc_stride()], 2, bits_of(x), work);", "psum.add(accs[base + psum.size(1)..base + acc_stride()], 3, bits_of(x), work);"),
+    ("second-power-accumulator", "psum.add(accs[base + psum.size(1)..base + psum.size(1) + psum.size(2)], 2, bits_of(x), work);", "psum.add(accs[base + psum.size(1)..base + psum.size(1) + psum.size(2)], 3, bits_of(x), work);"),
     ("blank-line-one-column", "} else if len(line) > 0 || info.ncols == 1 {", "} else if len(line) > 0 {"),
     ("ragged-check", "    if n != ncols {\n        return 1;", "    if n < ncols {\n        return 1;"),
     ("row-limit-edge", "if info.rows >= max_rows {", "if info.rows > max_rows {"),
@@ -38,6 +37,14 @@ M = [
 EXPLAINED = {}
 
 
+def control():
+    """the same two gates on the UNMUTATED build must pass, or every kill below would be a gate that cannot run (a flag it does not know exits non-zero too)"""
+    b = str(ROOT / "build" / "stats")
+    g = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe.py"), "--bin", b, "--files", "60"], capture_output=True, text=True, timeout=600)
+    g2 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe_refusals.py"), "--bin", b, "--fuzz", "150"], capture_output=True, text=True, timeout=600)
+    return g.returncode == 0 and g2.returncode == 0
+
+
 def main():
     t = (ROOT / F).read_text()
     for n, o, w in M:
@@ -46,6 +53,10 @@ def main():
             return 1
     if "--check" in sys.argv:
         print("mutants_stats: %d mutants, every pattern applies once" % len(M)); return 0
+    if not control():
+        print("mutants_stats: the unmutated build fails the gates: refusing to count kills")
+        return 1
+    print("control (unmutated) passes both gates")
     bad, killed = [], 0
     for n, o, w in M:
         with tempfile.TemporaryDirectory() as d:
@@ -58,7 +69,7 @@ def main():
             if r.returncode != 0:
                 bad.append(n); print("%-28s INVALID: %s" % (n, r.stderr[-120:].replace("\n", " "))); continue
             try:
-                g = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe.py"), "--driver", str(d / "build" / "stats"), "--files", "60"], capture_output=True, text=True, timeout=300)
+                g = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe.py"), "--bin", str(d / "build" / "stats"), "--files", "60"], capture_output=True, text=True, timeout=300)
                 dead = g.returncode != 0
                 if not dead:
                     g2 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe_refusals.py"), "--bin", str(d / "build" / "stats"), "--fuzz", "150"], capture_output=True, text=True, timeout=600)

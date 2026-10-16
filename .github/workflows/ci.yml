@@ -190,6 +190,7 @@ jobs:
           python3 scripts/gate_describe.py --files 200
           python3 scripts/gate_describe_refusals.py --fuzz 1000
           python3 scripts/manifest.py --check
+          python3 scripts/update_replay.py --check
 
       - name: Quantiles (nine definitions) against an independent exact reference
         if: steps.stores.outputs.fetchable == 'yes'
