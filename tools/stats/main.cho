@@ -13,6 +13,7 @@ import std.bytes;
 import std.json;
 import std.vec;
 import acc.bigint;
+import acc.central;
 import acc.psum;
 import flt;
 import reader;
@@ -90,7 +91,7 @@ res struct Cols {
 }
 
 fn acc_stride() -> [] int {
-    return psum.size(1) + psum.size(2);
+    return psum.size(1) + psum.size(2) + psum.size(3) + psum.size(4);
 }
 
 fn make_cols[&h](heap: &!h Heap, n: int) -> [heap] Cols {
@@ -157,7 +158,9 @@ fn take_row[&c, &l](c: &!c Cols, line: &l [byte], delim: int, ncols: int) -> [] 
                     numeric[j] = numeric[j] + 1;
                     let base = j * acc_stride();
                     psum.add(accs[base..base + psum.size(1)], 1, bits_of(x), work);
-                    psum.add(accs[base + psum.size(1)..base + acc_stride()], 2, bits_of(x), work);
+                    psum.add(accs[base + psum.size(1)..base + psum.size(1) + psum.size(2)], 2, bits_of(x), work);
+                    psum.add(accs[base + psum.size(1) + psum.size(2)..base + psum.size(1) + psum.size(2) + psum.size(3)], 3, bits_of(x), work);
+                    psum.add(accs[base + psum.size(1) + psum.size(2) + psum.size(3)..base + acc_stride()], 4, bits_of(x), work);
                 }
             }
             j = j + 1;
@@ -176,51 +179,14 @@ fn float_of_bits(bits: int) -> [] float {
     return flt.float_of_key(key);
 }
 
-fn limbs_of[&o](v: int, out: &!o [int]) -> [] int {
-    out[0] = v & 67108863;
-    out[1] = v >> 26 & 67108863;
-    out[2] = v >> 52;
-    return 0;
-}
-
-// (num * 2^e) / den as the BITS of the nearest double (one rounding), with the sign `neg`, and 1 in the second place beyond the largest double.
-// num has nn limbs, den is a limb number of nd limbs.
-fn ratio_bits[&h, &n, &d](heap: &!h Heap, num: &n [int], nn: int, den: &d [int], nd: int, e: int, neg: bool) -> [heap] (int, int) {
-    let bn = bigint.bit_length(num, nn);
-    if bn == 0 {
-        return (0, 0);
-    }
-    let bd = bigint.bit_length(den, nd);
-    var k = 66 + bd - bn;
-    if k < 0 {
-        k = 0;
-    }
-    let nq = (bn + k) / 26 + 3;
-    let q = box_slice(heap, nq, 0);
-    let r = box_slice(heap, nd + 2, 0);
-    var bits = 0;
-    var code = 0;
-    borrow mut q as &!qw in {
-        borrow mut r as &!rw in {
-            let sticky = bigint.div_shifted(num, nn, den, nd, k, contents(qw), contents(rw));
-            let (b, c) = bigint.round_bits(contents(qw), nq, e - k, sticky);
-            bits = b;
-            code = c;
-        }
-    }
-    unbox_slice(heap, q);
-    unbox_slice(heap, r);
-    if neg && code == 0 {
-        bits = bits | 0 - 9223372036854775807 - 1;
-    }
-    return (bits, code);
-}
-
 struct Stats {
     mean: float,
     variance: float,
     sd: float,
     variance_ok: bool,
+    skew: float,
+    kurt: float,
+    moments_ok: bool,
 }
 
 // the exact mean and variance of the numeric cells of column j
@@ -240,9 +206,9 @@ fn moments[&h, &c](heap: &!h Heap, c: &c Cols, j: int, ddof: int) -> [heap] Stat
         borrow mut s2 as &!w2 in {
             borrow mut nl as &!wn in {
                 let neg1 = psum.magnitude(accs[base..base + psum.size(1)], 1, contents(w1)) < 0;
-                psum.magnitude(accs[base + psum.size(1)..base + acc_stride()], 2, contents(w2));
-                limbs_of(n, contents(wn));
-                let (mb, mc) = ratio_bits(heap, contents(w1), l1, contents(wn), 3, 0 - 1074, neg1);
+                psum.magnitude(accs[base + psum.size(1)..base + psum.size(1) + psum.size(2)], 2, contents(w2));
+                central.limbs_of(n, contents(wn));
+                let (mb, mc) = central.ratio_bits(heap, contents(w1), l1, contents(wn), 3, 0 - 1074, neg1);
                 mean = float_of_bits(mb);
                 if n - ddof >= 1 {
                     // N = n sum(x^2) - sum(x)^2, exact, in units of 2^-2148
@@ -255,8 +221,8 @@ fn moments[&h, &c](heap: &!h Heap, c: &c Cols, j: int, ddof: int) -> [heap] Stat
                             bigint.sub_in(contents(aw), l2 + 5, contents(bw), 2 * l1 + 2);
                             let dl = box_slice(heap, 4, 0);
                             borrow mut dl as &!dw in {
-                                limbs_of(n * (n - ddof), contents(dw));
-                                let (vb, vc) = ratio_bits(heap, contents(aw), l2 + 5, contents(dw), 3, 0 - 2148, false);
+                                central.limbs_of(n * (n - ddof), contents(dw));
+                                let (vb, vc) = central.ratio_bits(heap, contents(aw), l2 + 5, contents(dw), 3, 0 - 2148, false);
                                 variance = float_of_bits(vb);
                                 ok = vc == 0;
                             }
@@ -276,7 +242,18 @@ fn moments[&h, &c](heap: &!h Heap, c: &c Cols, j: int, ddof: int) -> [heap] Stat
     if ok {
         sd = sqrt(variance);
     }
-    return Stats { mean: mean, variance: variance, sd: sd, variance_ok: ok };
+    var skew = 0.0;
+    var kurt = 0.0;
+    var mok = false;
+    if n >= 2 {
+        let (sb, sc, kb, kc, st) = central.skew_kurt(heap, accs[base..base + acc_stride()], n);
+        if st == 0 && sc == 0 && kc == 0 {
+            skew = float_of_bits(sb);
+            kurt = float_of_bits(kb);
+            mok = true;
+        }
+    }
+    return Stats { mean: mean, variance: variance, sd: sd, variance_ok: ok, skew: skew, kurt: kurt, moments_ok: mok };
 }
 
 // ------------------------------------------------------------------------------------------------ the answer
@@ -289,7 +266,7 @@ fn report[&h, &c, &nm, &en](heap: &!h Heap, c: &c Cols, names: &nm [byte], ends:
     w = json.put_key(heap, w, "ddof");
     w = json.put_int(heap, w, ddof);
     w = json.put_key(heap, w, "rounding");
-    w = json.put_string(heap, w, "mean and variance: exact, rounded once; sd: the square root of the rounded variance, two roundings");
+    w = json.put_string(heap, w, "mean, variance, skewness, excess kurtosis: exact, rounded once; sd: the square root of the rounded variance, two roundings");
     w = json.put_key(heap, w, "columns");
     w = json.begin_array(heap, w);
     var j = 0;
@@ -334,6 +311,18 @@ fn report[&h, &c, &nm, &en](heap: &!h Heap, c: &c Cols, names: &nm [byte], ends:
             w = json.put_key(heap, w, "sd");
             if s.variance_ok {
                 w = json.put_float(heap, w, s.sd);
+            } else {
+                w = json.put_null(heap, w);
+            }
+            w = json.put_key(heap, w, "skewness");
+            if s.moments_ok {
+                w = json.put_float(heap, w, s.skew);
+            } else {
+                w = json.put_null(heap, w);
+            }
+            w = json.put_key(heap, w, "kurtosis");
+            if s.moments_ok {
+                w = json.put_float(heap, w, s.kurt);
             } else {
                 w = json.put_null(heap, w);
             }

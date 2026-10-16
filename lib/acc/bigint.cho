@@ -115,6 +115,23 @@ pub fn copy[&d, &a](into: &!d [int], a: &a [int], n: int) -> [] int {
     return 0;
 }
 
+// out[0 .. nout) = a * 2^k (out must have room for na + k / 26 + 2 limbs; nout is that count)
+pub fn shl_bits[&o, &a](out: &!o [int], nout: int, a: &a [int], na: int, k: int) -> [] int {
+    clear(out, nout);
+    let q = k / 26;
+    let r = k % 26;
+    var carry = 0;
+    var i = 0;
+    while i < na {
+        let v = (a[i] << r) + carry;
+        out[q + i] = v & mask();
+        carry = v >> 26;
+        i = i + 1;
+    }
+    out[q + na] = carry;
+    return 0;
+}
+
 // a = a - b, for a >= b (na >= nb)
 pub fn sub_in[&a, &b](a: &!a [int], na: int, b: &b [int], nb: int) -> [] int {
     var owe = 0;

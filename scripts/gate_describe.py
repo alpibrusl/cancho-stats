@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""S1-B (docs/describe.md section 5), for the statistics `stats describe` prints so far: count, missing, kind, min, max, mean, variance, sd of generated CSV files against `fractions.Fraction`.
+"""S1-B (docs/describe.md section 5), for the statistics `stats describe` prints so far: count, missing, kind, min, max, mean, variance, sd, skewness and excess kurtosis of generated CSV files against `fractions.Fraction`.
 
     python3 scripts/gate_describe.py [--bin build/stats] [--files 300] [--seed 1]
 
@@ -78,6 +78,34 @@ def column(r, shape, n):
 SHAPES = ["uniform", "ints", "offset", "offset-neg", "wide", "tiny", "huge", "const", "gappy", "empty", "text", "mixed", "quoted", "exp"]
 
 
+def sqrt_round(x):
+    """the correctly rounded square root of the non-negative Fraction x: the integer root of x 4^k with a sticky bit below the guard bit"""
+    if x == 0:
+        return 0.0
+    num, den = x.numerator, x.denominator
+    k = max(0, (132 + den.bit_length() - num.bit_length() + 1) // 2)
+    y = (num << (2 * k)) // den
+    sroot = math.isqrt(y)
+    inexact = 1 if sroot * sroot * den != (num << (2 * k)) else 0
+    return float(Fraction(sroot * 2 + inexact, 2 ** (k + 1)))
+
+
+def shape_moments(fr):
+    """(skewness, excess kurtosis) of the exact values, each rounded once, or (None, None) when the variance is zero"""
+    n = len(fr)
+    mu = sum(fr, Fraction(0)) / n
+    d = [x - mu for x in fr]
+    m2 = sum((x * x for x in d), Fraction(0)) / n
+    if m2 == 0:
+        return None, None
+    m3 = sum((x ** 3 for x in d), Fraction(0)) / n
+    m4 = sum((x ** 4 for x in d), Fraction(0)) / n
+    g1 = sqrt_round(m3 * m3 / (m2 ** 3))
+    if m3 < 0:
+        g1 = -g1
+    return g1, float(m4 / (m2 * m2) - 3)
+
+
 def expected(cells, ddof):
     vals = []
     kind = "numeric"
@@ -118,6 +146,10 @@ def expected(cells, ddof):
     else:
         out["variance"] = None
         out["sd"] = None
+    if n >= 2:
+        out["skewness"], out["kurtosis"] = shape_moments(fr)
+    else:
+        out["skewness"], out["kurtosis"] = None, None
     return out
 
 
@@ -173,7 +205,7 @@ def main():
                         checked += 1
                         if not same(got[j].get(k), wv):
                             bad.append((fi, "%s ddof %d key %s: want %r got %r" % (names[j], ddof, k, wv, got[j].get(k))))
-                    for k in ("min", "max", "mean", "variance", "sd"):
+                    for k in ("min", "max", "mean", "variance", "sd", "skewness", "kurtosis"):
                         if k not in want and k in got[j]:
                             bad.append((fi, "%s: unexpected key %s" % (names[j], k)))
                 if ddof == 1:
