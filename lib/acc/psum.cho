@@ -1,0 +1,127 @@
+edition 5;
+
+module acc.psum;
+
+import acc.bigint;
+
+// Exact power sums sum(x^k) for k = 1 to 4 of finite doubles (docs/describe.md section 3). A finite double is +-m * 2^(f - 1074) with m below 2^53 and f in 0..2046 (f = max(efield - 1, 0), the
+// integer mantissa m including the hidden bit for a normal number), so x^k is +-m^k * 2^(k f - 1074 k): an integer multiple of 2^(-1074 k) below 2^(2098 k + 53 k). Two accumulators per k,
+// one for the positive terms and one for the negative, in 26-bit limbs of acc.bigint's kind, each with 64 bits of headroom (2^64 rows); a term is laid at the bit offset k f and the carry is
+// propagated at once, so every limb is below 2^26 between rows and nothing rounds: the order of the rows cannot change a bit. The sum is |P - N| with a sign, in units of 2^(-1074 k).
+
+pub fn limbs(k: int) -> [] int {
+    return (k * 2151 + 64 + 25) / 26;
+}
+
+// the slice length `acc` must have for power k: the positive and the negative accumulators, all zero at the start
+pub fn size(k: int) -> [] int {
+    return 2 * limbs(k);
+}
+
+// scratch for one row: m, m^2, m^3, m^4 at the offsets 0, 3, 9, 18 (3, 6, 9, 12 limbs)
+pub fn scratch() -> [] int {
+    return 32;
+}
+
+fn mask() -> [] int {
+    return 67108863;
+}
+
+// add pw (npw limbs) shifted left by s bits into acc at base (len limbs)
+fn add_shifted[&a, &p](acc: &!a [int], base: int, len: int, pw: &p [int], poff: int, npw: int, s: int) -> [] int {
+    let q = s / 26;
+    let r = s % 26;
+    var carry = 0;
+    var i = 0;
+    while i < npw {
+        let v = pw[poff + i] << r;
+        let t = acc[base + q + i] + (v & mask()) + carry;
+        acc[base + q + i] = t & mask();
+        carry = (t >> 26) + (v >> 26);
+        i = i + 1;
+    }
+    var j = q + npw;
+    while carry != 0 && j < len {
+        let t = acc[base + j] + carry;
+        acc[base + j] = t & mask();
+        carry = t >> 26;
+        j = j + 1;
+    }
+    return carry;
+}
+
+// Add x^k for the finite double with bits `bits`. `work` is `scratch()` ints (overwritten). Answers 1 if the accumulator overflowed its headroom (not reachable below 2^64 rows), else 0.
+pub fn add[&a, &w](acc: &!a [int], k: int, bits: int, work: &!w [int]) -> [] int {
+    let ef = bits >> 52 & 2047;
+    var m = bits & 4503599627370495;
+    var f = 0;
+    if ef != 0 {
+        m = m | 4503599627370496;
+        f = ef - 1;
+    }
+    if m == 0 {
+        return 0;
+    }
+    bigint.clear(work, 32);
+    work[0] = m & mask();
+    work[1] = m >> 26 & mask();
+    work[2] = m >> 52;
+    var npw = 3;
+    var poff = 0;
+    if k >= 2 {
+        bigint.mul(work[3..9], work[0..3], 3, work[0..3], 3);
+        npw = 6;
+        poff = 3;
+    }
+    if k == 3 {
+        bigint.mul(work[9..18], work[3..9], 6, work[0..3], 3);
+        npw = 9;
+        poff = 9;
+    }
+    if k == 4 {
+        bigint.mul(work[18..30], work[3..9], 6, work[3..9], 6);
+        npw = 12;
+        poff = 18;
+    }
+    let len = limbs(k);
+    var base = 0;
+    // x^k is negative only for an odd power of a negative number
+    if bits < 0 && k % 2 == 1 {
+        base = len;
+    }
+    return add_shifted(acc, base, len, work, poff, npw, k * f);
+}
+
+// out[0 .. limbs(k)) = |P - N|; answers the sign: 1, 0 or -1 for the sum
+pub fn magnitude[&a, &o](acc: &a [int], k: int, out: &!o [int]) -> [] int {
+    let len = limbs(k);
+    let c = bigint.compare(acc[0..len], len, acc[len..2 * len], len);
+    if c == 0 {
+        bigint.clear(out, len);
+        return 0;
+    }
+    if c > 0 {
+        bigint.copy(out, acc[0..len], len);
+        bigint.sub_in(out, len, acc[len..2 * len], len);
+        return 1;
+    }
+    bigint.copy(out, acc[len..2 * len], len);
+    bigint.sub_in(out, len, acc[0..len], len);
+    return -1;
+}
+
+// the sum rounded once to a double, as bits (with the sign), and 1 in the second place if it is beyond the largest double. `out` is limbs(k) ints of scratch.
+pub fn rounded[&a, &o](acc: &a [int], k: int, out: &!o [int]) -> [] (int, int) {
+    let sign = magnitude(acc, k, out);
+    if sign == 0 {
+        return (0, 0);
+    }
+    let (b, code) = bigint.round_bits(out, limbs(k), 0 - 1074 * k, 0);
+    if code != 0 {
+        return (0, 1);
+    }
+    if sign < 0 {
+        return (b | 0 - 9223372036854775807 - 1, 0);
+    }
+    return (b, 0);
+}

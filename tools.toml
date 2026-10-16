@@ -1,0 +1,7 @@
+# The authority ceiling of each tool (cancho docs/agent-toolbox.md D12), as in cancho-tools: what a person writes and reviews. scripts/manifest.py --check fails when the authority the compiler
+# derives from the source (manifests/<tool>.authority.json, embedded in the binary and printed by `<tool> introspect`) has a label that is not allowed here, when it is not bounded, or when it has a
+# foreign symbol. A label with an argument is written as the compiler prints it: fs_read(""). No tool may hold ffi, net_out, net_in, clock or conc: the same bytes at any thread count, and nothing is
+# threaded in this tool.
+
+[stats]
+allow = ["args", "dir_read", "err_write", "file_read", "fs_read(\"\")", "heap", "io_write"]

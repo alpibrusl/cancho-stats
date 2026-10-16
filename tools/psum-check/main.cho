@@ -1,0 +1,135 @@
+// psum-check: the exact power sums of acc.psum on vectors from standard input, for scripts/gate_psum.py. One line per vector:
+//
+//     K N HEX1 .. HEXN       K the power (1 to 4), N the count (at most 4096), each HEX the 16 hex digits of the bits of a FINITE double
+//
+// One line per vector: `BITS CODE`, the sum of x^K rounded once to a double as 16 hex digits (the sign bit set when negative; zero is all zeros), and 1 when the exact sum is beyond the largest double.
+edition 5;
+
+import std.io;
+import acc.psum;
+
+fn hexval(c: int) -> [] int {
+    if c >= '0' && c <= '9' {
+        return c - '0';
+    }
+    if c >= 'a' && c <= 'f' {
+        return c - 'a' + 10;
+    }
+    if c >= 'A' && c <= 'F' {
+        return c - 'A' + 10;
+    }
+    return 0;
+}
+
+fn hex16[&i](io: &!i Io, bits: int) -> [io_write] int {
+    var k = 0;
+    while k < 16 {
+        let nib = bits >> 60 - 4 * k & 15;
+        if nib < 10 {
+            putchar(io, '0' + nib);
+        } else {
+            putchar(io, 'a' + nib - 10);
+        }
+        k = k + 1;
+    }
+    return 0;
+}
+
+fn answer[&h, &i, &x](heap: &!h Heap, io: &!i Io, k: int, xs: &x [int], n: int) -> [heap, io_write] int {
+    let acc = box_slice(heap, psum.size(k) + 1, 0);
+    let work = box_slice(heap, psum.scratch() + 1, 0);
+    let out = box_slice(heap, psum.limbs(k) + 1, 0);
+    var bits = 0;
+    var code = 0;
+    borrow mut acc as &!aw in {
+        borrow mut work as &!ww in {
+            borrow mut out as &!ow in {
+                var j = 0;
+                while j < n {
+                    psum.add(contents(aw), k, xs[j], contents(ww));
+                    j = j + 1;
+                }
+                let (b, c) = psum.rounded(contents(aw), k, contents(ow));
+                bits = b;
+                code = c;
+            }
+        }
+    }
+    unbox_slice(heap, acc);
+    unbox_slice(heap, work);
+    unbox_slice(heap, out);
+    hex16(io, bits);
+    io.space(io);
+    io.print_int(io, code);
+    io.newline(io);
+    return 0;
+}
+
+fn serve[&h, &i](heap: &!h Heap, io: &!i Io) -> [heap, io_read, io_write] int {
+    let xb = box_slice(heap, 4097, 0);
+    var tok = 0;
+    var inword = false;
+    var v = 0;
+    var k = 0;
+    var n = 0;
+    var c = getchar(io);
+    borrow mut xb as &!xw in {
+        let xs = contents(xw);
+        while c >= 0 {
+            if c == ' ' || c == '\n' || c == '\r' || c == '\t' {
+                if inword {
+                    if tok == 0 {
+                        k = v;
+                    } else if tok == 1 {
+                        n = v;
+                        if n > 4096 {
+                            n = 0;
+                        }
+                    } else if tok - 2 < n {
+                        xs[tok - 2] = v;
+                    }
+                    tok = tok + 1;
+                    inword = false;
+                    v = 0;
+                }
+                if c == '\n' {
+                    if tok > 1 && k >= 1 && k <= 4 {
+                        answer(heap, io, k, xs, n);
+                    }
+                    tok = 0;
+                    n = 0;
+                    k = 0;
+                }
+            } else {
+                inword = true;
+                if tok < 2 {
+                    if v < 100000 {
+                        v = v * 10 + (c - '0');
+                    }
+                } else {
+                    v = v << 4 | hexval(c);
+                }
+            }
+            c = getchar(io);
+        }
+    }
+    unbox_slice(heap, xb);
+    return 0;
+}
+
+fn main(world: World) -> [] int {
+    let Split { io, ffi, fs, heap, args, net, clock } = split(world);
+    release(ffi);
+    release(net);
+    release(fs);
+    release(clock);
+    release(args);
+    borrow mut heap as &!h in {
+        borrow mut io as &!w in {
+            serve(h, w);
+        }
+    }
+    release(heap);
+    release(io);
+    return 0;
+}

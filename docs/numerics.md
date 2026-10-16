@@ -308,7 +308,7 @@ Exact sums by `fractions.Fraction`, rounded once, against: **A** two-product int
 * **The rule [choice, from these measurements].** (1) `sum(x^2)`, and any sum of squares of differences: `ml.fsq` through `add_square(acc, bits, 0)`, exact for all finite doubles, **at least 4196 bits plus the
   headroom of the row count** (its 4576-bit accumulator takes 2^36 rows without a carry); a sum beyond the largest double is `stats.sum-overflow`. (2) `sum(x*y)`: A with rule R, a value outside R is refused
   (`stats.range-product`, the repair is a power-of-two rescale of the column); 2304 bits suffice there. (3) One rounding, at the end, of the exact sum; no term and no partial sum is rounded. **[open]** the
-  numerator `n sum(xy) - sum(x) sum(y)` is a product of two exact sums, up to about 4700 bits: S1 and S2 need a big-integer multiply (`std.bignum` is in the compiler's library, **[read]** its name only, not examined),
+  numerator `n sum(xy) - sum(x) sum(y)` is a product of two exact sums, up to about 4700 bits: S1 and S2 need a big-integer multiply and a division by a small integer. `std.bignum` of the compiler `a4572ea` has neither (**[read]** `std/bignum.cho`: `zero`, `set`, `mul_small`, `shift_left`, `compare`, `subtract`, `add_into`, `copy`, `is_zero`, `mul_pow10`; its header says there is no division), so the module is written in this repository, with its own gates (docs/describe.md section 3),
   and `sum(xy) = (sum (x+y)^2 - sum (x-y)^2) / 4` through two `ml.fsq` accumulators would remove rule R if `ml.fsq` published a subtraction of two accumulators (a request to cancho-ml, not made here).
 
 ### 8.3 The special functions (`scripts/gate_special.py --n-scale 0.1`, seed 1)
