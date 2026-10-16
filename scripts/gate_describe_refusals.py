@@ -56,6 +56,9 @@ CASES = [
     ("cells exactly at the limit", b"a,b\n1,2\n3,4\n", ["describe", "--max-cells", "4", "f.csv"], None, 0),
     ("99 probabilities", b"a\n1\n", ["describe", "--quantiles", ",".join(["0.5"] * 99), "f.csv"], None, 0),
     ("100 probabilities", b"a\n1\n", ["describe", "--quantiles", ",".join(["0.5"] * 100), "f.csv"], "args.bad-value", 2),
+    ("bins above the ceiling", b"a\n1\n", ["describe", "--bins", "1001", "f.csv"], "args.bad-value", 2),
+    ("bins at the ceiling", b"a\n1\n2\n", ["describe", "--bins", "1000", "f.csv"], None, 0),
+    ("bins zero", b"a\n1\n2\n", ["describe", "--bins", "0", "f.csv"], None, 0),
     ("file with only a header", b"a,b\n", None, None, 0),
 ]
 
