@@ -53,6 +53,9 @@ CASES = [
     ("quantile empty item", b"a\n1\n", ["describe", "--quantiles", "0.1,,0.2", "f.csv"], "args.bad-value", 2),
     ("too many cells", b"a,b\n1,2\n3,4\n", ["describe", "--max-cells", "3", "f.csv"], "limit.too-many-cells", 8),
     ("max-cells zero", b"a\n1\n", ["describe", "--max-cells", "0", "f.csv"], "args.bad-value", 2),
+    ("cells exactly at the limit", b"a,b\n1,2\n3,4\n", ["describe", "--max-cells", "4", "f.csv"], None, 0),
+    ("99 probabilities", b"a\n1\n", ["describe", "--quantiles", ",".join(["0.5"] * 99), "f.csv"], None, 0),
+    ("100 probabilities", b"a\n1\n", ["describe", "--quantiles", ",".join(["0.5"] * 100), "f.csv"], "args.bad-value", 2),
     ("file with only a header", b"a,b\n", None, None, 0),
 ]
 
