@@ -69,6 +69,23 @@ def column(r, shape, n):
             cells.append(r.pick(["1", "2.5", "n/a"]))
         elif shape == "quoted":
             cells.append('"%s"' % repr(r.u()))
+        elif shape == "fifth":
+            # one zero in five, the rest ones: m2 = (2/5)^2 and skewness exactly -1.5 (the root of a perfect square)
+            cells.append("0" if i % 5 == 0 else "1")
+        elif shape == "symm":
+            # values in pairs v, -v: the third central moment is exactly 0 and the variance is not
+            v = repr(float(int(r.next() % 50) + 1))
+            cells.append(v if i % 2 == 0 else "-" + cells[i - 1])
+        elif shape == "levels":
+            # a skewed set of about 30 levels, some missing: ties and a long tail
+            k = int(r.next() % 30)
+            cells.append("" if r.next() % 7 == 0 else "k%d" % (k * k % 29 if r.next() & 1 else k % 4))
+        elif shape == "qtext":
+            cells.append(r.pick(['"a b"', '"say ""hi"""', '"x,y"', '""', "plain", '"plain"']))
+        elif shape == "utf8":
+            cells.append(r.pick(["caf\u00e9", "\u00fcber", "\u65e5\u672c", "Z", "z", "a"]))
+        elif shape == "uniq":
+            cells.append("id%07d" % (int(r.next() % 10 ** 7)))
         elif shape == "exp":
             cells.append("%de%d" % (int(r.next() % 9) + 1, int(r.next() % 40) - 20))
         else:
@@ -76,7 +93,7 @@ def column(r, shape, n):
     return cells
 
 
-SHAPES = ["uniform", "ints", "offset", "offset-neg", "wide", "tiny", "huge", "const", "gappy", "empty", "text", "mixed", "quoted", "exp"]
+SHAPES = ["uniform", "ints", "offset", "offset-neg", "wide", "tiny", "huge", "const", "gappy", "empty", "text", "mixed", "quoted", "exp", "levels", "qtext", "utf8", "uniq", "fifth", "symm"]
 
 
 def sqrt_round(x):
@@ -145,6 +162,14 @@ def expected(cells, ddof, qtype=7, probs=("0", "0.25", "0.5", "0.75", "1"), bins
         return out
     out["kind"] = kind
     if kind == "text":
+        counts = {}
+        for c in cells:
+            if c == "":
+                continue
+            lv = c[1:-1] if c.startswith('"') else c
+            counts[lv] = counts.get(lv, 0) + 1
+        out["distinct"] = len(counts)
+        out["levels_all"] = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0].encode("utf-8")))
         return out
     n = len(vals)
     fr = [Fraction(v) for v in vals]
@@ -233,10 +258,15 @@ def main():
                             if len(gq) != len(wv) or any(not same(x, y) for x, y in zip(gq, wv)):
                                 bad.append((fi, "%s ddof %d quantiles: want %r got %r" % (names[j], ddof, wv, gq)))
                             continue
+                        if k == "levels_all":
+                            gl = [(q["value"], q["count"]) for q in got[j].get("levels", [])]
+                            if gl != wv[:10] or got[j].get("levels_capped") is not False:
+                                bad.append((fi, "%s ddof %d levels: want %r got %r" % (names[j], ddof, wv[:10], gl)))
+                            continue
                         if not same(got[j].get(k), wv):
                             bad.append((fi, "%s ddof %d key %s: want %r got %r" % (names[j], ddof, k, wv, got[j].get(k))))
-                    for k in ("min", "max", "mean", "variance", "sd", "skewness", "kurtosis", "quantiles", "distinct", "histogram"):
-                        if k not in want and k in got[j]:
+                    for k in ("min", "max", "mean", "variance", "sd", "skewness", "kurtosis", "quantiles", "distinct", "histogram", "levels", "levels_capped"):
+                        if k not in want and k in got[j] and not (k in ("levels", "levels_capped") and "levels_all" in want):
                             bad.append((fi, "%s: unexpected key %s" % (names[j], k)))
                 if ddof == 1:
                     qt = 1 + int(r.next() % 9)
@@ -267,6 +297,57 @@ def main():
                                 gq = [q["value"] for q in got3[j].get("quantiles", [])]
                                 if len(gq) != len(want3) or any(not same(x, y) for x, y in zip(gq, want3)):
                                     bad.append((fi, "%s type %d p %s: want %r got %r" % (names[j], qt, probs, want3, gq)))
+                    # --levels N: the first N levels, or none and no `distinct` for a text column with 0
+                    nl = [0, 1, 2, 3, 10, 100][int(r.next() % 6)]
+                    p4 = run(a.bin, tmp, names, rows, ddof, ["--levels", str(nl)])
+                    if p4.returncode != 0:
+                        bad.append((fi, "--levels %d: exit %d: %s" % (nl, p4.returncode, p4.stdout[:120])))
+                    else:
+                        got4 = json.loads(p4.stdout)["data"]["columns"]
+                        for j in range(ncols):
+                            w4 = expected(cols[j], ddof)
+                            if w4["kind"] != "text":
+                                continue
+                            checked += 1
+                            if nl == 0:
+                                if "levels" in got4[j] or "distinct" in got4[j]:
+                                    bad.append((fi, "%s: levels with --levels 0" % names[j]))
+                            else:
+                                gl = [(q["value"], q["count"]) for q in got4[j].get("levels", [])]
+                                if gl != w4["levels_all"][:nl] or got4[j].get("distinct") != w4["distinct"]:
+                                    bad.append((fi, "%s --levels %d: want %r got %r" % (names[j], nl, w4["levels_all"][:nl], gl)))
+                    # --max-levels M: the pairs are added row by row, column by column; the column that would need one more is capped
+                    ml = [1, 2, 3, 8, 30, 1000][int(r.next() % 6)]
+                    p5 = run(a.bin, tmp, names, rows, ddof, ["--max-levels", str(ml)])
+                    if p5.returncode != 0:
+                        bad.append((fi, "--max-levels %d: exit %d: %s" % (ml, p5.returncode, p5.stdout[:120])))
+                    else:
+                        got5 = json.loads(p5.stdout)["data"]["columns"]
+                        wants = [expected(cols[j], ddof) for j in range(ncols)]
+                        seen, capped = set(), set()
+                        for i in range(n):
+                            for j in range(ncols):
+                                c = cols[j][i]
+                                if wants[j]["kind"] != "text" or c == "":
+                                    continue
+                                key = (j, c[1:-1] if c.startswith('"') else c)
+                                if key not in seen:
+                                    if len(seen) < ml:
+                                        seen.add(key)
+                                    else:
+                                        capped.add(j)
+                        for j in range(ncols):
+                            if wants[j]["kind"] != "text":
+                                continue
+                            checked += 1
+                            g = got5[j]
+                            if j in capped:
+                                if g.get("levels_capped") is not True or g.get("distinct") is not None or g.get("levels") is not None:
+                                    bad.append((fi, "%s --max-levels %d: want capped, got %r" % (names[j], ml, g)))
+                            else:
+                                gl = [(q["value"], q["count"]) for q in g.get("levels", [])]
+                                if g.get("levels_capped") is not False or g.get("distinct") != wants[j]["distinct"] or gl != wants[j]["levels_all"][:10]:
+                                    bad.append((fi, "%s --max-levels %d: want exact levels, got %r" % (names[j], ml, g)))
                     # row order cannot change a byte
                     order = list(range(n))
                     for i in range(n - 1, 0, -1):
@@ -275,6 +356,49 @@ def main():
                     p2 = run(a.bin, tmp, names, [rows[i] for i in order], ddof)
                     if p2.stdout != p.stdout:
                         bad.append((fi, "shuffled rows give other bytes"))
+    # fixed columns that reach the exact square root and the zero third moment on every run: one zero in five (skewness exactly -1.5), pairs v and -v (skewness 0)
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        fixed = {"fifth5": ["0", "1", "1", "1", "1"], "fifth20": ["0" if i % 5 == 0 else "1" for i in range(20)], "symm2": ["3", "-3"], "symm10": ["4", "-4", "7", "-7", "1", "-1", "2", "-2", "9", "-9"], "tenth": ["0" if i % 10 == 0 else "1" for i in range(10)]}
+        names = list(fixed)
+        rows = [[fixed[nm][i] if i < len(fixed[nm]) else "" for nm in names] for i in range(20)]
+        p = run(a.bin, tmp, names, rows, 1)
+        if p.returncode != 0:
+            bad.append((-1, "fixed columns: exit %d" % p.returncode))
+        else:
+            got = json.loads(p.stdout)["data"]["columns"]
+            for j, nm in enumerate(names):
+                want = expected(fixed[nm], 1)
+                for k in ("skewness", "kurtosis", "variance", "mean"):
+                    checked += 1
+                    if not same(got[j].get(k), want.get(k)):
+                        bad.append((-1, "fixed %s %s: want %r got %r" % (nm, k, want.get(k), got[j].get(k))))
+    # a file of one text column with blank lines: each is one missing cell, in both passes
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        (tmp / "f.csv").write_text("c\nx\n\ny\nx\n\n")
+        p = subprocess.run([a.bin, "describe", "--root", str(tmp), "f.csv"], capture_output=True, text=True)
+        col = json.loads(p.stdout)["data"]["columns"][0] if p.returncode == 0 else {}
+        checked += 1
+        if col.get("count") != 3 or col.get("missing") != 2 or [(q["value"], q["count"]) for q in col.get("levels", [])] != [("x", 2), ("y", 1)]:
+            bad.append((-1, "one text column with blank lines: %r" % p.stdout[:200]))
+    # more than 256 text columns: the column number of a key is two bytes, and the levels of column j and of column j + 256 must not meet
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        wide = 300
+        names = ["w%d" % j for j in range(wide)]
+        rows = [["t%d" % ((j * 7 + i) % 5) for j in range(wide)] for i in range(6)]
+        p = run(a.bin, tmp, names, rows, 1, ["--max-cols", "400"])
+        if p.returncode != 0:
+            bad.append((-1, "wide file: exit %d: %s" % (p.returncode, p.stdout[:120])))
+        else:
+            got = json.loads(p.stdout)["data"]["columns"]
+            for j in range(wide):
+                want = expected([rows[i][j] for i in range(6)], 1)
+                checked += 1
+                gl = [(q["value"], q["count"]) for q in got[j].get("levels", [])]
+                if gl != want["levels_all"][:10] or got[j].get("distinct") != want["distinct"]:
+                    bad.append((-1, "wide column %d: want %r got %r" % (j, want["levels_all"][:10], gl)))
     print("gate_describe: %d files, %d values compared, %d differ" % (a.files, checked, len(bad)))
     for b in bad[:6]:
         print("  file %d: %s" % b)

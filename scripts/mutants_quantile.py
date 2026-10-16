@@ -36,7 +36,10 @@ M = [
     ("default-type", "tools/stats/main.cho", "|none|7|which of the nine", "|none|6|which of the nine"),
 ]
 
-EXPLAINED = {}
+EXPLAINED = {
+    "type3-negative-guard": "the guard matters only for n p - 1/2 = -1/2 (p = 0 written without decimals); without it the rank is 1 instead of the clamped 0, and rank 0 and rank 1 are the same value (equivalent)",
+    "blend-equal-keys": "the blend of two equal values is that value exactly, so the early return only saves work; no gate can tell the two apart (equivalent, as far as the gates can show)",
+}
 
 
 import re
@@ -56,6 +59,15 @@ def occurrences(t, o):
     return len(re.findall(pattern(o), t))
 
 
+def control():
+    """the same two gates on the UNMUTATED build must pass, or every kill below would be a gate that cannot run (a flag it does not know exits non-zero too)"""
+    b = str(ROOT / "build" / "stats")
+    g = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe.py"), "--bin", b, "--files", "80"], capture_output=True, text=True, timeout=600)
+    g2 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe_refusals.py"), "--bin", b, "--fuzz", "150"], capture_output=True, text=True, timeout=600)
+    g3 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_quantile.py"), "--driver", str(ROOT / "build" / "quantile-check"), "--cases", "1500"], capture_output=True, text=True, timeout=900)
+    return g.returncode == 0 and g2.returncode == 0 and g3.returncode == 0
+
+
 def main():
     for n, fl, o, w in M:
         t = (ROOT / fl).read_text()
@@ -64,6 +76,10 @@ def main():
             return 1
     if "--check" in sys.argv:
         print("mutants_quantile: %d mutants, every pattern applies once" % len(M)); return 0
+    if not control():
+        print("mutants_quantile: the unmutated build fails the gates: refusing to count kills")
+        return 1
+    print("control (unmutated) passes both gates")
     bad, killed = [], 0
     for n, fl, o, w in M:
         with tempfile.TemporaryDirectory() as d:
@@ -73,14 +89,19 @@ def main():
             (d / "build").mkdir(); shutil.copytree(ROOT / "build" / "deps", d / "build" / "deps")
             f = d / fl; f.write_text(apply(f.read_text(), o, w))
             r = subprocess.run([CANCHO, "build", "--bin", "stats"], cwd=d, capture_output=True, text=True)
+            if r.returncode == 0:
+                r = subprocess.run([CANCHO, "build", "--bin", "quantile-check"], cwd=d, capture_output=True, text=True)
             if r.returncode != 0:
                 bad.append(n); print("%-28s INVALID: %s" % (n, r.stderr[-120:].replace("\n", " "))); continue
             try:
-                g = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe.py"), "--driver", str(d / "build" / "stats"), "--files", "80"], capture_output=True, text=True, timeout=300)
+                g = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe.py"), "--bin", str(d / "build" / "stats"), "--files", "80"], capture_output=True, text=True, timeout=300)
                 dead = g.returncode != 0
                 if not dead:
                     g2 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe_refusals.py"), "--bin", str(d / "build" / "stats"), "--fuzz", "150"], capture_output=True, text=True, timeout=600)
                     dead = g2.returncode != 0
+                if not dead:
+                    g3 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_quantile.py"), "--driver", str(d / "build" / "quantile-check"), "--cases", "1500"], capture_output=True, text=True, timeout=900)
+                    dead = g3.returncode != 0
             except subprocess.TimeoutExpired:
                 dead = True
         if dead: killed += 1; print("%-28s killed" % n)

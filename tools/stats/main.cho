@@ -11,6 +11,7 @@ edition 5;
 import std.buffer;
 import std.bytes;
 import std.json;
+import std.map;
 import std.vec;
 import acc.bigint;
 import acc.central;
@@ -28,13 +29,14 @@ import toolbox.lines;
 import toolbox.out;
 import toolbox.path;
 import toolbox.place;
+import toolbox.text;
 
 fn flag_table() -> [] &static [byte] {
-    return "root||path|root||resolve FILE relative to this directory and refuse paths outside it;delim|d|text|none|,|the one byte that separates fields (default comma);ddof||nat|none|1|the divisor of the variance is n minus this (1 is the sample variance, 0 the population variance);max-rows||nat|none|1000000|the most data rows read, one more is limit.too-many-rows (ceiling 10000000);max-cols||nat|none|256|the most columns, more is limit.too-many-columns (ceiling 4096);max-line-bytes||nat|none|1048576|the longest line read, a longer one is limit.line-too-long (ceiling 16777216);max-cells||nat|none|20000000|the most cells (rows times columns) held for the quantiles, more is limit.too-many-cells (ceiling 100000000);quantiles||text|none|0,0.25,0.5,0.75,1|the probabilities of the quantiles, comma separated decimals from 0 to 1 with at most 9 decimals (at most 99 of them);quantile-type||nat|none|7|which of the nine Hyndman-Fan definitions, 1 to 9 (7 is the default of R and numpy);bins||nat|none|10|the number of equal-width histogram bins over [min, max], 0 for none (ceiling 1000)";
+    return "root||path|root||resolve FILE relative to this directory and refuse paths outside it;delim|d|text|none|,|the one byte that separates fields (default comma);ddof||nat|none|1|the divisor of the variance is n minus this (1 is the sample variance, 0 the population variance);max-rows||nat|none|1000000|the most data rows read, one more is limit.too-many-rows (ceiling 10000000);max-cols||nat|none|256|the most columns, more is limit.too-many-columns (ceiling 4096);max-line-bytes||nat|none|1048576|the longest line read, a longer one is limit.line-too-long (ceiling 16777216);max-cells||nat|none|20000000|the most cells (rows times columns) held for the quantiles, more is limit.too-many-cells (ceiling 100000000);quantiles||text|none|0,0.25,0.5,0.75,1|the probabilities of the quantiles, comma separated decimals from 0 to 1 with at most 9 decimals (at most 99 of them);quantile-type||nat|none|7|which of the nine Hyndman-Fan definitions, 1 to 9 (7 is the default of R and numpy);bins||nat|none|10|the number of equal-width histogram bins over [min, max], 0 for none (ceiling 1000);levels||nat|none|10|how many of the most frequent levels of a text column to print, 0 for none and no second pass (ceiling 100);max-levels||nat|none|100000|the most distinct (column, level) pairs held for all text columns together, a column that would need one more is levels_capped (ceiling 1000000)";
 }
 
 fn extra() -> [] &static [byte] {
-    return "stats.csv-ragged|8|never|a record with a different number of fields than the header;stats.csv-multiline|8|never|a record that continues on the next line, which this version does not read;stats.csv-bad-quote|8|never|a quote that opens or closes where it may not;stats.no-header|8|never|a file with no header line;stats.bad-verb|2|never|the first operand is not a verb this tool has;limit.too-many-rows|8|never|more data rows than --max-rows;limit.too-many-columns|8|never|more columns than --max-cols;limit.too-many-cells|8|never|more cells than --max-cells";
+    return "stats.csv-ragged|8|never|a record with a different number of fields than the header;stats.csv-multiline|8|never|a record that continues on the next line, which this version does not read;stats.csv-bad-quote|8|never|a quote that opens or closes where it may not;stats.no-header|8|never|a file with no header line;stats.bad-verb|2|never|the first operand is not a verb this tool has;limit.too-many-rows|8|never|more data rows than --max-rows;limit.too-many-columns|8|never|more columns than --max-cols;limit.too-many-cells|8|never|more cells than --max-cells;stats.file-changed|8|never|the file is not the same on the second pass that counts the levels of a text column";
 }
 
 fn tool() -> [] describe.Tool {
@@ -414,7 +416,221 @@ fn quantile_list[&h, &sv, &q](heap: &!h Heap, w0: json.Writer, store: &sv vec.Ve
     return w;
 }
 
-fn report[&h, &c, &nm, &en, &sv, &q](heap: &!h Heap, c: &c Cols, names: &nm [byte], ends: &en vec.Vec[int], store: &sv vec.Vec[int], ncols: int, rows: int, ddof: int, qtype: int, qtext: &q [byte], bins: int) -> [heap] buffer.Buffer {
+// ------------------------------------------------------------------------------------------------ the levels of a text column
+
+// The pairs (column, cell bytes) of every text column, counted: one map whose key is two bytes of column number then the cell, and whose value is the count. `top` holds, for column j and rank r, the entry
+// of its r-th most frequent level (-1 when there is none); `distinct` and `capped` are per column.
+res struct Levels {
+    m: map.Map[int],
+    distinct: Box[[int]],
+    capped: Box[[int]],
+    top: Box[[int]],
+    cells: Box[[int]],
+}
+
+fn make_levels[&h](heap: &!h Heap, ncols: int, k: int) -> [heap] Levels {
+    return Levels { m: map.empty(heap, 64, 0, 7), distinct: box_slice(heap, ncols + 1, 0), capped: box_slice(heap, ncols + 1, 0), top: box_slice(heap, ncols * k + 1, 0 - 1), cells: box_slice(heap, 3 * ncols + 4, 0) };
+}
+
+fn drop_levels[&h](heap: &!h Heap, lv: Levels) -> [heap] int {
+    let Levels { m, distinct, capped, top, cells } = lv;
+    map.drop(heap, m);
+    unbox_slice(heap, distinct);
+    unbox_slice(heap, capped);
+    unbox_slice(heap, top);
+    unbox_slice(heap, cells);
+    return 0;
+}
+
+// Whether entry `a` goes before entry `b`: more frequent first, then the bytes (the column prefix is the same inside one column).
+fn precedes[&m](m: &m map.Map[int], a: int, b: int) -> [] bool {
+    let ca = map.value_at(m, a);
+    let cb = map.value_at(m, b);
+    if ca != cb {
+        return ca > cb;
+    }
+    return bytes.compare(map.key_at(m, a), map.key_at(m, b)) < 0;
+}
+
+fn column_of[&m](m: &m map.Map[int], e: int) -> [] int {
+    let key = map.key_at(m, e);
+    return int_of(key[0]) + 256 * int_of(key[1]);
+}
+
+// The first `k` levels of every column in `k` passes over the entries: pass r keeps, per column, the entry that goes before all the others that come after the one of rank r - 1.
+fn rank_levels[&m, &t, &b](m: &m map.Map[int], ncols: int, k: int, top: &!t [int], best: &!b [int]) -> [] int {
+    var r = 0;
+    while r < k {
+        var j = 0;
+        while j < ncols {
+            best[j] = 0 - 1;
+            j = j + 1;
+        }
+        var e = 0;
+        while e < map.entries(m) {
+            if map.is_live(m, e) {
+                let col = column_of(m, e);
+                var eligible = true;
+                if r > 0 {
+                    let prev = top[col * k + r - 1];
+                    eligible = prev >= 0 && precedes(m, prev, e);
+                }
+                if eligible && (best[col] < 0 || precedes(m, e, best[col])) {
+                    best[col] = e;
+                }
+            }
+            e = e + 1;
+        }
+        j = 0;
+        while j < ncols {
+            top[j * k + r] = best[j];
+            j = j + 1;
+        }
+        r = r + 1;
+    }
+    return 0;
+}
+
+// The second pass: the file again, and every non-missing cell of a text column counted. `expected` is the number of data rows the first pass took; a different file is `stats.file-changed`.
+fn level_pass[&h, &f, &s, &c](heap: &!h Heap, file: &!f File, shown: &s [byte], cols: &c Cols, ncols: int, expected: int, delim: int, cap: int, k: int, max_levels: int, lv0: Levels, errs: fail.Errors) -> [heap, file_read] (Levels, fail.Errors) {
+    let Levels { m, distinct, capped, top, cells } = lv0;
+    var mm = m;
+    var e = errs;
+    var kb = buffer.empty(heap, 64);
+    var r = lines.start(heap, cap);
+    var going = true;
+    var seen_header = false;
+    var rows = 0;
+    var changed = false;
+    while going {
+        let (stepped, status) = lines.next(heap, r);
+        r = stepped;
+        if status == lines.need() {
+            r = lines.fill_file(r, file);
+        } else if status == lines.done() {
+            going = false;
+        } else if status == lines.long() {
+            changed = true;
+            going = false;
+        } else {
+            borrow r as &rr in {
+                let line = lines.text(rr);
+                if !seen_header {
+                    seen_header = true;
+                } else if len(line) > 0 || ncols == 1 {
+                    rows = rows + 1;
+                    borrow mut cells as &!cw in {
+                        let cs = contents(cw);
+                        let (n, inside, badq) = reader.fields(line, delim, cs, ncols);
+                        if inside || badq || n != ncols || rows > expected {
+                            changed = true;
+                            going = false;
+                        } else {
+                            let bad = contents(cols.bad);
+                            var j = 0;
+                            while j < ncols {
+                                let from = cs[3 * j];
+                                let to = cs[3 * j + 1];
+                                if bad[j] == 1 && !(to == from && cs[3 * j + 2] == 0) {
+                                    borrow mut kb as &!kw in {
+                                        buffer.clear(kw);
+                                    }
+                                    kb = buffer.push(heap, kb, byte_of(j % 256));
+                                    kb = buffer.push(heap, kb, byte_of(j / 256));
+                                    kb = buffer.append(heap, kb, line[from..to]);
+                                    borrow kb as &kr in {
+                                        let key = buffer.bytes(kr);
+                                        var known = false;
+                                        var count = 0;
+                                        var room = false;
+                                        borrow mm as &mr in {
+                                            known = map.has(mr, key);
+                                            count = map.get(mr, key, 0);
+                                            room = map.size(mr) < max_levels;
+                                        }
+                                        if known || room {
+                                            if !known {
+                                                borrow mut distinct as &!dw in {
+                                                    contents(dw)[j] = contents(dw)[j] + 1;
+                                                }
+                                            }
+                                            mm = map.put(heap, mm, key, count + 1);
+                                        } else {
+                                            borrow mut capped as &!pw in {
+                                                contents(pw)[j] = 1;
+                                            }
+                                        }
+                                    }
+                                }
+                                j = j + 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    var errno = 0;
+    borrow r as &rr in {
+        errno = lines.failed(rr);
+    }
+    lines.drop(heap, r);
+    buffer.drop(heap, kb);
+    if errno != 0 {
+        e = fail.io_error(heap, e, errno, false, shown);
+    } else if changed || rows != expected {
+        e = refuse(heap, e, "stats.file-changed", "the file is not the same on the second pass", "the file was changed while it was read: run the command again on a file that is not being written", "file", shown);
+    } else {
+        let best = box_slice(heap, ncols + 1, 0);
+        borrow mm as &mr in {
+            borrow mut top as &!tw in {
+                borrow mut best as &!bw in {
+                    rank_levels(mr, ncols, k, contents(tw), contents(bw));
+                }
+            }
+        }
+        unbox_slice(heap, best);
+    }
+    return (Levels { m: mm, distinct: distinct, capped: capped, top: top, cells: cells }, e);
+}
+
+// `distinct` and the first `k` `levels` of the text column j, or `levels_capped` when the bound of --max-levels stopped the count of it
+fn level_list[&h, &lv](heap: &!h Heap, w0: json.Writer, lv: &lv Levels, j: int, k: int) -> [heap] json.Writer {
+    var w = w0;
+    if contents(lv.capped)[j] == 1 {
+        w = json.put_key(heap, w, "distinct");
+        w = json.put_null(heap, w);
+        w = json.put_key(heap, w, "levels");
+        w = json.put_null(heap, w);
+        w = json.put_key(heap, w, "levels_capped");
+        w = json.put_bool(heap, w, true);
+        return w;
+    }
+    w = json.put_key(heap, w, "distinct");
+    w = json.put_int(heap, w, contents(lv.distinct)[j]);
+    w = json.put_key(heap, w, "levels");
+    w = json.begin_array(heap, w);
+    var r = 0;
+    while r < k {
+        let e = contents(lv.top)[j * k + r];
+        if e >= 0 {
+            let key = map.key_at(lv.m, e);
+            w = json.begin_object(heap, w);
+            w = json.put_key(heap, w, "value");
+            w = text.put(heap, w, key[2..len(key)]);
+            w = json.put_key(heap, w, "count");
+            w = json.put_int(heap, w, map.value_at(lv.m, e));
+            w = json.end_object(heap, w);
+        }
+        r = r + 1;
+    }
+    w = json.end_array(heap, w);
+    w = json.put_key(heap, w, "levels_capped");
+    w = json.put_bool(heap, w, false);
+    return w;
+}
+
+fn report[&h, &c, &nm, &en, &sv, &q, &lv](heap: &!h Heap, c: &c Cols, names: &nm [byte], ends: &en vec.Vec[int], store: &sv vec.Vec[int], ncols: int, rows: int, ddof: int, qtype: int, qtext: &q [byte], bins: int, lv: &lv Levels, k: int, counted: bool) -> [heap] buffer.Buffer {
     var w = json.writer(heap, 1024);
     w = json.begin_object(heap, w);
     w = json.put_key(heap, w, "rows");
@@ -485,6 +701,8 @@ fn report[&h, &c, &nm, &en, &sv, &q](heap: &!h Heap, c: &c Cols, names: &nm [byt
                 w = json.put_null(heap, w);
             }
             w = quantile_list(heap, w, store, rows, ncols, j, numeric, qtype, qtext, bins);
+        } else if nonmiss > 0 && counted {
+            w = level_list(heap, w, lv, j, k);
         }
         w = json.end_object(heap, w);
         j = j + 1;
@@ -644,6 +862,12 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
     if cli.nat(args, parsed, table, "bins") > 1000 {
         e = refuse(heap, e, "args.bad-value", "--bins is above the ceiling", "1000 is the most bins this tool counts", "flag", "--bins");
     }
+    if cli.nat(args, parsed, table, "levels") > 100 {
+        e = refuse(heap, e, "args.bad-value", "--levels is above the ceiling", "100 is the most levels this tool prints", "flag", "--levels");
+    }
+    if cli.nat(args, parsed, table, "max-levels") > 1000000 || cli.nat(args, parsed, table, "max-levels") < 1 {
+        e = refuse(heap, e, "args.bad-value", "--max-levels is outside 1 to 1000000", "1000000 is the most pairs this tool holds", "flag", "--max-levels");
+    }
     if !valid_list(cli.text(args, parsed, table, "quantiles")) {
         e = refuse(heap, e, "args.bad-value", "--quantiles takes at most 99 comma separated decimals from 0 to 1 with at most 9 decimals", "--quantiles 0.25,0.5,0.75", "flag", "--quantiles");
     }
@@ -677,16 +901,59 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
                                     clean = fail.count(er2) == 0;
                                 }
                                 if clean {
-                                    borrow names as &nb in {
-                                        borrow ends as &eb in {
-                                            borrow cols as &cb in {
-                                                buffer.drop(heap, data);
-                                                borrow store as &sb in {
-                                                    data = report(heap, cb, buffer.bytes(nb), eb, sb, info.ncols, info.rows, cli.nat(args, parsed, table, "ddof"), cli.nat(args, parsed, table, "quantile-type"), cli.text(args, parsed, table, "quantiles"), cli.nat(args, parsed, table, "bins"));
+                                    let k = cli.nat(args, parsed, table, "levels");
+                                    var lv = make_levels(heap, 1, 1);
+                                    var counted = false;
+                                    var any_text = false;
+                                    borrow cols as &c0 in {
+                                        var jt = 0;
+                                        while jt < info.ncols {
+                                            if contents(c0.nonmiss)[jt] > 0 && contents(c0.bad)[jt] == 1 {
+                                                any_text = true;
+                                            }
+                                            jt = jt + 1;
+                                        }
+                                    }
+                                    if k > 0 && any_text {
+                                        counted = true;
+                                        match place.open_operand(fs, buffer.bytes(rr), path.shown(tp), path.full(tp)) {
+                                            Opened::Failed(reason) => {
+                                                e = fail.io_error(heap, e, reason, false, path.shown(tp));
+                                            }
+                                            Opened::Ok(again) => {
+                                                var file2 = again;
+                                                borrow mut file2 as &!handle2 in {
+                                                    borrow cols as &c1 in {
+                                                        let fresh = make_levels(heap, info.ncols, k);
+                                                        drop_levels(heap, lv);
+                                                        let (lv2, e4) = level_pass(heap, handle2, path.shown(tp), c1, info.ncols, info.rows, int_of(cli.text(args, parsed, table, "delim")[0]), cli.nat(args, parsed, table, "max-line-bytes"), k, cli.nat(args, parsed, table, "max-levels"), fresh, e);
+                                                        lv = lv2;
+                                                        e = e4;
+                                                    }
+                                                }
+                                                file_close(file2);
+                                            }
+                                        }
+                                    }
+                                    var clean2 = false;
+                                    borrow e as &er3 in {
+                                        clean2 = fail.count(er3) == 0;
+                                    }
+                                    if clean2 {
+                                        borrow names as &nb in {
+                                            borrow ends as &eb in {
+                                                borrow cols as &cb in {
+                                                    buffer.drop(heap, data);
+                                                    borrow store as &sb in {
+                                                        borrow lv as &lb in {
+                                                            data = report(heap, cb, buffer.bytes(nb), eb, sb, info.ncols, info.rows, cli.nat(args, parsed, table, "ddof"), cli.nat(args, parsed, table, "quantile-type"), cli.text(args, parsed, table, "quantiles"), cli.nat(args, parsed, table, "bins"), lb, k, counted);
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
                                     }
+                                    drop_levels(heap, lv);
                                 }
                                 buffer.drop(heap, names);
                                 vec.drop(heap, ends);

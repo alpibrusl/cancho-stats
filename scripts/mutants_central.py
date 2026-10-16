@@ -31,13 +31,18 @@ M = [
     ("sqrt-sticky", "lib/acc/central.cho", "contents(bw), ns) != 0 {\n                            sticky = 1;", "contents(bw), ns) == 0 {\n                            sticky = 1;"),
     ("sqrt-exponent", "lib/acc/central.cho", "round_bits(contents(sw), 8, 0 - k, sticky)", "round_bits(contents(sw), 8, 1 - k, sticky)"),
     ("ratio-too-few-bits", "lib/acc/central.cho", "    var k = 66 + bd - bn;", "    var k = 40 + bd - bn;"),
+    ("limbs-of-shift", "lib/acc/central.cho", "    out[1] = v >> 26 & 67108863;", "    out[1] = v >> 25 & 67108863;"),
     ("shl-limb-index", "lib/acc/bigint.cho", "        out[q + i] = v & mask();\n        carry = v >> 26;", "        out[q + i] = v & mask();\n        carry = v >> 25;"),
     ("third-power-accumulator", "tools/stats/main.cho", ", 3, bits_of(x), work);", ", 2, bits_of(x), work);"),
     ("fourth-power-accumulator", "tools/stats/main.cho", ", 4, bits_of(x), work);", ", 3, bits_of(x), work);"),
     ("moments-status-ignored", "tools/stats/main.cho", "if st == 0 && sc == 0 && kc == 0 {", "if sc == 0 && kc == 0 {"),
 ]
 
-EXPLAINED = {}
+EXPLAINED = {
+    "skewness-zero-numerator": "the square root of 0 is 0 bits already; the symmetric columns of gate_describe.py (K3 = 0 exactly, variance not 0) pass with and without the line (equivalent, as far as the gates can show)",
+    "sqrt-equality": "dropping an exact hit of a bit leaves s one unit short at 66 or more bits and sets the sticky bit, which changes the rounded double only if the exact root is a tie between two doubles (54 significant bits); a column with such a skewness needs about 2^54 rows, so no gate reaches it: argued, not tested",
+    "sqrt-sticky": "the sticky bit decides only when the 66-bit root ends exactly at a half of the last double (a tie); the generated and the fixed columns reached none: argued, not tested",
+}
 
 
 import re
@@ -57,6 +62,14 @@ def occurrences(t, o):
     return len(re.findall(pattern(o), t))
 
 
+def control():
+    """the same two gates on the UNMUTATED build must pass, or every kill below would be a gate that cannot run (a flag it does not know exits non-zero too)"""
+    b = str(ROOT / "build" / "stats")
+    g = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe.py"), "--bin", b, "--files", "80"], capture_output=True, text=True, timeout=600)
+    g2 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe_refusals.py"), "--bin", b, "--fuzz", "150"], capture_output=True, text=True, timeout=600)
+    return g.returncode == 0 and g2.returncode == 0
+
+
 def main():
     for n, fl, o, w in M:
         t = (ROOT / fl).read_text()
@@ -65,6 +78,10 @@ def main():
             return 1
     if "--check" in sys.argv:
         print("mutants_central: %d mutants, every pattern applies once" % len(M)); return 0
+    if not control():
+        print("mutants_central: the unmutated build fails the gates: refusing to count kills")
+        return 1
+    print("control (unmutated) passes both gates")
     bad, killed = [], 0
     for n, fl, o, w in M:
         with tempfile.TemporaryDirectory() as d:
@@ -77,7 +94,7 @@ def main():
             if r.returncode != 0:
                 bad.append(n); print("%-28s INVALID: %s" % (n, r.stderr[-120:].replace("\n", " "))); continue
             try:
-                g = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe.py"), "--driver", str(d / "build" / "stats"), "--files", "80"], capture_output=True, text=True, timeout=300)
+                g = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe.py"), "--bin", str(d / "build" / "stats"), "--files", "80"], capture_output=True, text=True, timeout=300)
                 dead = g.returncode != 0
                 if not dead:
                     g2 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe_refusals.py"), "--bin", str(d / "build" / "stats"), "--fuzz", "150"], capture_output=True, text=True, timeout=600)

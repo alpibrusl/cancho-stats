@@ -95,7 +95,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2rem; color: var(-
     <div class="bar"><i></i><i></i><i></i> a real run, replayed <button id="replay" type="button">&#8635; replay</button></div>
     <pre id="screen"></pre>
   </div>
-  <p class="caption">Two real runs of <code>stats describe</code> on a Mac (Apple M4 Max): the file <code>docs/example/readings.csv</code> of this repository, and a file with a short record. The command prints one line of JSON, which the page wraps; nothing is elided or edited. It is a replay, not a live session. The numbers in it are the exact mean, variance, skewness and kurtosis of the doubles in the file, each rounded once; the quantiles are type 7 at 0, 0.25, 0.5, 0.75 and 1, the histogram has 10 bins whose edges are exact rationals and whose counts compare exactly with them (the standard deviation is the square root of the rounded variance).</p>
+  <p class="caption">Two real runs of <code>stats describe</code> on a Mac (Apple M4 Max): the file <code>docs/example/readings.csv</code> of this repository, and a file with a short record. The command prints one line of JSON, which the page wraps; nothing is elided or edited. It is a replay, not a live session. The numbers in it are the exact mean, variance, skewness and kurtosis of the doubles in the file, each rounded once; the quantiles are type 7 at 0, 0.25, 0.5, 0.75 and 1, the histogram has 10 bins whose edges are exact rationals and whose counts compare exactly with them (the standard deviation is the square root of the rounded variance). A text column, like <code>site</code> here, gets its number of distinct values and its most frequent levels, counted exactly and ordered by count, then by bytes, so a tie is broken the same way everywhere.</p>
 </div>
 
 <section class="alt" id="why"><div class="wrap">
@@ -180,7 +180,7 @@ python3 -m venv .venv &amp;&amp; .venv/bin/pip install -r ci/requirements.txt
 sh scripts/check.sh            # every gate, minutes
 echo "1 4000000000000000 4024000000000000" | build/special-check t_sf
 1 3fa2c98ee9420ee7 0           # t_sf(2, df 10): the bits of the answer</code></pre>
-  <p class="lead" style="margin-bottom:0">Next in <code>describe</code>: the levels of text columns and <code>--by</code>; then correlations, tests, intervals, resampling and regression.</p>
+  <p class="lead" style="margin-bottom:0">Next in <code>describe</code>: <code>--by</code> and <code>--cols</code>; then correlations, tests, intervals, resampling and regression.</p>
 </div></section>
 
 <section class="alt"><div class="wrap">
@@ -204,39 +204,39 @@ echo "1 4000000000000000 4024000000000000" | build/special-check t_sf
   ],
   [
     "a",
-    "sensor,temp,pressure,drift"
+    "sensor,temp,pressure,drift,site"
   ],
   [
     "a",
-    "A1,21.4,1013.2,100000000.1"
+    "A1,21.4,1013.2,100000000.1,north"
   ],
   [
     "a",
-    "A2,21.9,1012.8,100000000.4"
+    "A2,21.9,1012.8,100000000.4,north"
   ],
   [
     "a",
-    "A3,,1013.5,100000000.2"
+    "A3,,1013.5,100000000.2,north"
   ],
   [
     "a",
-    "B1,22.3,1011.9,100000000.3"
+    "B1,22.3,1011.9,100000000.3,south"
   ],
   [
     "a",
-    "B2,21.7,1013.1,100000000.2"
+    "B2,21.7,1013.1,100000000.2,south"
   ],
   [
     "a",
-    "B3,22.0,,100000000.5"
+    "B3,22.0,,100000000.5,north"
   ],
   [
     "a",
-    "C1,21.5,1012.4,100000000.1"
+    "C1,21.5,1012.4,100000000.1,east"
   ],
   [
     "a",
-    "C2,22.1,1012.9,100000000.4"
+    "C2,22.1,1012.9,100000000.4,north"
   ],
   [
     "d",
@@ -244,7 +244,7 @@ echo "1 4000000000000000 4024000000000000" | build/special-check t_sf
   ],
   [
     "g",
-    "{\"ok\":true,\"command\":\"stats\",\"schema\":\"stats.v1\",\"data\":{\"rows\":8,\"ddof\":1,\"quantile_type\":7,\"rounding\":\"mean, variance, skewness, excess kurtosis, quantiles: exact, rounded once; sd: the square root of the rounded variance, two roundings\",\"columns\":[{\"name\":\"sensor\",\"kind\":\"text\",\"count\":8,\"missing\":0},{\"name\":\"temp\",\"kind\":\"numeric\",\"count\":7,\"missing\":1,\"min\":21.4,\"max\":22.3,\"mean\":21.84285714285714,\"variance\":0.10619047619047664,\"sd\":0.3258688021128697,\"skewness\":-0.0700715376042248,\"kurtosis\":-1.2521365802650364,\"quantiles\":[{\"p\":\"0\",\"value\":21.4},{\"p\":\"0.25\",\"value\":21.6},{\"p\":\"0.5\",\"value\":21.9},{\"p\":\"0.75\",\"value\":22.05},{\"p\":\"1\",\"value\":22.3}],\"distinct\":7,\"histogram\":{\"bins\":10,\"edges\":[21.4,21.49,21.58,21.669999999999998,21.759999999999998,21.85,21.94,22.03,22.12,22.21,22.3],\"counts\":[1,1,0,1,0,1,1,1,0,1]}},{\"name\":\"pressure\",\"kind\":\"numeric\",\"count\":7,\"missing\":1,\"min\":1011.9,\"max\":1013.5,\"mean\":1012.8285714285714,\"variance\":0.2857142857143036,\"sd\":0.5345224838248654,\"skewness\":-0.5953924651017629,\"kurtosis\":-0.6063250000001137,\"quantiles\":[{\"p\":\"0\",\"value\":1011.9},{\"p\":\"0.25\",\"value\":1012.5999999999999},{\"p\":\"0.5\",\"value\":1012.9},{\"p\":\"0.75\",\"value\":1013.1500000000001},{\"p\":\"1\",\"value\":1013.5}],\"distinct\":7,\"histogram\":{\"bins\":10,\"edges\":[1011.9,1012.06,1012.22,1012.38,1012.54,1012.7,1012.86,1013.02,1013.18,1013.34,1013.5],\"counts\":[1,0,0,1,0,1,1,1,1,1]}},{\"name\":\"drift\",\"kind\":\"numeric\",\"count\":8,\"missing\":0,\"min\":100000000.1,\"max\":100000000.5,\"mean\":100000000.275,\"variance\":0.022142858015639467,\"sd\":0.1488047647612114,\"skewness\":0.17381154384018935,\"kurtosis\":-1.338189406223851,\"quantiles\":[{\"p\":\"0\",\"value\":100000000.1},{\"p\":\"0.25\",\"value\":100000000.175},{\"p\":\"0.5\",\"value\":100000000.25},{\"p\":\"0.75\",\"value\":100000000.4},{\"p\":\"1\",\"value\":100000000.5}],\"distinct\":5,\"histogram\":{\"bins\":10,\"edges\":[100000000.1,100000000.14,100000000.17999999,100000000.22,100000000.25999999,100000000.3,100000000.34,100000000.38,100000000.42,100000000.46,100000000.5],\"counts\":[2,0,2,0,0,1,0,2,0,1]}}]},\"meta\":{\"version\":\"0.1.0\"}}"
+    "{\"ok\":true,\"command\":\"stats\",\"schema\":\"stats.v1\",\"data\":{\"rows\":8,\"ddof\":1,\"quantile_type\":7,\"rounding\":\"mean, variance, skewness, excess kurtosis, quantiles: exact, rounded once; sd: the square root of the rounded variance, two roundings\",\"columns\":[{\"name\":\"sensor\",\"kind\":\"text\",\"count\":8,\"missing\":0,\"distinct\":8,\"levels\":[{\"value\":\"A1\",\"count\":1},{\"value\":\"A2\",\"count\":1},{\"value\":\"A3\",\"count\":1},{\"value\":\"B1\",\"count\":1},{\"value\":\"B2\",\"count\":1},{\"value\":\"B3\",\"count\":1},{\"value\":\"C1\",\"count\":1},{\"value\":\"C2\",\"count\":1}],\"levels_capped\":false},{\"name\":\"temp\",\"kind\":\"numeric\",\"count\":7,\"missing\":1,\"min\":21.4,\"max\":22.3,\"mean\":21.84285714285714,\"variance\":0.10619047619047664,\"sd\":0.3258688021128697,\"skewness\":-0.0700715376042248,\"kurtosis\":-1.2521365802650364,\"quantiles\":[{\"p\":\"0\",\"value\":21.4},{\"p\":\"0.25\",\"value\":21.6},{\"p\":\"0.5\",\"value\":21.9},{\"p\":\"0.75\",\"value\":22.05},{\"p\":\"1\",\"value\":22.3}],\"distinct\":7,\"histogram\":{\"bins\":10,\"edges\":[21.4,21.49,21.58,21.669999999999998,21.759999999999998,21.85,21.94,22.03,22.12,22.21,22.3],\"counts\":[1,1,0,1,0,1,1,1,0,1]}},{\"name\":\"pressure\",\"kind\":\"numeric\",\"count\":7,\"missing\":1,\"min\":1011.9,\"max\":1013.5,\"mean\":1012.8285714285714,\"variance\":0.2857142857143036,\"sd\":0.5345224838248654,\"skewness\":-0.5953924651017629,\"kurtosis\":-0.6063250000001137,\"quantiles\":[{\"p\":\"0\",\"value\":1011.9},{\"p\":\"0.25\",\"value\":1012.5999999999999},{\"p\":\"0.5\",\"value\":1012.9},{\"p\":\"0.75\",\"value\":1013.1500000000001},{\"p\":\"1\",\"value\":1013.5}],\"distinct\":7,\"histogram\":{\"bins\":10,\"edges\":[1011.9,1012.06,1012.22,1012.38,1012.54,1012.7,1012.86,1013.02,1013.18,1013.34,1013.5],\"counts\":[1,0,0,1,0,1,1,1,1,1]}},{\"name\":\"drift\",\"kind\":\"numeric\",\"count\":8,\"missing\":0,\"min\":100000000.1,\"max\":100000000.5,\"mean\":100000000.275,\"variance\":0.022142858015639467,\"sd\":0.1488047647612114,\"skewness\":0.17381154384018935,\"kurtosis\":-1.338189406223851,\"quantiles\":[{\"p\":\"0\",\"value\":100000000.1},{\"p\":\"0.25\",\"value\":100000000.175},{\"p\":\"0.5\",\"value\":100000000.25},{\"p\":\"0.75\",\"value\":100000000.4},{\"p\":\"1\",\"value\":100000000.5}],\"distinct\":5,\"histogram\":{\"bins\":10,\"edges\":[100000000.1,100000000.14,100000000.17999999,100000000.22,100000000.25999999,100000000.3,100000000.34,100000000.38,100000000.42,100000000.46,100000000.5],\"counts\":[2,0,2,0,0,1,0,2,0,1]}},{\"name\":\"site\",\"kind\":\"text\",\"count\":8,\"missing\":0,\"distinct\":3,\"levels\":[{\"value\":\"north\",\"count\":5},{\"value\":\"south\",\"count\":2},{\"value\":\"east\",\"count\":1}],\"levels_capped\":false}]},\"meta\":{\"version\":\"0.1.0\"}}"
   ],
   [
     "d",
