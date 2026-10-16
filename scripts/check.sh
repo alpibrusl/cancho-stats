@@ -27,6 +27,6 @@ step "determinism"; $PY scripts/xplat_fp.py; $PY scripts/xplat_fp.py --mutants |
 if [ "$1" = "--full" ]; then
   step "accuracy sweeps (10%)"; $PY scripts/gate_special.py --n-scale 0.1
   step "mutants of the special functions"; $PY scripts/mutants_special.py
-  step "mutants of the big integers, the power sums and stats"; $PY scripts/mutants_bigint.py; $PY scripts/mutants_psum.py; $PY scripts/mutants_stats.py; $PY scripts/mutants_central.py; $PY scripts/mutants_quantile.py
+  step "mutants of the big integers, the power sums and stats"; $PY scripts/mutants_bigint.py; $PY scripts/mutants_psum.py; $PY scripts/mutants_stats.py; $PY scripts/mutants_central.py; $PY scripts/mutants_quantile.py; $PY scripts/mutants_histogram.py
 fi
 echo; echo "check.sh: all gates passed"
