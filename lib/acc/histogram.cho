@@ -1,0 +1,171 @@
+edition 5;
+
+module acc.histogram;
+
+import acc.bigint;
+import acc.central;
+
+// The exact histogram of docs/describe.md section 2: N equal-width bins over [min, max] whose edges are the rationals e_i = min + i (max - min) / N = ((N - i) min + i max) / N, counted by an exact
+// comparison against the RATIONAL edge (never the rounded one), the last bin closed. A value x is below e_i exactly when N x - (N - i) min - i max is negative; that signed sum of three doubles
+// times small integers is formed exactly (a positive and a negative magnitude, subtracted once). The count of values below an edge is a binary search of the sorted keys. An edge is printed as
+// the nearest double to its exact value (one rounding).
+
+fn bits_of_key(k: int) -> [] int {
+    if k < 0 {
+        return k ^ 0x7fffffffffffffff;
+    }
+    return k;
+}
+
+fn parts(bits: int) -> [] (bool, int, int) {
+    let ef = bits >> 52 & 2047;
+    var m = bits & 4503599627370495;
+    var f = 0;
+    if ef != 0 {
+        m = m | 4503599627370496;
+        f = ef - 1;
+    }
+    return (bits < 0, m, f);
+}
+
+fn add_signed[&p, &q, &m](pos: &!p [int], neg: &!q [int], len: int, mag: &m [int], nm: int, negative: bool) -> [] int {
+    if negative {
+        bigint.add_in(neg, len, mag, nm);
+    } else {
+        bigint.add_in(pos, len, mag, nm);
+    }
+    return 0;
+}
+
+// c0 x0 + c1 x1 + c2 x2 exactly (the c are integers of either sign below 2^40, the x are doubles given by their keys): the sign (1, 0, -1), the magnitude in `out` (100 limbs) and the exponent
+// emin such that the value is out * 2^(emin - 1074)
+fn comb3[&h, &o](heap: &!h Heap, out: &!o [int], c0: int, k0: int, c1: int, k1: int, c2: int, k2: int) -> [heap] (int, int) {
+    let len = 100;
+    let (n0, m0, f0) = parts(bits_of_key(k0));
+    let (n1, m1, f1) = parts(bits_of_key(k1));
+    let (n2, m2, f2) = parts(bits_of_key(k2));
+    var emin = f0;
+    if f1 < emin {
+        emin = f1;
+    }
+    if f2 < emin {
+        emin = f2;
+    }
+    let pos = box_slice(heap, len, 0);
+    let neg = box_slice(heap, len, 0);
+    let w = box_slice(heap, 8, 0);
+    let m = box_slice(heap, 8, 0);
+    let t = box_slice(heap, 12, 0);
+    let sh = box_slice(heap, len, 0);
+    var sign = 0;
+    borrow mut pos as &!wp in {
+        borrow mut neg as &!wn in {
+            borrow mut w as &!ww in {
+                borrow mut m as &!wm in {
+                    borrow mut t as &!wt in {
+                        borrow mut sh as &!ws in {
+                            var q = 0;
+                            while q < 3 {
+                                var c = c0;
+                                var mm = m0;
+                                var ff = f0;
+                                var nn = n0;
+                                if q == 1 {
+                                    c = c1;
+                                    mm = m1;
+                                    ff = f1;
+                                    nn = n1;
+                                } else if q == 2 {
+                                    c = c2;
+                                    mm = m2;
+                                    ff = f2;
+                                    nn = n2;
+                                }
+                                var ac = c;
+                                var cneg = false;
+                                if c < 0 {
+                                    ac = 0 - c;
+                                    cneg = true;
+                                }
+                                if ac != 0 && mm != 0 {
+                                    central.limbs_of(ac, contents(ww));
+                                    central.limbs_of(mm, contents(wm));
+                                    bigint.mul(contents(wt), contents(ww), 2, contents(wm), 3);
+                                    bigint.shl_bits(contents(ws), len, contents(wt), 5, ff - emin);
+                                    add_signed(contents(wp), contents(wn), len, contents(ws), len, cneg != nn);
+                                }
+                                q = q + 1;
+                            }
+                            let c = bigint.compare(contents(wp), len, contents(wn), len);
+                            if c > 0 {
+                                bigint.sub_in(contents(wp), len, contents(wn), len);
+                                bigint.copy(out, contents(wp), len);
+                                sign = 1;
+                            } else if c < 0 {
+                                bigint.sub_in(contents(wn), len, contents(wp), len);
+                                bigint.copy(out, contents(wn), len);
+                                sign = 0 - 1;
+                            } else {
+                                bigint.clear(out, len);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    unbox_slice(heap, pos);
+    unbox_slice(heap, neg);
+    unbox_slice(heap, w);
+    unbox_slice(heap, m);
+    unbox_slice(heap, t);
+    unbox_slice(heap, sh);
+    return (sign, emin);
+}
+
+// the edge i (0 to bins) over [kmin, kmax] as the BITS of the nearest double
+pub fn edge_bits[&h](heap: &!h Heap, bins: int, i: int, kmin: int, kmax: int) -> [heap] (int, int) {
+    let out = box_slice(heap, 100, 0);
+    let d = box_slice(heap, 8, 0);
+    var bits = 0;
+    var code = 0;
+    borrow mut out as &!wo in {
+        borrow mut d as &!wd in {
+            let (sign, emin) = comb3(heap, contents(wo), bins - i, kmin, i, kmax, 0, kmin);
+            central.limbs_of(bins, contents(wd));
+            let (b, c) = central.ratio_bits(heap, contents(wo), 100, contents(wd), 3, emin - 1074, sign < 0);
+            bits = b;
+            code = c;
+        }
+    }
+    unbox_slice(heap, out);
+    unbox_slice(heap, d);
+    return (bits, code);
+}
+
+// the number of sorted keys below the edge i: the first index whose value is not below it
+pub fn below[&h, &a](heap: &!h Heap, keys: &a [int], n: int, bins: int, i: int, kmin: int, kmax: int) -> [heap] int {
+    if i <= 0 {
+        return 0;
+    }
+    if i >= bins {
+        return n;
+    }
+    let out = box_slice(heap, 100, 0);
+    var lo = 0;
+    var hi = n;
+    borrow mut out as &!wo in {
+        while lo < hi {
+            let mid = (lo + hi) / 2;
+            // x below the edge  <=>  bins x - (bins - i) kmin - i kmax < 0
+            let (sign, emin) = comb3(heap, contents(wo), bins, keys[mid], i - bins, kmin, 0 - i, kmax);
+            if sign < 0 {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+    }
+    unbox_slice(heap, out);
+    return lo;
+}

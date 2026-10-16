@@ -107,7 +107,21 @@ def shape_moments(fr):
     return g1, float(m4 / (m2 * m2) - 3)
 
 
-def expected(cells, ddof, qtype=7, probs=("0", "0.25", "0.5", "0.75", "1")):
+def histogram(vals, bins):
+    """(bins, edges, counts) with the edges rounded once and the counts by exact comparison against the rational edges, the last bin closed"""
+    fr = [Fraction(v) for v in vals]
+    lo, hi = min(fr), max(fr)
+    if lo == hi:
+        return 1, [float(lo), float(hi)], [len(vals)]
+    edges = [lo + (hi - lo) * i / bins for i in range(bins + 1)]
+    counts = [0] * bins
+    for x in fr:
+        idx = sum(1 for i in range(1, bins) if x >= edges[i])
+        counts[idx] += 1
+    return bins, [float(e) for e in edges], counts
+
+
+def expected(cells, ddof, qtype=7, probs=("0", "0.25", "0.5", "0.75", "1"), bins=10):
     vals = []
     kind = "numeric"
     nonmiss = 0
@@ -148,6 +162,9 @@ def expected(cells, ddof, qtype=7, probs=("0", "0.25", "0.5", "0.75", "1")):
         out["variance"] = None
         out["sd"] = None
     srt = sorted(vals)
+    out["distinct"] = len(set(vals))
+    if bins > 0:
+        out["histogram"] = histogram(vals, bins)
     out["quantiles"] = [float(gate_quantile.hf(srt, Fraction(pt), qtype)) for pt in probs]
     if n >= 2:
         out["skewness"], out["kurtosis"] = shape_moments(fr)
@@ -206,6 +223,11 @@ def main():
                     want = expected(cols[j], ddof)
                     for k, wv in want.items():
                         checked += 1
+                        if k == "histogram":
+                            gh = got[j].get("histogram", {})
+                            if gh.get("bins") != wv[0] or gh.get("counts") != wv[2] or len(gh.get("edges", [])) != len(wv[1]) or any(not same(x, y) for x, y in zip(gh.get("edges", []), wv[1])):
+                                bad.append((fi, "%s ddof %d histogram: want %r got %r" % (names[j], ddof, wv, gh)))
+                            continue
                         if k == "quantiles":
                             gq = [q["value"] for q in got[j].get("quantiles", [])]
                             if len(gq) != len(wv) or any(not same(x, y) for x, y in zip(gq, wv)):
@@ -213,7 +235,7 @@ def main():
                             continue
                         if not same(got[j].get(k), wv):
                             bad.append((fi, "%s ddof %d key %s: want %r got %r" % (names[j], ddof, k, wv, got[j].get(k))))
-                    for k in ("min", "max", "mean", "variance", "sd", "skewness", "kurtosis", "quantiles"):
+                    for k in ("min", "max", "mean", "variance", "sd", "skewness", "kurtosis", "quantiles", "distinct", "histogram"):
                         if k not in want and k in got[j]:
                             bad.append((fi, "%s: unexpected key %s" % (names[j], k)))
                 if ddof == 1:
@@ -222,13 +244,24 @@ def main():
                     for _ in range(1 + int(r.next() % 4)):
                         d = int(r.next() % 10)
                         probs.append("%.*f" % (d, (int(r.next() % (10 ** d + 1))) / (10 ** d)) if d else str(int(r.next() % 2)))
-                    p3 = run(a.bin, tmp, names, rows, ddof, ["--quantile-type", str(qt), "--quantiles", ",".join(probs)])
+                    nbins = [0, 1, 2, 3, 5, 7, 20, 64][int(r.next() % 8)]
+                    p3 = run(a.bin, tmp, names, rows, ddof, ["--quantile-type", str(qt), "--quantiles", ",".join(probs), "--bins", str(nbins)])
                     if p3.returncode != 0:
                         bad.append((fi, "quantile flags: exit %d: %s" % (p3.returncode, p3.stdout[:120])))
                     else:
                         got3 = json.loads(p3.stdout)["data"]["columns"]
                         for j in range(ncols):
-                            want3 = expected(cols[j], ddof, qt, tuple(probs)).get("quantiles")
+                            w3 = expected(cols[j], ddof, qt, tuple(probs), nbins)
+                            want3 = w3.get("quantiles")
+                            if "histogram" in w3 or nbins == 0:
+                                gh = got3[j].get("histogram")
+                                wh = w3.get("histogram")
+                                checked += 1
+                                if wh is None:
+                                    if gh is not None:
+                                        bad.append((fi, "%s: histogram with --bins 0" % names[j]))
+                                elif gh is None or gh.get("bins") != wh[0] or gh.get("counts") != wh[2] or any(not same(x, y) for x, y in zip(gh.get("edges", []), wh[1])):
+                                    bad.append((fi, "%s bins %d: want %r got %r" % (names[j], nbins, wh, gh)))
                             if want3 is not None:
                                 checked += 1
                                 gq = [q["value"] for q in got3[j].get("quantiles", [])]

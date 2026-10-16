@@ -15,6 +15,7 @@ import std.vec;
 import acc.bigint;
 import acc.central;
 import acc.psum;
+import acc.histogram;
 import acc.quantile;
 import metrics.rank;
 import flt;
@@ -29,7 +30,7 @@ import toolbox.path;
 import toolbox.place;
 
 fn flag_table() -> [] &static [byte] {
-    return "root||path|root||resolve FILE relative to this directory and refuse paths outside it;delim|d|text|none|,|the one byte that separates fields (default comma);ddof||nat|none|1|the divisor of the variance is n minus this (1 is the sample variance, 0 the population variance);max-rows||nat|none|1000000|the most data rows read, one more is limit.too-many-rows (ceiling 10000000);max-cols||nat|none|256|the most columns, more is limit.too-many-columns (ceiling 4096);max-line-bytes||nat|none|1048576|the longest line read, a longer one is limit.line-too-long (ceiling 16777216);max-cells||nat|none|20000000|the most cells (rows times columns) held for the quantiles, more is limit.too-many-cells (ceiling 100000000);quantiles||text|none|0,0.25,0.5,0.75,1|the probabilities of the quantiles, comma separated decimals from 0 to 1 with at most 9 decimals (at most 99 of them);quantile-type||nat|none|7|which of the nine Hyndman-Fan definitions, 1 to 9 (7 is the default of R and numpy)";
+    return "root||path|root||resolve FILE relative to this directory and refuse paths outside it;delim|d|text|none|,|the one byte that separates fields (default comma);ddof||nat|none|1|the divisor of the variance is n minus this (1 is the sample variance, 0 the population variance);max-rows||nat|none|1000000|the most data rows read, one more is limit.too-many-rows (ceiling 10000000);max-cols||nat|none|256|the most columns, more is limit.too-many-columns (ceiling 4096);max-line-bytes||nat|none|1048576|the longest line read, a longer one is limit.line-too-long (ceiling 16777216);max-cells||nat|none|20000000|the most cells (rows times columns) held for the quantiles, more is limit.too-many-cells (ceiling 100000000);quantiles||text|none|0,0.25,0.5,0.75,1|the probabilities of the quantiles, comma separated decimals from 0 to 1 with at most 9 decimals (at most 99 of them);quantile-type||nat|none|7|which of the nine Hyndman-Fan definitions, 1 to 9 (7 is the default of R and numpy);bins||nat|none|10|the number of equal-width histogram bins over [min, max], 0 for none (ceiling 1000)";
 }
 
 fn extra() -> [] &static [byte] {
@@ -37,7 +38,7 @@ fn extra() -> [] &static [byte] {
 }
 
 fn tool() -> [] describe.Tool {
-    return describe.Tool { name: "stats", version: "0.1.0", summary: "Describe the columns of a CSV file: counts, minimum, maximum, mean, variance and standard deviation from exact sums rounded once; the same bytes on every platform and at any thread count.", usage: "stats describe [--root DIR] [--delim D] [--ddof N] [--max-rows N] [--max-cols N] [--max-line-bytes N] [--max-cells N] [--quantiles P,P,..] [--quantile-type N] FILE", output: "document", schema: "stats.v1", flags: flag_table(), operands: "VERB|none|1|1|describe;FILE|path-read|1|1|the CSV file to describe", rules: "args.unknown-flag;args.missing-value;args.bad-value;args.duplicate-flag;args.missing-operand;args.too-many-operands;path.empty;path.dotdot;path.absolute;path.outside-root;path.too-long;path.symlink;io.not-found;io.not-a-directory;io.is-a-directory;io.permission-denied;io.read-failed;limit.line-too-long;stats.csv-ragged;stats.csv-multiline;stats.csv-bad-quote;stats.no-header;stats.bad-verb;limit.too-many-rows;limit.too-many-columns;limit.too-many-cells", extra_rules: extra(), limits: "max-rows|1000000|10000000;max-cols|256|4096;max-line-bytes|1048576|16777216;max-cells|20000000|100000000", reversibility: "reversible-cheap", stdin: "never", guarantees: "deterministic;idempotent;bounded_memory" };
+    return describe.Tool { name: "stats", version: "0.1.0", summary: "Describe the columns of a CSV file: counts, minimum, maximum, mean, variance and standard deviation from exact sums rounded once; the same bytes on every platform and at any thread count.", usage: "stats describe [--root DIR] [--delim D] [--ddof N] [--max-rows N] [--max-cols N] [--max-line-bytes N] [--max-cells N] [--quantiles P,P,..] [--quantile-type N] [--bins N] FILE", output: "document", schema: "stats.v1", flags: flag_table(), operands: "VERB|none|1|1|describe;FILE|path-read|1|1|the CSV file to describe", rules: "args.unknown-flag;args.missing-value;args.bad-value;args.duplicate-flag;args.missing-operand;args.too-many-operands;path.empty;path.dotdot;path.absolute;path.outside-root;path.too-long;path.symlink;io.not-found;io.not-a-directory;io.is-a-directory;io.permission-denied;io.read-failed;limit.line-too-long;stats.csv-ragged;stats.csv-multiline;stats.csv-bad-quote;stats.no-header;stats.bad-verb;limit.too-many-rows;limit.too-many-columns;limit.too-many-cells", extra_rules: extra(), limits: "max-rows|1000000|10000000;max-cols|256|4096;max-line-bytes|1048576|16777216;max-cells|20000000|100000000;bins|10|1000", reversibility: "reversible-cheap", stdin: "never", guarantees: "deterministic;idempotent;bounded_memory" };
 }
 
 fn built() -> [] describe.Built {
@@ -321,7 +322,7 @@ fn valid_list[&t](text: &t [byte]) -> [] bool {
 }
 
 // the quantiles of column j: its numeric cells gathered from the store, sorted, and each probability of `qtext` answered exactly
-fn quantile_list[&h, &sv, &q](heap: &!h Heap, w0: json.Writer, store: &sv vec.Vec[int], rows: int, ncols: int, j: int, n: int, qtype: int, qtext: &q [byte]) -> [heap] json.Writer {
+fn quantile_list[&h, &sv, &q](heap: &!h Heap, w0: json.Writer, store: &sv vec.Vec[int], rows: int, ncols: int, j: int, n: int, qtype: int, qtext: &q [byte], bins: int) -> [heap] json.Writer {
     var w = w0;
     let keys = box_slice(heap, n + 1, 0);
     let tmp = box_slice(heap, n + 1, 0);
@@ -356,17 +357,64 @@ fn quantile_list[&h, &sv, &q](heap: &!h Heap, w0: json.Writer, store: &sv vec.Ve
                     w = json.end_object(heap, w);
                     i = i + 1;
                 }
+                w = json.end_array(heap, w);
+                // the distinct values: the changes of the sorted keys
+                var d = 0;
+                var t = 0;
+                while t < m {
+                    if t == 0 || contents(kw)[t] != contents(kw)[t - 1] {
+                        d = d + 1;
+                    }
+                    t = t + 1;
+                }
+                w = json.put_key(heap, w, "distinct");
+                w = json.put_int(heap, w, d);
+                if bins > 0 {
+                    let kmin = contents(kw)[0];
+                    let kmax = contents(kw)[m - 1];
+                    var nb = bins;
+                    if kmin == kmax {
+                        nb = 1;
+                    }
+                    w = json.put_key(heap, w, "histogram");
+                    w = json.begin_object(heap, w);
+                    w = json.put_key(heap, w, "bins");
+                    w = json.put_int(heap, w, nb);
+                    w = json.put_key(heap, w, "edges");
+                    w = json.begin_array(heap, w);
+                    var e = 0;
+                    while e <= nb {
+                        let (eb, ec) = histogram.edge_bits(heap, nb, e, kmin, kmax);
+                        w = json.put_float(heap, w, float_of_bits(eb));
+                        e = e + 1;
+                    }
+                    w = json.end_array(heap, w);
+                    w = json.put_key(heap, w, "counts");
+                    w = json.begin_array(heap, w);
+                    var prev = 0;
+                    var b = 1;
+                    while b <= nb {
+                        var upto = m;
+                        if b < nb {
+                            upto = histogram.below(heap, contents(kw), m, nb, b, kmin, kmax);
+                        }
+                        w = json.put_int(heap, w, upto - prev);
+                        prev = upto;
+                        b = b + 1;
+                    }
+                    w = json.end_array(heap, w);
+                    w = json.end_object(heap, w);
+                }
             }
         }
     }
     unbox_slice(heap, keys);
     unbox_slice(heap, tmp);
     unbox_slice(heap, cnt);
-    w = json.end_array(heap, w);
     return w;
 }
 
-fn report[&h, &c, &nm, &en, &sv, &q](heap: &!h Heap, c: &c Cols, names: &nm [byte], ends: &en vec.Vec[int], store: &sv vec.Vec[int], ncols: int, rows: int, ddof: int, qtype: int, qtext: &q [byte]) -> [heap] buffer.Buffer {
+fn report[&h, &c, &nm, &en, &sv, &q](heap: &!h Heap, c: &c Cols, names: &nm [byte], ends: &en vec.Vec[int], store: &sv vec.Vec[int], ncols: int, rows: int, ddof: int, qtype: int, qtext: &q [byte], bins: int) -> [heap] buffer.Buffer {
     var w = json.writer(heap, 1024);
     w = json.begin_object(heap, w);
     w = json.put_key(heap, w, "rows");
@@ -436,7 +484,7 @@ fn report[&h, &c, &nm, &en, &sv, &q](heap: &!h Heap, c: &c Cols, names: &nm [byt
             } else {
                 w = json.put_null(heap, w);
             }
-            w = quantile_list(heap, w, store, rows, ncols, j, numeric, qtype, qtext);
+            w = quantile_list(heap, w, store, rows, ncols, j, numeric, qtype, qtext, bins);
         }
         w = json.end_object(heap, w);
         j = j + 1;
@@ -593,6 +641,9 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
     if cli.nat(args, parsed, table, "quantile-type") < 1 || cli.nat(args, parsed, table, "quantile-type") > 9 {
         e = refuse(heap, e, "args.bad-value", "--quantile-type is 1 to 9", "type 7 is the default of R and numpy", "flag", "--quantile-type");
     }
+    if cli.nat(args, parsed, table, "bins") > 1000 {
+        e = refuse(heap, e, "args.bad-value", "--bins is above the ceiling", "1000 is the most bins this tool counts", "flag", "--bins");
+    }
     if !valid_list(cli.text(args, parsed, table, "quantiles")) {
         e = refuse(heap, e, "args.bad-value", "--quantiles takes at most 99 comma separated decimals from 0 to 1 with at most 9 decimals", "--quantiles 0.25,0.5,0.75", "flag", "--quantiles");
     }
@@ -631,7 +682,7 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
                                             borrow cols as &cb in {
                                                 buffer.drop(heap, data);
                                                 borrow store as &sb in {
-                                                    data = report(heap, cb, buffer.bytes(nb), eb, sb, info.ncols, info.rows, cli.nat(args, parsed, table, "ddof"), cli.nat(args, parsed, table, "quantile-type"), cli.text(args, parsed, table, "quantiles"));
+                                                    data = report(heap, cb, buffer.bytes(nb), eb, sb, info.ncols, info.rows, cli.nat(args, parsed, table, "ddof"), cli.nat(args, parsed, table, "quantile-type"), cli.text(args, parsed, table, "quantiles"), cli.nat(args, parsed, table, "bins"));
                                                 }
                                             }
                                         }
