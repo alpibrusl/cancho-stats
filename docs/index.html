@@ -180,7 +180,7 @@ python3 -m venv .venv &amp;&amp; .venv/bin/pip install -r ci/requirements.txt
 sh scripts/check.sh            # every gate, minutes
 echo "1 4000000000000000 4024000000000000" | build/special-check t_sf
 1 3fa2c98ee9420ee7 0           # t_sf(2, df 10): the bits of the answer</code></pre>
-  <p class="lead" style="margin-bottom:0">Next in <code>describe</code>: <code>--cols</code> and a text output; then correlations, tests, intervals, resampling and regression.</p>
+  <p class="lead" style="margin-bottom:0"><code>--cols</code> picks columns and <code>--format text</code> prints the same document as one <code>path = value</code> line per value, for a person. Next: correlations, tests, intervals, resampling and regression.</p>
 </div></section>
 
 <section class="alt"><div class="wrap">
@@ -253,6 +253,154 @@ echo "1 4000000000000000 4024000000000000" | build/special-check t_sf
   [
     "g",
     "{\"ok\":true,\"command\":\"stats\",\"schema\":\"stats.v1\",\"data\":{\"ddof\":1,\"quantile_type\":7,\"rounding\":\"mean, variance, skewness, excess kurtosis, quantiles: exact, rounded once; sd: the square root of the rounded variance, two roundings\",\"by\":\"site\",\"groups\":[{\"value\":\"east\",\"rows\":1,\"columns\":[{\"name\":\"sensor\",\"kind\":\"text\",\"count\":1,\"missing\":0,\"distinct\":1,\"levels\":[{\"value\":\"C1\",\"count\":1}],\"levels_capped\":false},{\"name\":\"temp\",\"kind\":\"numeric\",\"count\":1,\"missing\":0,\"min\":21.5,\"max\":21.5,\"mean\":21.5,\"variance\":null,\"sd\":null,\"skewness\":null,\"kurtosis\":null,\"quantiles\":[{\"p\":\"0.5\",\"value\":21.5}],\"distinct\":1},{\"name\":\"pressure\",\"kind\":\"numeric\",\"count\":1,\"missing\":0,\"min\":1012.4,\"max\":1012.4,\"mean\":1012.4,\"variance\":null,\"sd\":null,\"skewness\":null,\"kurtosis\":null,\"quantiles\":[{\"p\":\"0.5\",\"value\":1012.4}],\"distinct\":1},{\"name\":\"drift\",\"kind\":\"numeric\",\"count\":1,\"missing\":0,\"min\":100000000.1,\"max\":100000000.1,\"mean\":100000000.1,\"variance\":null,\"sd\":null,\"skewness\":null,\"kurtosis\":null,\"quantiles\":[{\"p\":\"0.5\",\"value\":100000000.1}],\"distinct\":1},{\"name\":\"site\",\"kind\":\"text\",\"count\":1,\"missing\":0,\"distinct\":1,\"levels\":[{\"value\":\"east\",\"count\":1}],\"levels_capped\":false}]},{\"value\":\"north\",\"rows\":5,\"columns\":[{\"name\":\"sensor\",\"kind\":\"text\",\"count\":5,\"missing\":0,\"distinct\":5,\"levels\":[{\"value\":\"A1\",\"count\":1},{\"value\":\"A2\",\"count\":1}],\"levels_capped\":false},{\"name\":\"temp\",\"kind\":\"numeric\",\"count\":4,\"missing\":1,\"min\":21.4,\"max\":22.1,\"mean\":21.85,\"variance\":0.09666666666666729,\"sd\":0.3109126351029615,\"skewness\":-0.9220734033619077,\"kurtosis\":-0.8394768133174828,\"quantiles\":[{\"p\":\"0.5\",\"value\":21.95}],\"distinct\":4},{\"name\":\"pressure\",\"kind\":\"numeric\",\"count\":4,\"missing\":1,\"min\":1012.8,\"max\":1013.5,\"mean\":1013.1,\"variance\":0.10000000000001516,\"sd\":0.3162277660168619,\"skewness\":0.3651483716699239,\"kurtosis\":-1.4266666666668546,\"quantiles\":[{\"p\":\"0.5\",\"value\":1013.05}],\"distinct\":4},{\"name\":\"drift\",\"kind\":\"numeric\",\"count\":5,\"missing\":0,\"min\":100000000.1,\"max\":100000000.5,\"mean\":100000000.32000001,\"variance\":0.02700000095367434,\"sd\":0.16431677015348842,\"skewness\":-0.3477671123159114,\"kurtosis\":-1.421810683690269,\"quantiles\":[{\"p\":\"0.5\",\"value\":100000000.4}],\"distinct\":4},{\"name\":\"site\",\"kind\":\"text\",\"count\":5,\"missing\":0,\"distinct\":1,\"levels\":[{\"value\":\"north\",\"count\":5}],\"levels_capped\":false}]},{\"value\":\"south\",\"rows\":2,\"columns\":[{\"name\":\"sensor\",\"kind\":\"text\",\"count\":2,\"missing\":0,\"distinct\":2,\"levels\":[{\"value\":\"B1\",\"count\":1},{\"value\":\"B2\",\"count\":1}],\"levels_capped\":false},{\"name\":\"temp\",\"kind\":\"numeric\",\"count\":2,\"missing\":0,\"min\":21.7,\"max\":22.3,\"mean\":22.0,\"variance\":0.18000000000000085,\"sd\":0.4242640687119295,\"skewness\":0.0,\"kurtosis\":-2.0,\"quantiles\":[{\"p\":\"0.5\",\"value\":22.0}],\"distinct\":2},{\"name\":\"pressure\",\"kind\":\"numeric\",\"count\":2,\"missing\":0,\"min\":1011.9,\"max\":1013.1,\"mean\":1012.5,\"variance\":0.7200000000000546,\"sd\":0.8485281374238892,\"skewness\":0.0,\"kurtosis\":-2.0,\"quantiles\":[{\"p\":\"0.5\",\"value\":1012.5}],\"distinct\":2},{\"name\":\"drift\",\"kind\":\"numeric\",\"count\":2,\"missing\":0,\"min\":100000000.2,\"max\":100000000.3,\"mean\":100000000.25,\"variance\":0.00499999940395357,\"sd\":0.0707106739039699,\"skewness\":0.0,\"kurtosis\":-2.0,\"quantiles\":[{\"p\":\"0.5\",\"value\":100000000.25}],\"distinct\":2},{\"name\":\"site\",\"kind\":\"text\",\"count\":2,\"missing\":0,\"distinct\":1,\"levels\":[{\"value\":\"south\",\"count\":2}],\"levels_capped\":false}]}]},\"meta\":{\"version\":\"0.1.0\"}}"
+  ],
+  [
+    "d",
+    "$ stats describe readings.csv --cols temp,site --bins 3 --quantiles 0.5 --levels 2 --format text"
+  ],
+  [
+    "a",
+    "rows = 8"
+  ],
+  [
+    "a",
+    "ddof = 1"
+  ],
+  [
+    "a",
+    "quantile_type = 7"
+  ],
+  [
+    "a",
+    "rounding = \"mean, variance, skewness, excess kurtosis, quantiles: exact, rounded once; sd: the square root of the rounded variance, two roundings\""
+  ],
+  [
+    "a",
+    "columns[0].name = \"temp\""
+  ],
+  [
+    "a",
+    "columns[0].kind = \"numeric\""
+  ],
+  [
+    "a",
+    "columns[0].count = 7"
+  ],
+  [
+    "a",
+    "columns[0].missing = 1"
+  ],
+  [
+    "a",
+    "columns[0].min = 21.4"
+  ],
+  [
+    "a",
+    "columns[0].max = 22.3"
+  ],
+  [
+    "a",
+    "columns[0].mean = 21.84285714285714"
+  ],
+  [
+    "a",
+    "columns[0].variance = 0.10619047619047664"
+  ],
+  [
+    "a",
+    "columns[0].sd = 0.3258688021128697"
+  ],
+  [
+    "a",
+    "columns[0].skewness = -0.0700715376042248"
+  ],
+  [
+    "a",
+    "columns[0].kurtosis = -1.2521365802650364"
+  ],
+  [
+    "a",
+    "columns[0].quantiles[0].p = \"0.5\""
+  ],
+  [
+    "a",
+    "columns[0].quantiles[0].value = 21.9"
+  ],
+  [
+    "a",
+    "columns[0].distinct = 7"
+  ],
+  [
+    "a",
+    "columns[0].histogram.bins = 3"
+  ],
+  [
+    "a",
+    "columns[0].histogram.edges[0] = 21.4"
+  ],
+  [
+    "a",
+    "columns[0].histogram.edges[1] = 21.7"
+  ],
+  [
+    "a",
+    "columns[0].histogram.edges[2] = 22.0"
+  ],
+  [
+    "a",
+    "columns[0].histogram.edges[3] = 22.3"
+  ],
+  [
+    "a",
+    "columns[0].histogram.counts[0] = 2"
+  ],
+  [
+    "a",
+    "columns[0].histogram.counts[1] = 2"
+  ],
+  [
+    "a",
+    "columns[0].histogram.counts[2] = 3"
+  ],
+  [
+    "a",
+    "columns[1].name = \"site\""
+  ],
+  [
+    "a",
+    "columns[1].kind = \"text\""
+  ],
+  [
+    "a",
+    "columns[1].count = 8"
+  ],
+  [
+    "a",
+    "columns[1].missing = 0"
+  ],
+  [
+    "a",
+    "columns[1].distinct = 3"
+  ],
+  [
+    "a",
+    "columns[1].levels[0].value = \"north\""
+  ],
+  [
+    "a",
+    "columns[1].levels[0].count = 5"
+  ],
+  [
+    "a",
+    "columns[1].levels[1].value = \"south\""
+  ],
+  [
+    "a",
+    "columns[1].levels[1].count = 2"
+  ],
+  [
+    "a",
+    "columns[1].levels_capped = false"
   ],
   [
     "d",

@@ -240,6 +240,42 @@ def group_key(c):
     return None if c == "" else (c[1:-1] if c.startswith('"') else c)
 
 
+def unflatten(text):
+    """the `path = value` lines of --format text read back into a document, by a parser that shares nothing with the program (the value is the JSON text of the value)"""
+    import re as _re
+    root = None
+    for line in text.split("\n"):
+        if not line:
+            continue
+        path, lit = line.split(" = ", 1)
+        toks = _re.findall(r"\.?([A-Za-z_][A-Za-z_0-9]*)|\[(\d+)\]", path)
+        if "".join(("." if i and a else "") + (a or "[%s]" % b) for i, (a, b) in enumerate(toks)) != path:
+            raise ValueError("path not understood: %r" % path)
+        val = json.loads(lit)
+        if root is None:
+            root = [] if toks[0][1] else {}
+        node = root
+        for i, (a, b) in enumerate(toks):
+            key = a if a else int(b)
+            last = i == len(toks) - 1
+            if last:
+                if isinstance(node, list):
+                    while len(node) <= key:
+                        node.append(None)
+                node[key] = val
+            else:
+                nxt_is_list = bool(toks[i + 1][1])
+                if isinstance(node, list):
+                    while len(node) <= key:
+                        node.append(None)
+                    if node[key] is None:
+                        node[key] = [] if nxt_is_list else {}
+                    node = node[key]
+                else:
+                    node = node.setdefault(key, [] if nxt_is_list else {})
+    return root
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bin", default=str(ROOT / "build" / "stats"))
@@ -408,6 +444,33 @@ def main():
                         pg2 = run(a.bin, tmp, gnames, [grows[i] for i in order2], 1, ["--by", "grp"])
                         if pg2.stdout != pg.stdout:
                             bad.append((fi, "--by: shuffled rows give other bytes"))
+                    # --cols: the selected columns of the full answer, in the order of the file whatever the order of the list
+                    pick = sorted({int(r.next() % ncols) for _ in range(1 + int(r.next() % ncols))})
+                    lst = [names[x] for x in pick]
+                    pc = run(a.bin, tmp, names, rows, 1, ["--cols", ",".join(lst)])
+                    pr = run(a.bin, tmp, names, rows, 1, ["--cols", ",".join(reversed(lst))])
+                    checked += 1
+                    if pc.returncode != 0 or pc.stdout != pr.stdout:
+                        bad.append((fi, "--cols: exit %d or the order of the list changes the bytes" % pc.returncode))
+                    else:
+                        dc = json.loads(pc.stdout)["data"]
+                        if dc["columns"] != [got[x] for x in pick] or dc["rows"] != n:
+                            bad.append((fi, "--cols %s: the columns differ from the full answer" % lst))
+                    # --format text: the same document, read back by an independent parser
+                    for extra_args in ([], ["--by", "grp"], ["--cols", ",".join(lst), "--levels", "3", "--bins", "4"]):
+                        if extra_args[:1] == ["--by"]:
+                            tn, tr = gnames, grows
+                        else:
+                            tn, tr = names, rows
+                        pj = run(a.bin, tmp, tn, tr, 1, extra_args)
+                        pt = run(a.bin, tmp, tn, tr, 1, extra_args + ["--format", "text"])
+                        checked += 1
+                        try:
+                            same_doc = pj.returncode == 0 and pt.returncode == 0 and unflatten(pt.stdout) == json.loads(pj.stdout)["data"]
+                        except (ValueError, KeyError, IndexError) as ex:
+                            same_doc = False
+                        if not same_doc:
+                            bad.append((fi, "--format text %s: not the document of the JSON run" % extra_args))
                     # row order cannot change a byte
                     order = list(range(n))
                     for i in range(n - 1, 0, -1):
@@ -433,6 +496,34 @@ def main():
                     checked += 1
                     if not same(got[j].get(k), want.get(k)):
                         bad.append((-1, "fixed %s %s: want %r got %r" % (nm, k, want.get(k), got[j].get(k))))
+    # --cols leaves the levels of the other text columns uncounted: B keeps its place in a budget of one pair
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        rows = [["u%d" % i, "same"] for i in range(10)]
+        p = run(a.bin, tmp, ["A", "B"], rows, 1, ["--cols", "B", "--max-levels", "1"])
+        col = json.loads(p.stdout)["data"]["columns"] if p.returncode == 0 else []
+        checked += 1
+        if len(col) != 1 or col[0].get("distinct") != 1 or col[0].get("levels_capped") is not False:
+            bad.append((-1, "--cols B --max-levels 1: %r" % p.stdout[:200]))
+    # --format text on awkward values (an escaped quote, a comma, a backslash, a tab, non-ASCII) and on a file with no rows (an empty `groups`)
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        awk = ['"say ""hi"""', '"x,y"', "a\\b", "tab\there", "caf\u00e9", '"[1]"', '"a = b"', '""']
+        for label, tn, tr, ea in (("awkward values", ["v"], [[x] for x in awk], []), ("awkward values by", ["v", "g"], [[x, "k"] for x in awk], ["--by", "g"]), ("no rows by", ["v", "g"], [], ["--by", "g"]), ("no rows", ["v"], [], [])):
+            (tmp / "f.csv").write_text(",".join(tn) + "\n" + "".join(",".join(rw) + "\n" for rw in tr), encoding="utf-8")
+            pj = subprocess.run([a.bin, "describe", "--root", str(tmp)] + ea + ["f.csv"], capture_output=True, text=True, encoding="utf-8")
+            pt = subprocess.run([a.bin, "describe", "--root", str(tmp), "--format", "text"] + ea + ["f.csv"], capture_output=True, text=True, encoding="utf-8")
+            checked += 1
+            try:
+                ok = pj.returncode == 0 and pt.returncode == 0 and unflatten(pt.stdout) == json.loads(pj.stdout)["data"]
+            except (ValueError, KeyError, IndexError):
+                ok = False
+            if not ok:
+                bad.append((-1, "--format text, %s: not the document of the JSON run: %r" % (label, pt.stdout[:200])))
+        p = subprocess.run([a.bin, "describe", "--root", str(tmp), "--format", "text", "--cols", "nope", "f.csv"], capture_output=True, text=True)
+        checked += 1
+        if p.returncode != 2 or p.stdout != "" or "stats.no-such-column" not in p.stderr:
+            bad.append((-1, "--format text refusal: exit %d stdout %r stderr %r" % (p.returncode, p.stdout[:60], p.stderr[:80])))
     # a file of one text column with blank lines: each is one missing cell, in both passes
     with tempfile.TemporaryDirectory() as t:
         tmp = pathlib.Path(t)

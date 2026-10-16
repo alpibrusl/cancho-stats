@@ -75,6 +75,13 @@ CASES = [
     ("max-groups at the ceiling", b"g\na\n", ["describe", "--by", "g", "--max-groups", "1000", "f.csv"], None, 0),
     ("by limits rows of a group not of the file", b"g,x\na,1\nb,2\nb,3\na,4\n", ["describe", "--by", "g", "--max-rows", "4", "f.csv"], None, 0),
     ("by with a group over the cells limit", b"g,x\na,1\na,2\nb,3\n", ["describe", "--by", "g", "--max-cells", "3", "f.csv"], "limit.too-many-cells", 8),
+    ("cols no such column", b"a,b\n1,2\n", ["describe", "--cols", "a,z", "f.csv"], "stats.no-such-column", 2),
+    ("cols two columns of the name", b"a,a\n1,2\n", ["describe", "--cols", "a", "f.csv"], "stats.ambiguous-column", 2),
+    ("cols empty item", b"a,b\n1,2\n", ["describe", "--cols", "a,,b", "f.csv"], "args.bad-value", 2),
+    ("cols trailing comma", b"a,b\n1,2\n", ["describe", "--cols", "a,", "f.csv"], "args.bad-value", 2),
+    ("cols a name twice is fine", b"a,b\n1,2\n", ["describe", "--cols", "a,a", "f.csv"], None, 0),
+    ("cols with by", b"g,x\na,1\nb,2\n", ["describe", "--by", "g", "--cols", "x", "f.csv"], None, 0),
+    ("format xml", b"a\n1\n", ["describe", "--format", "xml", "f.csv"], "args.bad-value", 2),
     ("levels above the ceiling", b"a\nx\n", ["describe", "--levels", "101", "f.csv"], "args.bad-value", 2),
     ("levels at the ceiling", b"a\nx\n", ["describe", "--levels", "100", "f.csv"], None, 0),
     ("max-levels zero", b"a\nx\n", ["describe", "--max-levels", "0", "f.csv"], "args.bad-value", 2),
@@ -166,7 +173,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 6)
+            k = int(r.next() % 10)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -175,10 +182,27 @@ def main():
                 argv = ["describe", "--max-rows", str(int(r.next() % 4)), "--max-cols", str(1 + int(r.next() % 3)), "f.csv"]
             elif k == 4:
                 argv = ["describe", "--max-line-bytes", str(1 + int(r.next() % 30)), "f.csv"]
+            elif k == 6:
+                argv = ["describe", "--by", "a", "f.csv"]
+            elif k == 7:
+                argv = ["describe", "--cols", "a", "--levels", "3", "f.csv"]
+            elif k == 8:
+                argv = ["describe", "--by", "a", "--max-groups", "2", "--max-rows", "3", "f.csv"]
+            elif k == 9:
+                argv = ["describe", "--format", "text", "f.csv"]
             try:
                 p = call(a.bin, tmp, argv)
             except subprocess.TimeoutExpired:
                 bad.append("fuzz %d: hang on %r" % (i, data[:60]))
+                continue
+            if k == 9:
+                # text mode: no signal; an answer is lines `path = value`, a refusal is a sentence on standard error with nothing on standard output
+                if p.returncode < 0:
+                    bad.append("fuzz %d: text mode died of signal %d" % (i, -p.returncode))
+                elif p.returncode == 0 and any(b" = " not in ln for ln in p.stdout.split(b"\n") if ln):
+                    bad.append("fuzz %d: text mode printed a line that is not `path = value`: %r" % (i, p.stdout[:80]))
+                elif p.returncode != 0 and (p.stdout != b"" or p.stderr == b""):
+                    bad.append("fuzz %d: text mode refusal: stdout %r stderr %r" % (i, p.stdout[:40], p.stderr[:40]))
                 continue
             bad += check_doc(p, known, "fuzz %d %r" % (i, data[:40]))
             if len(bad) > 20:

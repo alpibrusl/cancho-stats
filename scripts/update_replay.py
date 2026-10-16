@@ -4,7 +4,7 @@
     python3 scripts/update_replay.py            # rewrite the `var lines = [...]` block of docs/index.html
     python3 scripts/update_replay.py --check    # exit 1 if the page differs from what the binary prints now
 
-The replay is `cat readings.csv`, `stats describe readings.csv` on docs/example/readings.csv, the same grouped by the `site` column, and `stats describe broken.csv` on a file with a short record (its exit code is printed).
+The replay is `cat readings.csv`, `stats describe readings.csv` on docs/example/readings.csv, the same grouped by the `site` column, two columns as text lines, and `stats describe broken.csv` on a file with a short record (its exit code is printed).
 """
 import json
 import pathlib
@@ -25,6 +25,9 @@ def lines():
     out += [["d", "$ stats describe readings.csv"], ["g", ok.stdout.rstrip("\n")]]
     by = subprocess.run([binary, "describe", "--root", str(ROOT / "docs" / "example"), "--by", "site", "--bins", "0", "--quantiles", "0.5", "--levels", "2", "readings.csv"], capture_output=True, text=True, check=True)
     out += [["d", "$ stats describe readings.csv --by site --bins 0 --quantiles 0.5 --levels 2"], ["g", by.stdout.rstrip("\n")]]
+    cmd = ["describe", "--root", str(ROOT / "docs" / "example"), "--cols", "temp,site", "--bins", "3", "--quantiles", "0.5", "--levels", "2", "--format", "text", "readings.csv"]
+    tx = subprocess.run([binary] + cmd, capture_output=True, text=True, check=True)
+    out += [["d", "$ stats describe readings.csv --cols temp,site --bins 3 --quantiles 0.5 --levels 2 --format text"]] + [["a", ln] for ln in tx.stdout.rstrip("\n").split("\n")]
     with tempfile.TemporaryDirectory() as t:
         (pathlib.Path(t) / "broken.csv").write_text(BROKEN)
         bad = subprocess.run([binary, "describe", "--root", t, "broken.csv"], capture_output=True, text=True)

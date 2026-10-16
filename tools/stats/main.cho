@@ -32,7 +32,7 @@ import toolbox.place;
 import toolbox.text;
 
 fn flag_table() -> [] &static [byte] {
-    return "root||path|root||resolve FILE relative to this directory and refuse paths outside it;delim|d|text|none|,|the one byte that separates fields (default comma);ddof||nat|none|1|the divisor of the variance is n minus this (1 is the sample variance, 0 the population variance);max-rows||nat|none|1000000|the most data rows read, one more is limit.too-many-rows (ceiling 10000000);max-cols||nat|none|256|the most columns, more is limit.too-many-columns (ceiling 4096);max-line-bytes||nat|none|1048576|the longest line read, a longer one is limit.line-too-long (ceiling 16777216);max-cells||nat|none|20000000|the most cells (rows times columns) held for the quantiles, more is limit.too-many-cells (ceiling 100000000);quantiles||text|none|0,0.25,0.5,0.75,1|the probabilities of the quantiles, comma separated decimals from 0 to 1 with at most 9 decimals (at most 99 of them);quantile-type||nat|none|7|which of the nine Hyndman-Fan definitions, 1 to 9 (7 is the default of R and numpy);bins||nat|none|10|the number of equal-width histogram bins over [min, max], 0 for none (ceiling 1000);levels||nat|none|10|how many of the most frequent levels of a text column to print, 0 for none and no second pass (ceiling 100);max-levels||nat|none|100000|the most distinct (column, level) pairs held for all text columns together, a column that would need one more is levels_capped (ceiling 1000000);by||text|none||the header name of a column: describe each group of rows that have the same value in it, one after the other;max-groups||nat|none|50|the most groups with --by, one more is limit.too-many-groups (ceiling 1000)";
+    return "root||path|root||resolve FILE relative to this directory and refuse paths outside it;delim|d|text|none|,|the one byte that separates fields (default comma);ddof||nat|none|1|the divisor of the variance is n minus this (1 is the sample variance, 0 the population variance);max-rows||nat|none|1000000|the most data rows read, one more is limit.too-many-rows (ceiling 10000000);max-cols||nat|none|256|the most columns, more is limit.too-many-columns (ceiling 4096);max-line-bytes||nat|none|1048576|the longest line read, a longer one is limit.line-too-long (ceiling 16777216);max-cells||nat|none|20000000|the most cells (rows times columns) held for the quantiles, more is limit.too-many-cells (ceiling 100000000);quantiles||text|none|0,0.25,0.5,0.75,1|the probabilities of the quantiles, comma separated decimals from 0 to 1 with at most 9 decimals (at most 99 of them);quantile-type||nat|none|7|which of the nine Hyndman-Fan definitions, 1 to 9 (7 is the default of R and numpy);bins||nat|none|10|the number of equal-width histogram bins over [min, max], 0 for none (ceiling 1000);levels||nat|none|10|how many of the most frequent levels of a text column to print, 0 for none and no second pass (ceiling 100);max-levels||nat|none|100000|the most distinct (column, level) pairs held for all text columns together, a column that would need one more is levels_capped (ceiling 1000000);by||text|none||the header name of a column: describe each group of rows that have the same value in it, one after the other;max-groups||nat|none|50|the most groups with --by, one more is limit.too-many-groups (ceiling 1000);cols||text|none||describe only these columns: header names separated by commas, printed in the order of the file;format||choice:json/text|none|json|json for a program, text (one line per value, path = value) for a person";
 }
 
 fn extra() -> [] &static [byte] {
@@ -512,7 +512,7 @@ fn rank_levels[&m, &t, &b](m: &m map.Map[int], ncols: int, k: int, top: &!t [int
 }
 
 // The second pass: the file again, and every non-missing cell of a text column counted. `expected` is the number of data rows the first pass took; a different file is `stats.file-changed`.
-fn level_pass[&h, &f, &s, &c, &k](heap: &!h Heap, file: &!f File, shown: &s [byte], cols: &c Cols, ncols: int, by: int, key: &k [byte], by_null: bool, expected: int, delim: int, cap: int, k: int, max_levels: int, lv0: Levels, errs: fail.Errors) -> [heap, file_read] (Levels, fail.Errors) {
+fn level_pass[&h, &f, &s, &c, &k, &x](heap: &!h Heap, file: &!f File, shown: &s [byte], cols: &c Cols, sel: &x [int], ncols: int, by: int, key: &k [byte], by_null: bool, expected: int, delim: int, cap: int, k: int, max_levels: int, lv0: Levels, errs: fail.Errors) -> [heap, file_read] (Levels, fail.Errors) {
     let Levels { m, distinct, capped, top, cells } = lv0;
     var mm = m;
     var e = errs;
@@ -557,7 +557,7 @@ fn level_pass[&h, &f, &s, &c, &k](heap: &!h Heap, file: &!f File, shown: &s [byt
                             while j < ncols {
                                 let from = cs[3 * j];
                                 let to = cs[3 * j + 1];
-                                if bad[j] == 1 && !(to == from && cs[3 * j + 2] == 0) {
+                                if bad[j] == 1 && sel[j] == 1 && !(to == from && cs[3 * j + 2] == 0) {
                                     borrow mut kb as &!kw in {
                                         buffer.clear(kw);
                                     }
@@ -656,72 +656,74 @@ fn level_list[&h, &lv](heap: &!h Heap, w0: json.Writer, lv: &lv Levels, j: int, 
     return w;
 }
 
-fn report_columns[&h, &c, &nm, &en, &sv, &q, &lv](heap: &!h Heap, w0: json.Writer, c: &c Cols, names: &nm [byte], ends: &en vec.Vec[int], store: &sv vec.Vec[int], ncols: int, rows: int, ddof: int, qtype: int, qtext: &q [byte], bins: int, lv: &lv Levels, k: int, counted: bool) -> [heap] json.Writer {
+fn report_columns[&h, &c, &x, &nm, &en, &sv, &q, &lv](heap: &!h Heap, w0: json.Writer, c: &c Cols, sel: &x [int], names: &nm [byte], ends: &en vec.Vec[int], store: &sv vec.Vec[int], ncols: int, rows: int, ddof: int, qtype: int, qtext: &q [byte], bins: int, lv: &lv Levels, k: int, counted: bool) -> [heap] json.Writer {
     var w = w0;
     w = json.put_key(heap, w, "columns");
     w = json.begin_array(heap, w);
     var j = 0;
     while j < ncols {
-        var from = 0;
-        if j > 0 {
-            from = vec.get(ends, j - 1);
+        if sel[j] == 1 {
+            var from = 0;
+            if j > 0 {
+                from = vec.get(ends, j - 1);
+            }
+            let to = vec.get(ends, j);
+            w = json.begin_object(heap, w);
+            w = json.put_key(heap, w, "name");
+            w = json.put_string(heap, w, names[from..to]);
+            let nonmiss = contents(c.nonmiss)[j];
+            let numeric = contents(c.numeric)[j];
+            let bad = contents(c.bad)[j];
+            w = json.put_key(heap, w, "kind");
+            if nonmiss == 0 {
+                w = json.put_string(heap, w, "empty");
+            } else if bad == 1 {
+                w = json.put_string(heap, w, "text");
+            } else {
+                w = json.put_string(heap, w, "numeric");
+            }
+            w = json.put_key(heap, w, "count");
+            w = json.put_int(heap, w, nonmiss);
+            w = json.put_key(heap, w, "missing");
+            w = json.put_int(heap, w, rows - nonmiss);
+            if nonmiss > 0 && bad == 0 {
+                w = json.put_key(heap, w, "min");
+                w = json.put_float(heap, w, contents(c.mn)[j]);
+                w = json.put_key(heap, w, "max");
+                w = json.put_float(heap, w, contents(c.mx)[j]);
+                let s = moments(heap, c, j, ddof);
+                w = json.put_key(heap, w, "mean");
+                w = json.put_float(heap, w, s.mean);
+                w = json.put_key(heap, w, "variance");
+                if s.variance_ok {
+                    w = json.put_float(heap, w, s.variance);
+                } else {
+                    w = json.put_null(heap, w);
+                }
+                w = json.put_key(heap, w, "sd");
+                if s.variance_ok {
+                    w = json.put_float(heap, w, s.sd);
+                } else {
+                    w = json.put_null(heap, w);
+                }
+                w = json.put_key(heap, w, "skewness");
+                if s.moments_ok {
+                    w = json.put_float(heap, w, s.skew);
+                } else {
+                    w = json.put_null(heap, w);
+                }
+                w = json.put_key(heap, w, "kurtosis");
+                if s.moments_ok {
+                    w = json.put_float(heap, w, s.kurt);
+                } else {
+                    w = json.put_null(heap, w);
+                }
+                w = quantile_list(heap, w, store, rows, ncols, j, numeric, qtype, qtext, bins);
+            } else if nonmiss > 0 && counted {
+                w = level_list(heap, w, lv, j, k);
+            }
+            w = json.end_object(heap, w);
         }
-        let to = vec.get(ends, j);
-        w = json.begin_object(heap, w);
-        w = json.put_key(heap, w, "name");
-        w = json.put_string(heap, w, names[from..to]);
-        let nonmiss = contents(c.nonmiss)[j];
-        let numeric = contents(c.numeric)[j];
-        let bad = contents(c.bad)[j];
-        w = json.put_key(heap, w, "kind");
-        if nonmiss == 0 {
-            w = json.put_string(heap, w, "empty");
-        } else if bad == 1 {
-            w = json.put_string(heap, w, "text");
-        } else {
-            w = json.put_string(heap, w, "numeric");
-        }
-        w = json.put_key(heap, w, "count");
-        w = json.put_int(heap, w, nonmiss);
-        w = json.put_key(heap, w, "missing");
-        w = json.put_int(heap, w, rows - nonmiss);
-        if nonmiss > 0 && bad == 0 {
-            w = json.put_key(heap, w, "min");
-            w = json.put_float(heap, w, contents(c.mn)[j]);
-            w = json.put_key(heap, w, "max");
-            w = json.put_float(heap, w, contents(c.mx)[j]);
-            let s = moments(heap, c, j, ddof);
-            w = json.put_key(heap, w, "mean");
-            w = json.put_float(heap, w, s.mean);
-            w = json.put_key(heap, w, "variance");
-            if s.variance_ok {
-                w = json.put_float(heap, w, s.variance);
-            } else {
-                w = json.put_null(heap, w);
-            }
-            w = json.put_key(heap, w, "sd");
-            if s.variance_ok {
-                w = json.put_float(heap, w, s.sd);
-            } else {
-                w = json.put_null(heap, w);
-            }
-            w = json.put_key(heap, w, "skewness");
-            if s.moments_ok {
-                w = json.put_float(heap, w, s.skew);
-            } else {
-                w = json.put_null(heap, w);
-            }
-            w = json.put_key(heap, w, "kurtosis");
-            if s.moments_ok {
-                w = json.put_float(heap, w, s.kurt);
-            } else {
-                w = json.put_null(heap, w);
-            }
-            w = quantile_list(heap, w, store, rows, ncols, j, numeric, qtype, qtext, bins);
-        } else if nonmiss > 0 && counted {
-            w = level_list(heap, w, lv, j, k);
-        }
-        w = json.end_object(heap, w);
         j = j + 1;
     }
     w = json.end_array(heap, w);
@@ -1054,6 +1056,154 @@ fn read_file[&h, &g, &p, &f, &s, &k](heap: &!h Heap, args: &g Args, parsed: &p c
     return (names, ends, cols, store, info, e);
 }
 
+// The columns named by --cols: `sel[j]` is 1 for each named column and 0 for the others. Answers (0, _) when all is well, else (1, i) no column of the header has the name of item i, (2, i) two or more have, (3, i) item i is empty.
+fn select_columns[&n, &en, &t, &o](names: &n [byte], ends: &en vec.Vec[int], ncols: int, list: &t [byte], sel: &!o [int]) -> [] (int, int) {
+    var j = 0;
+    while j < ncols {
+        sel[j] = 0;
+        j = j + 1;
+    }
+    let count = bytes.count_byte(list, ',') + 1;
+    var i = 0;
+    while i < count {
+        let tok = bytes.field(list, ',', i + 1);
+        if len(tok) == 0 {
+            return (3, i);
+        }
+        var matches = 0;
+        var at = 0;
+        j = 0;
+        while j < ncols {
+            var from = 0;
+            if j > 0 {
+                from = vec.get(ends, j - 1);
+            }
+            if bytes.equal(names[from..vec.get(ends, j)], tok) {
+                matches = matches + 1;
+                at = j;
+            }
+            j = j + 1;
+        }
+        if matches == 0 {
+            return (1, i);
+        }
+        if matches > 1 {
+            return (2, i);
+        }
+        sel[at] = 1;
+        i = i + 1;
+    }
+    return (0, 0);
+}
+
+// ------------------------------------------------------------------------------------------------ the text form
+
+// The path of the value that the frames `f[0..count]` lead to: `.key` for an object (no dot first), `[i]` for an array item. A frame is six integers: kind (0 object, 1 array), the index, the start and end of the current key in `doc`, how many values it has had, and whether a key is expected.
+fn put_path[&h, &d, &fr](heap: &!h Heap, out: buffer.Buffer, doc: &d [byte], f: &fr [int], count: int) -> [heap] buffer.Buffer {
+    var o = out;
+    var k = 0;
+    while k < count {
+        if f[6 * k] == 0 {
+            if k > 0 {
+                o = buffer.push(heap, o, byte_of(46));
+            }
+            o = buffer.append(heap, o, doc[f[6 * k + 2]..f[6 * k + 3]]);
+        } else {
+            o = buffer.push(heap, o, byte_of(91));
+            o = buffer.push_nat(heap, o, f[6 * k + 1]);
+            o = buffer.push(heap, o, byte_of(93));
+        }
+        k = k + 1;
+    }
+    return o;
+}
+
+fn put_line[&h, &d, &fr, &l](heap: &!h Heap, out: buffer.Buffer, doc: &d [byte], f: &fr [int], count: int, lit: &l [byte]) -> [heap] buffer.Buffer {
+    var o = put_path(heap, out, doc, f, count);
+    o = buffer.append(heap, o, " = ");
+    o = buffer.append(heap, o, lit);
+    o = buffer.push(heap, o, byte_of(10));
+    return o;
+}
+
+// The document (the compact JSON this tool writes: no white space between tokens) as one line `path = value` per value, in document order, an empty array or object as `[]` or `{}`. Made from the bytes of the document, so a value cannot differ from the JSON's.
+fn flatten[&h, &d](heap: &!h Heap, doc: &d [byte]) -> [heap] buffer.Buffer {
+    var out = buffer.empty(heap, 1024);
+    let frames = box_slice(heap, 6 * 64 + 6, 0);
+    let n = len(doc);
+    var depth = 0;
+    var i = 0;
+    borrow mut frames as &!fw in {
+        let f = contents(fw);
+        while i < n && depth < 63 {
+            let c = int_of(doc[i]);
+            if c == 123 || c == 91 {
+                if depth > 0 {
+                    f[6 * (depth - 1) + 4] = f[6 * (depth - 1) + 4] + 1;
+                }
+                f[6 * depth] = 0;
+                if c == 91 {
+                    f[6 * depth] = 1;
+                }
+                f[6 * depth + 1] = 0;
+                f[6 * depth + 4] = 0;
+                f[6 * depth + 5] = 0;
+                if c == 123 {
+                    f[6 * depth + 5] = 1;
+                }
+                depth = depth + 1;
+                i = i + 1;
+            } else if c == 125 || c == 93 {
+                depth = depth - 1;
+                if f[6 * depth + 4] == 0 {
+                    if c == 125 {
+                        out = put_line(heap, out, doc, f, depth, "{}");
+                    } else {
+                        out = put_line(heap, out, doc, f, depth, "[]");
+                    }
+                }
+                i = i + 1;
+            } else if c == 44 {
+                if f[6 * (depth - 1)] == 1 {
+                    f[6 * (depth - 1) + 1] = f[6 * (depth - 1) + 1] + 1;
+                } else {
+                    f[6 * (depth - 1) + 5] = 1;
+                }
+                i = i + 1;
+            } else if c == 58 {
+                i = i + 1;
+            } else {
+                let start = i;
+                if c == 34 {
+                    i = i + 1;
+                    while i < n && int_of(doc[i]) != 34 {
+                        if int_of(doc[i]) == 92 {
+                            i = i + 1;
+                        }
+                        i = i + 1;
+                    }
+                    i = i + 1;
+                } else {
+                    while i < n && int_of(doc[i]) != 44 && int_of(doc[i]) != 125 && int_of(doc[i]) != 93 {
+                        i = i + 1;
+                    }
+                }
+                let top = depth - 1;
+                if c == 34 && f[6 * top] == 0 && f[6 * top + 5] == 1 {
+                    f[6 * top + 2] = start + 1;
+                    f[6 * top + 3] = i - 1;
+                    f[6 * top + 5] = 0;
+                } else {
+                    f[6 * top + 4] = f[6 * top + 4] + 1;
+                    out = put_line(heap, out, doc, f, depth, doc[start..i]);
+                }
+            }
+        }
+    }
+    unbox_slice(heap, frames);
+    return out;
+}
+
 // One description: the file opened and read (only the records of the group when `by` >= 0), the levels of its text columns, and what is written to `w0`: with `as_group` an object of the group, without it the `rows`, the settings and the `columns` of the whole file.
 fn describe_one[&h, &g, &p, &f, &r, &sh, &fu, &k](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], by: int, key: &k [byte], by_null: bool, as_group: bool, w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
     let table = flag_table();
@@ -1077,16 +1227,44 @@ fn describe_one[&h, &g, &p, &f, &r, &sh, &fu, &k](heap: &!h Heap, args: &g Args,
                     var lv = make_levels(heap, 1, 1);
                     var counted = false;
                     var any_text = false;
-                    borrow cols as &c0 in {
-                        var jt = 0;
-                        while jt < info.ncols {
-                            if contents(c0.nonmiss)[jt] > 0 && contents(c0.bad)[jt] == 1 {
-                                any_text = true;
+                    let sel = box_slice(heap, info.ncols + 1, 1);
+                    var cols_ok = true;
+                    if cli.has(parsed, table, "cols") {
+                        var st = 0;
+                        var item = 0;
+                        borrow names as &nb0 in {
+                            borrow ends as &eb0 in {
+                                borrow mut sel as &!sw0 in {
+                                    let (s1, i1) = select_columns(buffer.bytes(nb0), eb0, info.ncols, cli.text(args, parsed, table, "cols"), contents(sw0));
+                                    st = s1;
+                                    item = i1;
+                                }
                             }
-                            jt = jt + 1;
+                        }
+                        let one = bytes.field(cli.text(args, parsed, table, "cols"), ',', item + 1);
+                        if st == 1 {
+                            cols_ok = false;
+                            e = refuse(heap, e, "stats.no-such-column", "--cols names a column the header does not have", "the header names are the first line of the file; the match is exact", "column", one);
+                        } else if st == 2 {
+                            cols_ok = false;
+                            e = refuse(heap, e, "stats.ambiguous-column", "two or more columns have a name given to --cols", "rename the columns so that the name is unique", "column", one);
+                        } else if st == 3 {
+                            cols_ok = false;
+                            e = refuse(heap, e, "args.bad-value", "--cols has an empty item", "--cols name1,name2: no empty item, no leading or trailing comma", "flag", "--cols");
                         }
                     }
-                    if k > 0 && any_text {
+                    borrow cols as &c0 in {
+                        borrow sel as &sr0 in {
+                            var jt = 0;
+                            while jt < info.ncols {
+                                if contents(c0.nonmiss)[jt] > 0 && contents(c0.bad)[jt] == 1 && contents(sr0)[jt] == 1 {
+                                    any_text = true;
+                                }
+                                jt = jt + 1;
+                            }
+                        }
+                    }
+                    if k > 0 && any_text && cols_ok {
                         counted = true;
                         match place.open_operand(fs, root, rel, full) {
                             Opened::Failed(reason) => {
@@ -1096,11 +1274,13 @@ fn describe_one[&h, &g, &p, &f, &r, &sh, &fu, &k](heap: &!h Heap, args: &g Args,
                                 var file2 = again;
                                 borrow mut file2 as &!handle2 in {
                                     borrow cols as &c1 in {
-                                        let fresh = make_levels(heap, info.ncols, k);
-                                        drop_levels(heap, lv);
-                                        let (lv2, e4) = level_pass(heap, handle2, rel, c1, info.ncols, by, key, by_null, info.rows, int_of(cli.text(args, parsed, table, "delim")[0]), cli.nat(args, parsed, table, "max-line-bytes"), k, cli.nat(args, parsed, table, "max-levels"), fresh, e);
-                                        lv = lv2;
-                                        e = e4;
+                                        borrow sel as &sr1 in {
+                                            let fresh = make_levels(heap, info.ncols, k);
+                                            drop_levels(heap, lv);
+                                            let (lv2, e4) = level_pass(heap, handle2, rel, c1, contents(sr1), info.ncols, by, key, by_null, info.rows, int_of(cli.text(args, parsed, table, "delim")[0]), cli.nat(args, parsed, table, "max-line-bytes"), k, cli.nat(args, parsed, table, "max-levels"), fresh, e);
+                                            lv = lv2;
+                                            e = e4;
+                                        }
                                     }
                                 }
                                 file_close(file2);
@@ -1118,25 +1298,27 @@ fn describe_one[&h, &g, &p, &f, &r, &sh, &fu, &k](heap: &!h Heap, args: &g Args,
                             borrow ends as &eb in {
                                 borrow cols as &cb in {
                                     borrow store as &sb in {
-                                        borrow lv as &lb in {
-                                            if as_group {
-                                                w = json.begin_object(heap, w);
-                                                w = json.put_key(heap, w, "value");
-                                                if by_null {
-                                                    w = json.put_null(heap, w);
+                                        borrow sel as &sr2 in {
+                                            borrow lv as &lb in {
+                                                if as_group {
+                                                    w = json.begin_object(heap, w);
+                                                    w = json.put_key(heap, w, "value");
+                                                    if by_null {
+                                                        w = json.put_null(heap, w);
+                                                    } else {
+                                                        w = text.put(heap, w, key);
+                                                    }
+                                                    w = json.put_key(heap, w, "rows");
+                                                    w = json.put_int(heap, w, info.rows);
                                                 } else {
-                                                    w = text.put(heap, w, key);
+                                                    w = json.put_key(heap, w, "rows");
+                                                    w = json.put_int(heap, w, info.rows);
+                                                    w = put_settings(heap, w, ddof, qtype);
                                                 }
-                                                w = json.put_key(heap, w, "rows");
-                                                w = json.put_int(heap, w, info.rows);
-                                            } else {
-                                                w = json.put_key(heap, w, "rows");
-                                                w = json.put_int(heap, w, info.rows);
-                                                w = put_settings(heap, w, ddof, qtype);
-                                            }
-                                            w = report_columns(heap, w, cb, buffer.bytes(nb), eb, sb, info.ncols, info.rows, ddof, qtype, cli.text(args, parsed, table, "quantiles"), cli.nat(args, parsed, table, "bins"), lb, k, counted);
-                                            if as_group {
-                                                w = json.end_object(heap, w);
+                                                w = report_columns(heap, w, cb, contents(sr2), buffer.bytes(nb), eb, sb, info.ncols, info.rows, ddof, qtype, cli.text(args, parsed, table, "quantiles"), cli.nat(args, parsed, table, "bins"), lb, k, counted);
+                                                if as_group {
+                                                    w = json.end_object(heap, w);
+                                                }
                                             }
                                         }
                                     }
@@ -1145,6 +1327,7 @@ fn describe_one[&h, &g, &p, &f, &r, &sh, &fu, &k](heap: &!h Heap, args: &g Args,
                         }
                     }
                     drop_levels(heap, lv);
+                    unbox_slice(heap, sel);
                 }
                 buffer.drop(heap, names);
                 vec.drop(heap, ends);
@@ -1212,6 +1395,8 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
         refused = fail.count(er) > 0;
     }
     var data = buffer.empty(heap, 1);
+    var plain = buffer.empty(heap, 1);
+    let text_mode = bytes.equal(cli.text(args, parsed, table, "format"), "text");
     if !refused {
         borrow root as &rr in {
             let (target, checked) = path.operand(heap, args, buffer.bytes(rr), cli.operand_index(parsed, 1), e);
@@ -1282,6 +1467,12 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
                     if ok {
                         buffer.drop(heap, data);
                         data = doc;
+                        if text_mode {
+                            buffer.drop(heap, plain);
+                            borrow data as &dd in {
+                                plain = flatten(heap, buffer.bytes(dd));
+                            }
+                        }
                     } else {
                         buffer.drop(heap, doc);
                     }
@@ -1294,10 +1485,13 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
     var status = 0;
     borrow e as &er in {
         borrow data as &d in {
-            status = out.respond(heap, io, "stats", "stats.v1", "0.1.0", buffer.bytes(d), "", er, false, "", 0);
+            borrow plain as &pl in {
+                status = out.respond(heap, io, "stats", "stats.v1", "0.1.0", buffer.bytes(d), "", er, text_mode, buffer.bytes(pl), 0);
+            }
         }
     }
     buffer.drop(heap, data);
+    buffer.drop(heap, plain);
     fail.drop(heap, e);
     return status;
 }
