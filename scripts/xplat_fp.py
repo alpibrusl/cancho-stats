@@ -90,7 +90,7 @@ def describe_lines(stats):
 
 
 def describe_by_lines(stats):
-    """`stats describe --by g` on 4 seeded files (a group column of six values with one missing, a numeric column and a text column), --ddof 1 and 0: the hash of the bytes printed."""
+    """`stats describe --by g` (and the same with --cols and --format text) on 4 seeded files (a group column of six values with one missing, a numeric column and a text column), --ddof 1 and 0: the hash of the bytes printed."""
     r = gate_special.SM64(23)
     out = []
     with tempfile.TemporaryDirectory() as t:
@@ -107,6 +107,10 @@ def describe_by_lines(stats):
                 if p.returncode != 0:
                     raise RuntimeError("stats --by exit %d" % p.returncode)
                 h.update(p.stdout.encode())
+            pt = gate_describe.run(stats, tmp, ["g", "x", "t"], rows, 1, ["--by", "g", "--cols", "x,t", "--format", "text"])
+            if pt.returncode != 0:
+                raise RuntimeError("stats --format text exit %d" % pt.returncode)
+            h.update(pt.stdout.encode())
             out.append("describe-by\tfile%02d\t%d\t%s" % (k, n, h.hexdigest()))
     return out
 
