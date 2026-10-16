@@ -89,6 +89,28 @@ def describe_lines(stats):
     return out
 
 
+def describe_by_lines(stats):
+    """`stats describe --by g` on 4 seeded files (a group column of six values with one missing, a numeric column and a text column), --ddof 1 and 0: the hash of the bytes printed."""
+    r = gate_special.SM64(23)
+    out = []
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        for k, n in enumerate((5, 20, 100, 400)):
+            groups = ["a", "b", "", "c c", '"a"', "\u00e9"]
+            g = [groups[int(r.next() % 6)] for _ in range(n)]
+            num = gate_describe.column(r, "uniform", n)
+            txt = gate_describe.column(r, "levels", n)
+            rows = [[g[i], num[i], txt[i]] for i in range(n)]
+            h = hashlib.sha256()
+            for ddof in (1, 0):
+                p = gate_describe.run(stats, tmp, ["g", "x", "t"], rows, ddof, ["--by", "g"])
+                if p.returncode != 0:
+                    raise RuntimeError("stats --by exit %d" % p.returncode)
+                h.update(p.stdout.encode())
+            out.append("describe-by\tfile%02d\t%d\t%s" % (k, n, h.hexdigest()))
+    return out
+
+
 def fingerprint(driver, acc, threads_check=True, stats=None):
     lines = []
     bad = []
@@ -109,6 +131,7 @@ def fingerprint(driver, acc, threads_check=True, stats=None):
         lines.append("acc\t%s\t%d\t%s" % (name, len(vecs), sha(r.stdout)))
     if stats:
         lines += describe_lines(stats)
+        lines += describe_by_lines(stats)
     return lines, bad
 
 
