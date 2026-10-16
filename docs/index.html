@@ -95,7 +95,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2rem; color: var(-
     <div class="bar"><i></i><i></i><i></i> a real run, replayed <button id="replay" type="button">&#8635; replay</button></div>
     <pre id="screen"></pre>
   </div>
-  <p class="caption">Two real runs of <code>stats describe</code> on a Mac (Apple M4 Max): the file <code>docs/example/readings.csv</code> of this repository, and a file with a short record. The command prints one line of JSON, which the page wraps; nothing is elided or edited. It is a replay, not a live session. The numbers in it are the exact mean, variance, skewness and kurtosis of the doubles in the file, each rounded once (the standard deviation is the square root of the rounded variance).</p>
+  <p class="caption">Two real runs of <code>stats describe</code> on a Mac (Apple M4 Max): the file <code>docs/example/readings.csv</code> of this repository, and a file with a short record. The command prints one line of JSON, which the page wraps; nothing is elided or edited. It is a replay, not a live session. The numbers in it are the exact mean, variance, skewness and kurtosis of the doubles in the file, each rounded once; the quantiles are type 7 at 0, 0.25, 0.5, 0.75 and 1 (the standard deviation is the square root of the rounded variance).</p>
 </div>
 
 <section class="alt" id="why"><div class="wrap">
@@ -145,13 +145,13 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2rem; color: var(-
 
 <section id="first"><div class="wrap">
   <h2>The first command</h2>
-  <p class="lead"><code>stats describe FILE</code> reads a CSV and describes each column. The mean, the variance, the skewness and the kurtosis come from sums that are exact and rounded once.</p>
+  <p class="lead"><code>stats describe FILE</code> reads a CSV and describes each column. The mean, the variance, the skewness, the kurtosis and the quantiles come from exact arithmetic, rounded once.</p>
   <div class="cards">
     <div class="card"><div class="ic">&#129518;</div><h3>Exact, so it can be checked</h3><p>The <code>drift</code> column of the example (readings near 1e8 that differ in the first decimal) has variance <code>0.022142858015639467</code>, the exactly rounded value. The textbook one-pass formula in plain doubles gives <code>-2.2857</code> on the same eight numbers (a negative variance; Python 3.14 on this Mac).</p></div>
     <div class="card"><div class="ic">&#128196;</div><h3>Same bytes, any row order</h3><p>Shuffling the rows of a file cannot change a byte of the answer, and the answer is the same on a Mac, on a Linux x86-64 machine and on three GitHub runners (x86-64, aarch64, macOS). <code>stats</code> uses no threads, no clock and no network: the compiler proves it.</p></div>
     <div class="card"><div class="ic">&#128679;</div><h3>Refusals with a name</h3><p>A short record is <code>stats.csv-ragged</code>, exit 8, with the line number. 25 refusal cases and 5,000 hostile files are in the gates: no trap, no hang, one line of JSON.</p></div>
   </div>
-  <p class="fine">Measured: 1,000 generated files, 48,878 values, every one bit for bit equal to exact fractions rounded once, and 55 of 55 mutants of the program and of its exact moments killed. Not built yet: quantiles, histogram, distinct counts, <code>--by</code>.</p>
+  <p class="fine">Measured: 1,000 generated files, 54,244 values, every one bit for bit equal to exact fractions rounded once (the nine quantile definitions against an independent implementation of the paper's formulas), and 83 of 83 mutants of the program and of its exact arithmetic killed. Not built yet: histogram, distinct counts, <code>--by</code>.</p>
 </div></section>
 
 <section class="alt" id="numbers"><div class="wrap">
@@ -180,7 +180,7 @@ python3 -m venv .venv &amp;&amp; .venv/bin/pip install -r ci/requirements.txt
 sh scripts/check.sh            # every gate, minutes
 echo "1 4000000000000000 4024000000000000" | build/special-check t_sf
 1 3fa2c98ee9420ee7 0           # t_sf(2, df 10): the bits of the answer</code></pre>
-  <p class="lead" style="margin-bottom:0">Next in <code>describe</code>: quantiles, histogram and distinct counts; then correlations, tests, intervals, resampling and regression.</p>
+  <p class="lead" style="margin-bottom:0">Next in <code>describe</code>: histogram, distinct counts and <code>--by</code>; then correlations, tests, intervals, resampling and regression.</p>
 </div></section>
 
 <section class="alt"><div class="wrap">
@@ -244,7 +244,7 @@ echo "1 4000000000000000 4024000000000000" | build/special-check t_sf
   ],
   [
     "g",
-    "{\"ok\":true,\"command\":\"stats\",\"schema\":\"stats.v1\",\"data\":{\"rows\":8,\"ddof\":1,\"rounding\":\"mean, variance, skewness, excess kurtosis: exact, rounded once; sd: the square root of the rounded variance, two roundings\",\"columns\":[{\"name\":\"sensor\",\"kind\":\"text\",\"count\":8,\"missing\":0},{\"name\":\"temp\",\"kind\":\"numeric\",\"count\":7,\"missing\":1,\"min\":21.4,\"max\":22.3,\"mean\":21.84285714285714,\"variance\":0.10619047619047664,\"sd\":0.3258688021128697,\"skewness\":-0.0700715376042248,\"kurtosis\":-1.2521365802650364},{\"name\":\"pressure\",\"kind\":\"numeric\",\"count\":7,\"missing\":1,\"min\":1011.9,\"max\":1013.5,\"mean\":1012.8285714285714,\"variance\":0.2857142857143036,\"sd\":0.5345224838248654,\"skewness\":-0.5953924651017629,\"kurtosis\":-0.6063250000001137},{\"name\":\"drift\",\"kind\":\"numeric\",\"count\":8,\"missing\":0,\"min\":100000000.1,\"max\":100000000.5,\"mean\":100000000.275,\"variance\":0.022142858015639467,\"sd\":0.1488047647612114,\"skewness\":0.17381154384018935,\"kurtosis\":-1.338189406223851}]},\"meta\":{\"version\":\"0.1.0\"}}"
+    "{\"ok\":true,\"command\":\"stats\",\"schema\":\"stats.v1\",\"data\":{\"rows\":8,\"ddof\":1,\"quantile_type\":7,\"rounding\":\"mean, variance, skewness, excess kurtosis, quantiles: exact, rounded once; sd: the square root of the rounded variance, two roundings\",\"columns\":[{\"name\":\"sensor\",\"kind\":\"text\",\"count\":8,\"missing\":0},{\"name\":\"temp\",\"kind\":\"numeric\",\"count\":7,\"missing\":1,\"min\":21.4,\"max\":22.3,\"mean\":21.84285714285714,\"variance\":0.10619047619047664,\"sd\":0.3258688021128697,\"skewness\":-0.0700715376042248,\"kurtosis\":-1.2521365802650364,\"quantiles\":[{\"p\":\"0\",\"value\":21.4},{\"p\":\"0.25\",\"value\":21.6},{\"p\":\"0.5\",\"value\":21.9},{\"p\":\"0.75\",\"value\":22.05},{\"p\":\"1\",\"value\":22.3}]},{\"name\":\"pressure\",\"kind\":\"numeric\",\"count\":7,\"missing\":1,\"min\":1011.9,\"max\":1013.5,\"mean\":1012.8285714285714,\"variance\":0.2857142857143036,\"sd\":0.5345224838248654,\"skewness\":-0.5953924651017629,\"kurtosis\":-0.6063250000001137,\"quantiles\":[{\"p\":\"0\",\"value\":1011.9},{\"p\":\"0.25\",\"value\":1012.5999999999999},{\"p\":\"0.5\",\"value\":1012.9},{\"p\":\"0.75\",\"value\":1013.1500000000001},{\"p\":\"1\",\"value\":1013.5}]},{\"name\":\"drift\",\"kind\":\"numeric\",\"count\":8,\"missing\":0,\"min\":100000000.1,\"max\":100000000.5,\"mean\":100000000.275,\"variance\":0.022142858015639467,\"sd\":0.1488047647612114,\"skewness\":0.17381154384018935,\"kurtosis\":-1.338189406223851,\"quantiles\":[{\"p\":\"0\",\"value\":100000000.1},{\"p\":\"0.25\",\"value\":100000000.175},{\"p\":\"0.5\",\"value\":100000000.25},{\"p\":\"0.75\",\"value\":100000000.4},{\"p\":\"1\",\"value\":100000000.5}]}]},\"meta\":{\"version\":\"0.1.0\"}}"
   ],
   [
     "d",

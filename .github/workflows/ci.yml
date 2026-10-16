@@ -166,6 +166,7 @@ jobs:
           cancho build --bin bigint-check
           cancho build --bin psum-check
           cancho build --bin stats
+          cancho build --bin quantile-check
 
       - name: The pins agree with the document (with the stores installed)
         if: steps.stores.outputs.fetchable == 'yes'
@@ -189,6 +190,10 @@ jobs:
           python3 scripts/gate_describe.py --files 200
           python3 scripts/gate_describe_refusals.py --fuzz 1000
           python3 scripts/manifest.py --check
+
+      - name: Quantiles (nine definitions) against an independent exact reference
+        if: steps.stores.outputs.fetchable == 'yes'
+        run: python3 scripts/gate_quantile.py --cases 3000
 
       - name: Exact power sums against Fractions
         if: steps.stores.outputs.fetchable == 'yes'

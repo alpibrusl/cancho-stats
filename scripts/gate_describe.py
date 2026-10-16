@@ -22,6 +22,7 @@ from fractions import Fraction
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from gate_special import SM64  # noqa: E402
+import gate_quantile  # noqa: E402
 
 MAXF = float.fromhex("0x1.fffffffffffffp+1023")
 
@@ -106,7 +107,7 @@ def shape_moments(fr):
     return g1, float(m4 / (m2 * m2) - 3)
 
 
-def expected(cells, ddof):
+def expected(cells, ddof, qtype=7, probs=("0", "0.25", "0.5", "0.75", "1")):
     vals = []
     kind = "numeric"
     nonmiss = 0
@@ -146,6 +147,8 @@ def expected(cells, ddof):
     else:
         out["variance"] = None
         out["sd"] = None
+    srt = sorted(vals)
+    out["quantiles"] = [float(gate_quantile.hf(srt, Fraction(pt), qtype)) for pt in probs]
     if n >= 2:
         out["skewness"], out["kurtosis"] = shape_moments(fr)
     else:
@@ -153,10 +156,10 @@ def expected(cells, ddof):
     return out
 
 
-def run(binary, tmp, names, rows, ddof):
+def run(binary, tmp, names, rows, ddof, extra=()):
     text = ",".join(names) + "\n" + "\n".join(",".join(r) for r in rows) + "\n"
     (tmp / "f.csv").write_text(text)
-    p = subprocess.run([binary, "describe", "--root", str(tmp), "--ddof", str(ddof), "f.csv"], capture_output=True, text=True, timeout=120)
+    p = subprocess.run([binary, "describe", "--root", str(tmp), "--ddof", str(ddof)] + list(extra) + ["f.csv"], capture_output=True, text=True, timeout=120)
     return p
 
 
@@ -203,12 +206,34 @@ def main():
                     want = expected(cols[j], ddof)
                     for k, wv in want.items():
                         checked += 1
+                        if k == "quantiles":
+                            gq = [q["value"] for q in got[j].get("quantiles", [])]
+                            if len(gq) != len(wv) or any(not same(x, y) for x, y in zip(gq, wv)):
+                                bad.append((fi, "%s ddof %d quantiles: want %r got %r" % (names[j], ddof, wv, gq)))
+                            continue
                         if not same(got[j].get(k), wv):
                             bad.append((fi, "%s ddof %d key %s: want %r got %r" % (names[j], ddof, k, wv, got[j].get(k))))
-                    for k in ("min", "max", "mean", "variance", "sd", "skewness", "kurtosis"):
+                    for k in ("min", "max", "mean", "variance", "sd", "skewness", "kurtosis", "quantiles"):
                         if k not in want and k in got[j]:
                             bad.append((fi, "%s: unexpected key %s" % (names[j], k)))
                 if ddof == 1:
+                    qt = 1 + int(r.next() % 9)
+                    probs = []
+                    for _ in range(1 + int(r.next() % 4)):
+                        d = int(r.next() % 10)
+                        probs.append("%.*f" % (d, (int(r.next() % (10 ** d + 1))) / (10 ** d)) if d else str(int(r.next() % 2)))
+                    p3 = run(a.bin, tmp, names, rows, ddof, ["--quantile-type", str(qt), "--quantiles", ",".join(probs)])
+                    if p3.returncode != 0:
+                        bad.append((fi, "quantile flags: exit %d: %s" % (p3.returncode, p3.stdout[:120])))
+                    else:
+                        got3 = json.loads(p3.stdout)["data"]["columns"]
+                        for j in range(ncols):
+                            want3 = expected(cols[j], ddof, qt, tuple(probs)).get("quantiles")
+                            if want3 is not None:
+                                checked += 1
+                                gq = [q["value"] for q in got3[j].get("quantiles", [])]
+                                if len(gq) != len(want3) or any(not same(x, y) for x, y in zip(gq, want3)):
+                                    bad.append((fi, "%s type %d p %s: want %r got %r" % (names[j], qt, probs, want3, gq)))
                     # row order cannot change a byte
                     order = list(range(n))
                     for i in range(n - 1, 0, -1):

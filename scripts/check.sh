@@ -13,10 +13,11 @@ step "pins"; sh scripts/check_pins.sh; $PY scripts/mutants_pins.py | tail -1
 step "workflow"; $PY scripts/check_workflow.py; $PY scripts/check_workflow.py --mutants | tail -1
 step "documents"; sh scripts/check_docs.sh
 step "references"; $PY scripts/special_ref.py --selfcheck
-step "build"; $CANCHO install >/dev/null; $CANCHO build --bin special-check; $CANCHO build --bin acc-check; $CANCHO build --bin bigint-check; $CANCHO build --bin psum-check; $CANCHO build --bin stats
+step "build"; $CANCHO install >/dev/null; $CANCHO build --bin special-check; $CANCHO build --bin acc-check; $CANCHO build --bin bigint-check; $CANCHO build --bin psum-check; $CANCHO build --bin stats; $CANCHO build --bin quantile-check
 step "consumption"; $PY scripts/consume.py --mutants | tail -2
 step "domain and fuzz"; $PY scripts/gate_domain.py --fuzz 50000 | grep -v "first case with"
 step "big integers"; $PY scripts/gate_bigint.py --n 3000
+step "quantiles"; $PY scripts/gate_quantile.py --cases 3000
 step "stats describe"; $PY scripts/gate_describe.py --files 200; $PY scripts/gate_describe_refusals.py --fuzz 1000; $PY scripts/manifest.py --check
 step "power sums"; $PY scripts/gate_psum.py --vectors 300
 step "exact accumulation"; $PY scripts/measure_acc.py | tail -3
@@ -26,6 +27,6 @@ step "determinism"; $PY scripts/xplat_fp.py; $PY scripts/xplat_fp.py --mutants |
 if [ "$1" = "--full" ]; then
   step "accuracy sweeps (10%)"; $PY scripts/gate_special.py --n-scale 0.1
   step "mutants of the special functions"; $PY scripts/mutants_special.py
-  step "mutants of the big integers, the power sums and stats"; $PY scripts/mutants_bigint.py; $PY scripts/mutants_psum.py; $PY scripts/mutants_stats.py
+  step "mutants of the big integers, the power sums and stats"; $PY scripts/mutants_bigint.py; $PY scripts/mutants_psum.py; $PY scripts/mutants_stats.py; $PY scripts/mutants_central.py; $PY scripts/mutants_quantile.py
 fi
 echo; echo "check.sh: all gates passed"
