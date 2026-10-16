@@ -92,6 +92,42 @@ pub fn add[&a, &w](acc: &!a [int], k: int, bits: int, work: &!w [int]) -> [] int
     return add_shifted(acc, base, len, work, poff, npw, k * f);
 }
 
+// Add the product x * y of two finite doubles (docs/corr.md section 3) to an accumulator of the layout of k = 2: the integer product of the two mantissas (up to 106 bits) at the bit offset fx + fy, in units
+// of 2^-2148, the sign by the signs of the two factors. `work` is `scratch()` ints (overwritten). Exact for every pair of finite doubles: no range rule.
+pub fn add_cross[&a, &w](acc: &!a [int], bx: int, by: int, work: &!w [int]) -> [] int {
+    let ex = bx >> 52 & 2047;
+    let ey = by >> 52 & 2047;
+    var mx = bx & 4503599627370495;
+    var my = by & 4503599627370495;
+    var fx = 0;
+    var fy = 0;
+    if ex != 0 {
+        mx = mx | 4503599627370496;
+        fx = ex - 1;
+    }
+    if ey != 0 {
+        my = my | 4503599627370496;
+        fy = ey - 1;
+    }
+    if mx == 0 || my == 0 {
+        return 0;
+    }
+    bigint.clear(work, 32);
+    work[0] = mx & mask();
+    work[1] = mx >> 26 & mask();
+    work[2] = mx >> 52;
+    work[3] = my & mask();
+    work[4] = my >> 26 & mask();
+    work[5] = my >> 52;
+    bigint.mul(work[6..12], work[0..3], 3, work[3..6], 3);
+    let len = limbs(2);
+    var base = 0;
+    if bx < 0 != by < 0 {
+        base = len;
+    }
+    return add_shifted(acc, base, len, work, 6, 6, fx + fy);
+}
+
 // out[0 .. limbs(k)) = |P - N|; answers the sign: 1, 0 or -1 for the sum
 pub fn magnitude[&a, &o](acc: &a [int], k: int, out: &!o [int]) -> [] int {
     let len = limbs(k);

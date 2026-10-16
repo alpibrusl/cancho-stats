@@ -1,6 +1,6 @@
 // psum-check: the exact power sums of acc.psum on vectors from standard input, for scripts/gate_psum.py. One line per vector:
 //
-//     K N HEX1 .. HEXN       K the power (1 to 4), N the count (at most 4096), each HEX the 16 hex digits of the bits of a FINITE double
+//     K N HEX1 .. HEXN       K the power (1 to 4), or 5 for the sum of products x y of consecutive PAIRS (N even), N the count (at most 4096), each HEX the 16 hex digits of the bits of a FINITE double
 //
 // One line per vector: `BITS CODE`, the sum of x^K rounded once to a double as 16 hex digits (the sign bit set when negative; zero is all zeros), and 1 when the exact sum is beyond the largest double.
 edition 5;
@@ -36,20 +36,31 @@ fn hex16[&i](io: &!i Io, bits: int) -> [io_write] int {
 }
 
 fn answer[&h, &i, &x](heap: &!h Heap, io: &!i Io, k: int, xs: &x [int], n: int) -> [heap, io_write] int {
-    let acc = box_slice(heap, psum.size(k) + 1, 0);
+    var kk = k;
+    if k == 5 {
+        kk = 2;
+    }
+    let acc = box_slice(heap, psum.size(kk) + 1, 0);
     let work = box_slice(heap, psum.scratch() + 1, 0);
-    let out = box_slice(heap, psum.limbs(k) + 1, 0);
+    let out = box_slice(heap, psum.limbs(kk) + 1, 0);
     var bits = 0;
     var code = 0;
     borrow mut acc as &!aw in {
         borrow mut work as &!ww in {
             borrow mut out as &!ow in {
                 var j = 0;
-                while j < n {
-                    psum.add(contents(aw), k, xs[j], contents(ww));
-                    j = j + 1;
+                if k == 5 {
+                    while j + 1 < n {
+                        psum.add_cross(contents(aw), xs[j], xs[j + 1], contents(ww));
+                        j = j + 2;
+                    }
+                } else {
+                    while j < n {
+                        psum.add(contents(aw), k, xs[j], contents(ww));
+                        j = j + 1;
+                    }
                 }
-                let (b, c) = psum.rounded(contents(aw), k, contents(ow));
+                let (b, c) = psum.rounded(contents(aw), kk, contents(ow));
                 bits = b;
                 code = c;
             }
@@ -93,7 +104,7 @@ fn serve[&h, &i](heap: &!h Heap, io: &!i Io) -> [heap, io_read, io_write] int {
                     v = 0;
                 }
                 if c == '\n' {
-                    if tok > 1 && k >= 1 && k <= 4 {
+                    if tok > 1 && k >= 1 && k <= 5 {
                         answer(heap, io, k, xs, n);
                     }
                     tok = 0;

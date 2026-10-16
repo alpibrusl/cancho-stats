@@ -1,0 +1,201 @@
+edition 5;
+
+module acc.corr;
+
+import acc.bigint;
+import acc.central;
+import acc.psum;
+
+// The exact Pearson correlation of docs/corr.md from the exact sums of one pair of columns. With n the number of rows and the sums Sx, Sy (units 2^-1074) and Sxx, Syy, Sxy (units 2^-2148) of acc.psum,
+//     N  = n Sxy - Sx Sy      Dx = n Sxx - Sx^2      Dy = n Syy - Sy^2
+// are exact integers in the same unit, and
+//     r = sign(N) sqrt(N^2 / (Dx Dy))       y = r^2 = N^2 / (Dx Dy)       x = 1 - r^2 = (Dx Dy - N^2) / (Dx Dy)
+// are each ONE rounding of an exact rational. (x, y) is the pair `special.beta_xy` takes for the p-value, so 1 - r^2 is never formed from a rounded r.
+
+// the layout of the accumulators of one pair: Sx, Sy (k = 1), then Sxx, Syy, Sxy (k = 2), the sum of the products in the layout of k = 2
+pub fn stride() -> [] int {
+    return 2 * psum.size(1) + 3 * psum.size(2);
+}
+
+pub fn off_sx() -> [] int {
+    return 0;
+}
+
+pub fn off_sy() -> [] int {
+    return psum.size(1);
+}
+
+pub fn off_sxx() -> [] int {
+    return 2 * psum.size(1);
+}
+
+pub fn off_syy() -> [] int {
+    return 2 * psum.size(1) + psum.size(2);
+}
+
+pub fn off_sxy() -> [] int {
+    return 2 * psum.size(1) + 2 * psum.size(2);
+}
+
+// the limbs of a signed numerator or a difference: n Sxx and n Sxy are below 2^(4302 + 64 + 40), Sx Sy below 2^(4302 + 128)
+fn width() -> [] int {
+    return 180;
+}
+
+fn used[&a](a: &a [int], n: int) -> [] int {
+    let b = bigint.bit_length(a, n);
+    if b == 0 {
+        return 1;
+    }
+    return (b + 25) / 26;
+}
+
+// d = n S2 - S1^2 for the accumulators `sa` (k = 1) and `sb` (k = 2); d has width() limbs
+fn spread[&h, &a, &b, &n, &d](heap: &!h Heap, sa: &a [int], sb: &b [int], nl: &n [int], d: &!d [int]) -> [heap] int {
+    let l1 = psum.limbs(1);
+    let l2 = psum.limbs(2);
+    let m1 = box_slice(heap, l1 + 1, 0);
+    let m2 = box_slice(heap, l2 + 1, 0);
+    let sq = box_slice(heap, width() + 1, 0);
+    borrow mut m1 as &!w1 in {
+        borrow mut m2 as &!w2 in {
+            borrow mut sq as &!ws in {
+                psum.magnitude(sa, 1, contents(w1));
+                psum.magnitude(sb, 2, contents(w2));
+                bigint.clear(d, width());
+                bigint.mul(d[0..l2 + 3], contents(w2), l2, nl, 3);
+                bigint.mul(contents(ws)[0..2 * l1], contents(w1), l1, contents(w1), l1);
+                bigint.sub_in(d, width(), contents(ws), width());
+            }
+        }
+    }
+    unbox_slice(heap, m1);
+    unbox_slice(heap, m2);
+    unbox_slice(heap, sq);
+    return 0;
+}
+
+// The correlation of one pair from its accumulators `accs` (the layout above) and its row count n. Answers (status, r, x, y): status 0 and the bits of r (with the sign), of x = 1 - r^2 and of y = r^2;
+// status 1 when a column is constant over the rows (the correlation is undefined: Dx or Dy is 0); status 2 when n < 2.
+pub fn pearson[&h, &a](heap: &!h Heap, accs: &a [int], n: int) -> [heap] (int, int, int, int) {
+    if n < 2 {
+        return (2, 0, 0, 0);
+    }
+    let l1 = psum.limbs(1);
+    let l2 = psum.limbs(2);
+    let w = width();
+    let nlb = box_slice(heap, 4, 0);
+    let dx = box_slice(heap, w + 1, 0);
+    let dy = box_slice(heap, w + 1, 0);
+    let mx = box_slice(heap, l1 + 1, 0);
+    let my = box_slice(heap, l1 + 1, 0);
+    let mxy = box_slice(heap, l2 + 1, 0);
+    let pp = box_slice(heap, w + 1, 0);
+    let qq = box_slice(heap, w + 1, 0);
+    let dd = box_slice(heap, 2 * w + 2, 0);
+    let n2 = box_slice(heap, 2 * w + 2, 0);
+    let rr = box_slice(heap, 2 * w + 2, 0);
+    var status = 0;
+    var rbits = 0;
+    var xbits = 0;
+    var ybits = 0;
+    borrow mut nlb as &!wn in {
+        central.limbs_of(n, contents(wn));
+        borrow mut dx as &!wdx in {
+            borrow mut dy as &!wdy in {
+                spread(heap, accs[off_sx()..off_sx() + psum.size(1)], accs[off_sxx()..off_sxx() + psum.size(2)], contents(wn), contents(wdx));
+                spread(heap, accs[off_sy()..off_sy() + psum.size(1)], accs[off_syy()..off_syy() + psum.size(2)], contents(wn), contents(wdy));
+                let lx = used(contents(wdx), w);
+                let ly = used(contents(wdy), w);
+                if bigint.is_zero(contents(wdx), w) || bigint.is_zero(contents(wdy), w) {
+                    status = 1;
+                } else {
+                    borrow mut mx as &!wmx in {
+                        borrow mut my as &!wmy in {
+                            borrow mut mxy as &!wmxy in {
+                                borrow mut pp as &!wp in {
+                                    borrow mut qq as &!wq in {
+                                        let sgx = psum.magnitude(accs[off_sx()..off_sx() + psum.size(1)], 1, contents(wmx));
+                                        let sgy = psum.magnitude(accs[off_sy()..off_sy() + psum.size(1)], 1, contents(wmy));
+                                        let sgxy = psum.magnitude(accs[off_sxy()..off_sxy() + psum.size(2)], 2, contents(wmxy));
+                                        bigint.clear(contents(wp), w);
+                                        bigint.clear(contents(wq), w);
+                                        bigint.mul(contents(wp)[0..l2 + 3], contents(wmxy), l2, contents(wn), 3);
+                                        bigint.mul(contents(wq)[0..2 * l1], contents(wmx), l1, contents(wmy), l1);
+                                        // N = s1 P + s2 Q with P = n |Sxy|, Q = |Sx| |Sy|, s1 the sign of Sxy and s2 = - sign(Sx) sign(Sy) (a zero sum has a zero magnitude, so its sign does not matter)
+                                        var s1 = 1;
+                                        if sgxy < 0 {
+                                            s1 = -1;
+                                        }
+                                        var sx = 1;
+                                        if sgx < 0 {
+                                            sx = -1;
+                                        }
+                                        var sy = 1;
+                                        if sgy < 0 {
+                                            sy = -1;
+                                        }
+                                        let s2 = 0 - sx * sy;
+                                        var neg = s1 < 0;
+                                        if s1 == s2 {
+                                            bigint.add_in(contents(wp), w, contents(wq), w);
+                                        } else {
+                                            let c = bigint.compare(contents(wp), w, contents(wq), w);
+                                            if c >= 0 {
+                                                bigint.sub_in(contents(wp), w, contents(wq), w);
+                                            } else {
+                                                bigint.sub_in(contents(wq), w, contents(wp), w);
+                                                bigint.copy(contents(wp), contents(wq), w);
+                                                neg = s2 < 0;
+                                            }
+                                        }
+                                        let ln = used(contents(wp), w);
+                                        borrow mut dd as &!wdd in {
+                                            borrow mut n2 as &!wn2 in {
+                                                borrow mut rr as &!wrr in {
+                                                    bigint.mul(contents(wdd)[0..lx + ly], contents(wdx), lx, contents(wdy), ly);
+                                                    bigint.mul(contents(wn2)[0..2 * ln], contents(wp), ln, contents(wp), ln);
+                                                    let ld = used(contents(wdd), lx + ly);
+                                                    let l2n = used(contents(wn2), 2 * ln);
+                                                    let (rb, rc) = central.sqrt_ratio_bits(heap, contents(wn2), l2n, contents(wdd), ld);
+                                                    let (yb, yc) = central.ratio_bits(heap, contents(wn2), l2n, contents(wdd), ld, 0, false);
+                                                    // x = (Dx Dy - N^2) / (Dx Dy)
+                                                    bigint.copy(contents(wrr), contents(wdd), ld);
+                                                    var nb = l2n;
+                                                    if nb > ld {
+                                                        nb = ld;
+                                                    }
+                                                    bigint.sub_in(contents(wrr), ld, contents(wn2), nb);
+                                                    let lr = used(contents(wrr), ld);
+                                                    let (xb, xc) = central.ratio_bits(heap, contents(wrr), lr, contents(wdd), ld, 0, false);
+                                                    rbits = rb;
+                                                    if neg && !bigint.is_zero(contents(wp), w) {
+                                                        rbits = rb | 0 - 9223372036854775807 - 1;
+                                                    }
+                                                    xbits = xb;
+                                                    ybits = yb;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    unbox_slice(heap, nlb);
+    unbox_slice(heap, dx);
+    unbox_slice(heap, dy);
+    unbox_slice(heap, mx);
+    unbox_slice(heap, my);
+    unbox_slice(heap, mxy);
+    unbox_slice(heap, pp);
+    unbox_slice(heap, qq);
+    unbox_slice(heap, dd);
+    unbox_slice(heap, n2);
+    unbox_slice(heap, rr);
+    return (status, rbits, xbits, ybits);
+}
