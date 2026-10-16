@@ -26,6 +26,12 @@ from gate_special import SM64, hx, unhx, nb  # noqa: E402
 
 ARITY = {"lgamma": 1, "erf": 1, "erfc": 1, "gamma_p": 2, "gamma_q": 2, "beta_lo": 3, "beta_up": 3, "norm_cdf": 1, "norm_sf": 1, "qnorm": 1,
          "t_cdf": 2, "t_sf": 2, "chi2_cdf": 2, "chi2_sf": 2, "f_cdf": 3, "f_sf": 3, "binom_cdf": 3, "binom_sf": 3}
+QUANT = {"gamma_quantile": 2, "gamma_quantile_upper": 2, "chi2_quantile": 2, "chi2_quantile_upper": 2, "beta_quantile": 3, "beta_quantile_comp": 3, "beta_quantile_upper": 3,
+         "t_quantile": 2, "t_quantile_upper": 2, "f_quantile": 3, "f_quantile_upper": 3, "gamma_iterations": 2, "beta_iterations": 3}
+ARITY.update(QUANT)
+# the quantile functions answer values of these kinds: non-negative (gamma, chi-square, F), in [0, 1] (beta), any sign (t), an iteration count
+NONNEG = {"gamma_quantile", "gamma_quantile_upper", "chi2_quantile", "chi2_quantile_upper", "f_quantile", "f_quantile_upper"}
+UNIT = {"beta_quantile", "beta_quantile_comp", "beta_quantile_upper"}
 PAIRS = [("gamma_p", "gamma_q"), ("beta_lo", "beta_up"), ("norm_cdf", "norm_sf"), ("t_cdf", "t_sf"), ("chi2_cdf", "chi2_sf"), ("f_cdf", "f_sf"), ("binom_cdf", "binom_sf")]
 PROB = {"gamma_p", "gamma_q", "beta_lo", "beta_up", "norm_cdf", "norm_sf", "t_cdf", "t_sf", "chi2_cdf", "chi2_sf", "f_cdf", "f_sf", "binom_cdf", "binom_sf"}
 TAGS = {}
@@ -40,7 +46,7 @@ def driver_tags(driver):
 def run(driver, fn, cases, threads):
     inp = "".join("%d %s\n" % (i, " ".join(hx(a) for a in c)) for i, c in enumerate(cases))
     argv = [driver, fn] + (["--threads", str(threads)] if threads else [])
-    r = subprocess.run(argv, input=inp, capture_output=True, text=True, timeout=20 if len(cases) < 5000 else 180)
+    r = subprocess.run(argv, input=inp, capture_output=True, text=True, timeout=(120 if fn in QUANT else 20) if len(cases) < 5000 else 600)
     if r.returncode != 0:
         raise RuntimeError("%s exit %d (trap or crash) on a batch of %d: %s" % (fn, r.returncode, len(cases), (r.stderr or "")[-200:]))
     out = [ln.split() for ln in r.stdout.strip().split("\n")]
@@ -61,7 +67,20 @@ def specials():
     return base + nbs + nan_payloads
 
 
+def quantile_edges(fn):
+    """probabilities against shapes, a smaller set than `specials` (each valid case is an iteration, not a formula): every refusal of 9.3 and the ends of every range"""
+    big = float.fromhex("0x1.fffffffffffffp+1023")
+    ps = [0.0, -0.0, 1.0, 0.5, 5e-324, 1e-300, 2.0 ** -53, 1.0 - 2.0 ** -53, nb(0.5, 1), nb(0.5, -1), 0.02425, 0.975, 1e-10, NAN, INF, -1.0, 2.0]
+    ss = [0.0, -1.0, 5e-324, 1e-300, 1e-2, 0.5, 1.0, 2.0, 15.0, 1e4, 1e6, 1e8, nb(1e8, 1), 3e8, INF, NAN, big]
+    k = ARITY[fn]
+    if k == 2:
+        return [(p, a) for p in ps for a in ss]
+    return [(p, a, b) for p in ps for a in ss[2:] for b in ss[2:]] + [(0.5, a, b) for a in ss[:2] for b in ss] + [(0.5, a, b) for a in ss[2:] for b in ss[:2]]
+
+
 def edge_cases(fn):
+    if fn in QUANT:
+        return quantile_edges(fn)
     sp = specials()
     k = ARITY[fn]
     cs = []
@@ -95,6 +114,18 @@ EXPECT = [
     ("chi2_cdf", (-1.0, 3.0), "stats.domain-param"), ("chi2_sf", (1.0, 3e8), "stats.domain-range"), ("chi2_sf", (NAN, 3.0), "stats.domain-nan"), ("chi2_cdf", (0.0, 3.0), "ok"),
     ("f_cdf", (1.0, 0.0, 2.0), "stats.domain-param"), ("f_cdf", (-1.0, 2.0, 2.0), "stats.domain-param"), ("f_sf", (1.0, 3e8, 2.0), "stats.domain-range"), ("f_sf", (1.0, 2.0, NAN), "stats.domain-nan"), ("f_cdf", (INF, 2.0, 2.0), "ok"),
     ("binom_cdf", (1.0, 10.0, 2.0), "stats.domain-prob"), ("binom_cdf", (1.0, 0.5, 0.5), "stats.domain-param"), ("binom_sf", (1.0, 1.5, 0.5), "stats.domain-param"),
+    ("gamma_quantile", (0.5, 2.0), "ok"), ("gamma_quantile", (0.0, 2.0), "stats.domain-prob"), ("gamma_quantile", (1.0, 2.0), "stats.domain-prob"), ("gamma_quantile", (0.5, 0.0), "stats.domain-param"),
+    ("gamma_quantile_upper", (NAN, 2.0), "stats.domain-nan"), ("gamma_quantile_upper", (0.5, 2e8), "stats.domain-range"), ("gamma_quantile_upper", (0.5, INF), "stats.domain-param"),
+    ("chi2_quantile", (0.95, 3.0), "ok"), ("chi2_quantile", (0.95, -3.0), "stats.domain-param"), ("chi2_quantile_upper", (0.95, 5e8), "stats.domain-range"), ("chi2_quantile", (-0.5, 3.0), "stats.domain-prob"),
+    ("beta_quantile", (0.3, 2.0, 5.0), "ok"), ("beta_quantile", (0.3, 0.0, 5.0), "stats.domain-param"), ("beta_quantile", (0.3, 2.0, 2e8), "stats.domain-range"), ("beta_quantile_comp", (1.5, 2.0, 5.0), "stats.domain-prob"),
+    ("beta_quantile_upper", (0.3, NAN, 5.0), "stats.domain-nan"), ("beta_quantile_upper", (0.3, 2.0, -1.0), "stats.domain-param"),
+    ("t_quantile", (0.975, 10.0), "ok"), ("t_quantile", (0.5, 10.0), "ok"), ("t_quantile", (0.975, 0.0), "stats.domain-param"), ("t_quantile", (0.975, 3e8), "stats.domain-range"), ("t_quantile", (0.0, 10.0), "stats.domain-prob"),
+    ("t_quantile", (1e-300, 0.01), "stats.domain-range"), ("t_quantile_upper", (NAN, 10.0), "stats.domain-nan"), ("t_quantile_upper", (0.025, 10.0), "ok"),
+    ("f_quantile", (0.95, 3.0, 10.0), "ok"), ("f_quantile", (0.95, 0.0, 10.0), "stats.domain-param"), ("f_quantile", (0.95, 3.0, 3e8), "stats.domain-range"), ("f_quantile_upper", (1.0, 3.0, 10.0), "stats.domain-prob"),
+    ("f_quantile_upper", (0.95, NAN, 10.0), "stats.domain-nan"),
+    # roots among the subnormals, where a step is smaller than the spacing of the doubles (found by this gate: these did not converge)
+    ("chi2_quantile_upper", (0.975, 0.01), "ok"), ("gamma_quantile", (0.025, 0.005), "ok"), ("f_quantile", (0.02425, 0.01, 0.5), "ok"), ("beta_quantile", (0.0233, 0.005, 0.25), "ok"),
+    ("gamma_quantile", (5e-324, 10000.0), "ok"),
     ("binom_cdf", (1.0, 2e8, 0.5), "stats.domain-range"), ("binom_sf", (1.5, 10.0, 0.5), "stats.domain-param"), ("binom_cdf", (NAN, 10.0, 0.5), "stats.domain-nan"), ("binom_cdf", (3.0, 10.0, 0.5), "ok"),
 ]
 
@@ -111,6 +142,9 @@ def check_expect(driver, tags, bad, threads):
 def contract(fn, case, value, code, tags, bad):
     if code != 0 and (code, fn) not in FIRST:
         FIRST[(code, fn)] = case
+    if code != 0 and fn in QUANT and tags.get(code) == "stats.noconverge":
+        # a quantile that does not converge is a defect, not a refusal of the input: the cap of 200 is a margin, and every input of the domain has an answer
+        bad.append((fn, case, "no convergence in %d iterations" % 200))
     if code != 0:
         if code not in tags:
             bad.append((fn, case, "unknown code %d" % code))
@@ -128,6 +162,12 @@ def contract(fn, case, value, code, tags, bad):
         bad.append((fn, case, "erfc %r outside [0,2]" % value))
     if math.isinf(value):
         bad.append((fn, case, "infinite value with code 0"))
+    if fn in NONNEG and value < 0.0:
+        bad.append((fn, case, "negative quantile %r" % value))
+    if fn in UNIT and not (0.0 <= value <= 1.0):
+        bad.append((fn, case, "beta quantile %r outside [0,1]" % value))
+    if fn in ("gamma_iterations", "beta_iterations") and not (0.0 <= value <= 200.0):
+        bad.append((fn, case, "iteration count %r" % value))
     if fn == "lgamma" and case[0] <= 0.0:
         bad.append((fn, case, "lgamma answered a value for a non-positive argument"))
 
@@ -156,7 +196,7 @@ def main():
             total += len(cs)
             # D2: bit patterns
             fz = []
-            for _ in range(a.fuzz):
+            for _ in range(a.fuzz // 10 if fn in QUANT else a.fuzz):
                 fz.append(tuple(struct.unpack("<d", struct.pack("<Q", r.next()))[0] for _ in range(ARITY[fn])))
             res = run(a.driver, fn, fz, a.threads)
             for c, (v, code) in zip(fz, res):
@@ -199,6 +239,26 @@ def main():
                 if vals[i] < vals[i - 1]:
                     bad.append(("qnorm", (i,), "not monotone"))
                     break
+        # the quantile functions are monotone in p (probabilities a factor 1.01 apart: closer ones are inside the noise of the forward function, which the bound allows)
+        for fn, shape in (("gamma_quantile", (2.5,)), ("gamma_quantile_upper", (0.3,)), ("chi2_quantile", (7.0,)), ("beta_quantile", (2.0, 5.0)), ("beta_quantile_upper", (0.4, 30.0)),
+                          ("t_quantile", (4.0,)), ("f_quantile", (3.0, 12.0))):
+            ps = []
+            v = 1e-300
+            while v < 0.5:
+                ps.append(v)
+                v *= 1.01
+            ps += [0.5 + 0.5 * (i / 300.0) for i in range(300)]
+            res = run(a.driver, fn, [(p,) + shape for p in ps], a.threads)
+            vals = [(x, c) for x, c in res]
+            for i in range(1, len(vals)):
+                if vals[i][1] == 0 and vals[i - 1][1] == 0:
+                    inc = vals[i][0] >= vals[i - 1][0]
+                    dec = vals[i][0] <= vals[i - 1][0]
+                    ok = dec if fn.endswith("upper") else inc
+                    if not ok:
+                        bad.append((fn, (ps[i],) + shape, "not monotone between %r and %r" % (ps[i - 1], ps[i])))
+                        break
+            total += len(ps)
     except Exception as e:
         print("gate_domain: harness failure: %s" % e)
         return 2

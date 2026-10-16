@@ -269,6 +269,185 @@ def binom_tails(k, n, p):
     return +lo, +hi
 
 
+# ------------------------------------------------------------------------------------------------------------------------------ quantiles (docs/numerics.md section 9)
+# The reference solves tail(x) = tau at the working precision from a START that scipy gives in double precision (only the start: the answer is the root of the 100-digit forward functions above,
+# by a secant iteration in ln s that stops at 1e-45 relative). A root below the smallest subnormal is returned as a true tiny number (or 0 when the test below says so), so that the gate
+# can apply the same absolute allowance as everywhere else.
+
+TINY = mpf("5e-324")
+
+
+def _secant_log(g, u0, maxit=80):
+    """the root u of the monotone g(u) by the secant method from u0 and u0 + 1e-9"""
+    u0 = mpf(u0)
+    u1 = u0 + mpf("1e-9")
+    f0 = g(u0)
+    f1 = g(u1)
+    for _ in range(maxit):
+        if f1 == f0:
+            break
+        u2 = u1 - f1 * (u1 - u0) / (f1 - f0)
+        if abs(u2 - u1) < mpf("1e-45") * max(mpf(1), abs(u2)):
+            return u2
+        u0, f0 = u1, f1
+        u1 = u2
+        f1 = g(u1)
+    raise RuntimeError("secant did not converge")
+
+
+def _bisect_log(g, u0, width=2000, steps=300):
+    """the fallback: a sign change by stepping out from u0, then Illinois-style bisection (slow, used only when the start was bad)"""
+    u0 = mpf(u0)
+    lo, hi = u0 - 1, u0 + 1
+    for i in range(24):
+        if g(lo) <= 0:
+            break
+        lo -= 8 * 2 ** i
+    for i in range(24):
+        if g(hi) >= 0:
+            break
+        hi += 8 * 2 ** i
+    if g(lo) > 0 or g(hi) < 0:
+        raise RuntimeError("no sign change")
+    for _ in range(steps):
+        mid = (lo + hi) / 2
+        if g(mid) < 0:
+            lo = mid
+        else:
+            hi = mid
+        if hi - lo < mpf("1e-45") * max(mpf(1), abs(mid)):
+            break
+    return (lo + hi) / 2
+
+
+def _solve_log(g, x0):
+    """the root, VERIFIED: the residual of the forward function at the answer must be below 1e-35 (the secant method can stop on a flat piece far from the root, which an earlier version of this
+    file did once: a quantile whose forward value was 1e-126 for a target of 1e-183 was accepted until the gate's own result, which was right, disagreed)"""
+    g0 = g
+    lo_u, hi_u = mpf(-746), mpf(740)
+
+    def g(u):
+        # every root of these functions is between the smallest subnormal and 1e320, so outside [lo_u, hi_u] the function is continued linearly (steeply, increasing): the iteration cannot wander
+        c = min(max(u, lo_u), hi_u)
+        return g0(c) + 1000 * (u - c)
+
+    u = None
+    try:
+        if x0 and x0 > 0 and x0 < 1e308:
+            u = _secant_log(g, mp.log(mpf(x0)))
+    except RuntimeError:
+        u = None
+    if u is None or abs(g(u)) > mpf("1e-35"):
+        u = _bisect_log(g, mp.log(mpf(x0)) if x0 and x0 > 0 else mpf(0))
+    if abs(g(u)) > mpf("1e-35"):
+        raise RuntimeError("the root was not found: residual %s" % mp.nstr(g(u), 5))
+    return u
+
+
+def gamma_quantile_ref(tau, a, upper):
+    from scipy import special as sp
+
+    tau = mpf(tau)
+    a = mpf(a)
+
+    def tail(x):
+        p, q = gamma_pq(a, x)
+        return q if upper else p
+
+    lt = mp.log(tau)
+    t = tail(TINY)
+    if (not upper and t >= tau) or (upper and t <= tau):
+        return mpf(0)
+    sign = 1 if not upper else -1
+    g = lambda u: sign * (mp.log(tail(mp.exp(u))) - lt)
+    try:
+        x0 = float(sp.gammainccinv(float(a), float(tau)) if upper else sp.gammaincinv(float(a), float(tau)))
+    except Exception:
+        x0 = float(a)
+    if not (0.0 < x0 < 1e300):
+        x0 = float(a)
+    return mp.exp(_solve_log(g, x0))
+
+
+def beta_pair_ref(tau, a, b, upper):
+    """(x, y) with the tail of x equal to tau, the small one solved for, the other 1 minus it (a root below the smallest subnormal answers (0, 1) or (1, 0))"""
+    from scipy import special as sp
+
+    tau = mpf(tau)
+    a = mpf(a)
+    b = mpf(b)
+    lt = mp.log(tau)
+    # which side is small: the root is at most 1/2 when the lower tail at 1/2 is at least tau (lower target), or the upper tail at 1/2 is at most tau (upper target)
+    lo_h, up_h = beta_ix(a, b, mpf(1) / 2)
+    x_small = (lo_h >= tau) if not upper else (up_h <= tau)
+    # the start in double precision (scipy), used only if it lies on the side found
+    try:
+        if upper:
+            xs = float(sp.betainccinv(float(a), float(b), float(tau)))
+        else:
+            xs = float(sp.betaincinv(float(a), float(b), float(tau)))
+    except Exception:
+        xs = float("nan")
+    if x_small:
+        if not (0.0 < xs <= 0.5):
+            xs = 0.25
+    else:
+        if not (0.5 < xs < 1.0):
+            xs = 0.75
+
+    def tails_x(x):
+        return beta_ix(a, b, x)
+
+    def tails_y(y):
+        lo_y, up_y = beta_ix(b, a, y)
+        return up_y, lo_y  # the lower tail of x is the upper tail of y
+
+    def g_of(tails, sign):
+        def g(u):
+            lo, up = tails(mp.exp(u))
+            t = up if upper else lo
+            return sign * (mp.log(t) - lt)
+        return g
+
+    if x_small:
+        lo, up = tails_x(TINY)
+        t = up if upper else lo
+        if (not upper and t >= tau) or (upper and t <= tau):
+            return mpf(0), mpf(1)
+        s = mp.exp(_solve_log(g_of(tails_x, 1 if not upper else -1), xs))
+        return s, 1 - s
+    lo, up = tails_y(TINY)
+    t = up if upper else lo
+    # for the y side the tail of x DEcreases as y grows
+    if (not upper and t <= tau) or (upper and t >= tau):
+        return mpf(1), mpf(0)
+    ys = 1.0 - xs
+    if ys <= 0.0:
+        ys = 1e-16
+    s = mp.exp(_solve_log(g_of(tails_y, -1 if not upper else 1), ys))
+    return 1 - s, s
+
+
+def t_quantile_ref(p, nu):
+    p = mpf(p)
+    nu = mpf(nu)
+    if p == mpf(1) / 2:
+        return mpf(0)
+    with mp.workdps(_dps_for(nu) + 10):
+        tau = p if p < mpf(1) / 2 else 1 - p
+        x, y = beta_pair_ref(2 * tau, nu / 2, mpf(1) / 2, False)
+        t = mp.sqrt(nu * y / x) if x > 0 else mp.inf
+        return +(t if p > mpf(1) / 2 else -t)
+
+
+def f_quantile_ref(p, d1, d2, upper):
+    d1 = mpf(d1)
+    d2 = mpf(d2)
+    with mp.workdps(_dps_for(d1, d2) + 10):
+        x, y = beta_pair_ref(p, d1 / 2, d2 / 2, upper)
+        return +(d2 * x / (d1 * y)) if y > 0 else mp.inf
+
+
 # name -> (arity, function returning mpf)
 def ref(fn, args):
     a = args
@@ -310,11 +489,35 @@ def ref(fn, args):
         return binom_tails(a[0], a[1], a[2])[0]
     if fn == "binom_sf":
         return binom_tails(a[0], a[1], a[2])[1]
+    if fn == "gamma_quantile":
+        return gamma_quantile_ref(a[0], a[1], False)
+    if fn == "gamma_quantile_upper":
+        return gamma_quantile_ref(a[0], a[1], True)
+    if fn == "chi2_quantile":
+        return 2 * gamma_quantile_ref(a[0], mpf(a[1]) / 2, False)
+    if fn == "chi2_quantile_upper":
+        return 2 * gamma_quantile_ref(a[0], mpf(a[1]) / 2, True)
+    if fn == "beta_quantile":
+        return beta_pair_ref(a[0], a[1], a[2], False)[0]
+    if fn == "beta_quantile_comp":
+        return beta_pair_ref(a[0], a[1], a[2], False)[1]
+    if fn == "beta_quantile_upper":
+        return beta_pair_ref(a[0], a[1], a[2], True)[0]
+    if fn == "t_quantile":
+        return t_quantile_ref(a[0], a[1])
+    if fn == "t_quantile_upper":
+        return -t_quantile_ref(a[0], a[1])
+    if fn == "f_quantile":
+        return f_quantile_ref(a[0], a[1], a[2], False)
+    if fn == "f_quantile_upper":
+        return f_quantile_ref(a[0], a[1], a[2], True)
     raise KeyError(fn)
 
 
 ARITY = {"lgamma1p": 1, "lgamma": 1, "erf": 1, "erfc": 1, "gamma_p": 2, "gamma_q": 2, "beta_lo": 3, "beta_up": 3, "norm_cdf": 1, "norm_sf": 1, "qnorm": 1,
-         "t_cdf": 2, "t_sf": 2, "chi2_cdf": 2, "chi2_sf": 2, "f_cdf": 3, "f_sf": 3, "binom_cdf": 3, "binom_sf": 3}
+         "t_cdf": 2, "t_sf": 2, "chi2_cdf": 2, "chi2_sf": 2, "f_cdf": 3, "f_sf": 3, "binom_cdf": 3, "binom_sf": 3,
+         "gamma_quantile": 2, "gamma_quantile_upper": 2, "chi2_quantile": 2, "chi2_quantile_upper": 2, "beta_quantile": 3, "beta_quantile_comp": 3, "beta_quantile_upper": 3,
+         "t_quantile": 2, "t_quantile_upper": 2, "f_quantile": 3, "f_quantile_upper": 3}
 
 
 def selfcheck(n=300, seed=1):

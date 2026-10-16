@@ -176,6 +176,10 @@ jobs:
         if: steps.stores.outputs.fetchable == 'yes'
         run: python3 scripts/gate_domain.py --fuzz 50000
 
+      - name: Quantile functions (symmetry, scale, round trip, iteration margin)
+        if: steps.stores.outputs.fetchable == 'yes'
+        run: python3 scripts/gate_qprops.py --n 2000
+
       - name: Exact accumulation (the candidates against Fractions)
         if: steps.stores.outputs.fetchable == 'yes'
         run: python3 scripts/measure_acc.py

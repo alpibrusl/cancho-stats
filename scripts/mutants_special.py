@@ -28,6 +28,7 @@ DI = "lib/special/dist.cho"
 XP = "lib/special/xprod.cho"
 DD = "lib/special/dd.cho"
 PR = "tools/special-check/parrun.cho"
+QU = "lib/special/quantile.cho"
 
 # ranges (names or function names of gate_special.RANGES) each mutant is judged on
 R_LG = "lgamma,lgamma1p,gamma_p,gamma_q,beta_lo,beta_up"
@@ -35,8 +36,39 @@ R_ERF = "erf,erfc,norm_cdf,norm_sf"
 R_GAM = "gamma_p,gamma_q,chi2_cdf,chi2_sf"
 R_BETA = "beta_lo,beta_up,t_cdf,t_sf,f_cdf,f_sf,binom_cdf,binom_sf"
 R_Q = "qnorm"
+R_QG = "gamma q,gamma q_upper,gamma q big,gamma q_upper big,chi2 q,chi2 q_upper"
+R_QB = "beta q,beta q_comp,beta q_upper,beta q big,beta q_upper big,t q,t q_upper,f q,f q_upper"
+R_QALL = R_QG + "," + R_QB
 
 MUTANTS = [
+    # the quantile functions (docs/numerics.md section 9)
+    ("quantile-gamma-no-tail-switch", QU, "if tau > 0.5 {\n        tau = 1.0 - tau;\n        upper = !upper;\n    }\n    let lt = math.log(tau);\n    let lg", "if tau > 1.5 {\n        tau = 1.0 - tau;\n        upper = !upper;\n    }\n    let lt = math.log(tau);\n    let lg", R_QG),
+    ("quantile-beta-no-tail-switch", QU, "if tau > 0.5 {\n        tau = 1.0 - tau;\n        upper = !upper;\n    }\n    let lt = math.log(tau);\n    let lb", "if tau > 1.5 {\n        tau = 1.0 - tau;\n        upper = !upper;\n    }\n    let lt = math.log(tau);\n    let lb", R_QB),
+    ("quantile-gamma-step-sign", QU, "step = 0.0 - g / slope;", "step = g / slope;", R_QG),
+    ("quantile-beta-step-sign", QU, "dv = 0.0 - g / slope;", "dv = g / slope;", R_QB),
+    ("quantile-gamma-tolerance-loose", QU, "} else if sure && fabs(step) < 1.0e-9 {", "} else if sure && fabs(step) < 1.0e-3 {", R_QG),
+    ("quantile-beta-tolerance-loose", QU, "if closed || sure && fabs(dv) < 1.0e-9 || xn == x && yn == y {", "if closed || sure && fabs(dv) < 1.0e-3 || xn == x && yn == y {", R_QB),
+    ("quantile-gamma-bracket-sign", QU, "            if g < 0.0 {\n                xl = x;", "            if g > 0.0 {\n                xl = x;", R_QG),
+    ("quantile-beta-bracket-sign", QU, "            if g < 0.0 {\n                vl = v;", "            if g > 0.0 {\n                vl = v;", R_QB),
+    ("quantile-beta-update-denominator", QU, "let den = y + x * e;", "let den = x + y * e;", R_QB),
+    ("quantile-t-ratio-inverted", QU, "sqrt(nu) * (sqrt(y) / sqrt(x))", "sqrt(nu) * (sqrt(x) / sqrt(y))", "t q,t q_upper"),
+    ("quantile-t-two-sided-tail", QU, "beta_solve(2.0 * tau, nu / 2.0, 0.5, false)", "beta_solve(tau, nu / 2.0, 0.5, false)", "t q,t q_upper"),
+    ("quantile-t-beta-shape", QU, "nu / 2.0, 0.5, false)", "nu, 0.5, false)", "t q,t q_upper"),
+    ("quantile-t-upper-mirror", QU, "let (t, code) = t_positive(1.0 - p, nu);", "let (t, code) = t_positive(p, nu);", "t q,t q_upper"),
+    ("quantile-t-sign-lost", QU, "    return (0.0 - t, 0);\n}\n\npub fn t_quantile_upper", "    return (t, 0);\n}\n\npub fn t_quantile_upper", "t q,t q_upper"),
+    ("quantile-f-ratio-inverted", QU, "let f = d2 / d1 * (x / y);", "let f = d1 / d2 * (x / y);", "f q,f q_upper"),
+    ("quantile-chi2-scale-dropped", QU, "return (2.0 * x, code);", "return (x, code);", "chi2 q,chi2 q_upper"),
+    ("quantile-chi2-half-df", QU, "gamma_solve(p, nu / 2.0, upper);", "gamma_solve(p, nu, upper);", "chi2 q,chi2 q_upper"),
+    ("quantile-probability-zero-accepted", QU, "if p <= 0.0 || p >= 1.0 {", "if p < 0.0 || p >= 1.0 {", R_QALL),
+    ("control-quantile-iteration-cap", QU, "    return 200;", "    return 3;", R_QALL),
+    ("quantile-gamma-start-sign", QU, "zl / (3.0 * sqrt(a))", "0.0 - zl / (3.0 * sqrt(a))", R_QG),
+    ("quantile-gamma-slope-no-lgamma", QU, "a * math.log(x) - x - lg - lnt", "a * math.log(x) - x - lnt", R_QG),
+    ("quantile-beta-slope-no-betaln", QU, "a * math.log(x) + b * math.log(y) - lb - lnt", "a * math.log(x) + b * math.log(y) - lnt", R_QB),
+    ("quantile-gamma-underflow-answer", QU, "    if glo >= 0.0 {\n        return (0.0, 0, 1);", "    if glo >= 0.0 {\n        return (1.0, 0, 1);", R_QG),
+    ("quantile-beta-high-edge-answer", QU, "return (1.0, 0.0, 0, 2);", "return (0.5, 0.0, 0, 2);", R_QB),
+    ("quantile-beta-low-edge-answer", QU, "return (0.0, 1.0, 0, 1);", "return (0.0, 0.0, 0, 1);", R_QB),
+    ("quantile-gamma-stall-not-accepted", QU, "} else if xn == x {", "} else if xn == 0.0 {", R_QG),
+    ("quantile-beta-stall-not-accepted", QU, "|| xn == x && yn == y {", "|| xn == 0.0 && yn == 0.0 {", R_QB),
     # lgamma, delta, lgamma1p
     ("control-stirling-coefficient", LG, "let s = 1.0 / 12.0 - w", "let s = 1.0 / 12.001 - w", R_LG),
     ("lgamma-sign-of-x", LG, "return (x - 0.5) * math.log(x) - x + 0.9189385332046727 + delta(x);", "return (x - 0.5) * math.log(x) + x + 0.9189385332046727 + delta(x);", "lgamma"),
@@ -136,6 +168,7 @@ MUTANTS = [
 
 # a survivor that no input can kill: the mutation changes no result. Name -> reason.
 EXPLAINED = {
+    "quantile-gamma-start-sign": "the starting point changes only the number of iterations, not the answer (measured by gate_qprops.py: the largest count at 3,000 cases is 16 for gamma and 19 for gamma big with the sign wrong, against 39 and 3 with it right, all far under the cap of 200 and the margin of 80): equivalent in what it answers",
     "log-ratio-correction-dropped": "tolerance-equivalent under the corrected far-tail coefficient (1.5e-15 for the incomplete gamma, docs/numerics.md 3.2): without the correction the exponent loses about eps x (2e-13 at a = 2000), which the bound now admits; it was killed while the coefficient was 4e-16. The correction stays: it removes the larger part of that error",
     "lgamma-delta-drops-a-term": "tolerance-equivalent: the dropped term 1/(156 z^13) is below 6.4e-16 for z >= 10, the bound is 1e-14 max(1, |f|) with |f| >= 12.8",
     "stirlerr-switch-too-low": "tolerance-equivalent: the series is used from n = 5; its truncation error there (about 2e-14 in the exponent at n = 10, larger at 5 only where Loader's form is not used) stays below the 2e-13 bound of every range",
@@ -181,6 +214,10 @@ def checks(driver, tmp, ranges):
     gd = subprocess.run([PY, str(ROOT / "scripts" / "gate_domain.py"), "--driver", driver, "--fuzz", "1500", "--threads", "4"], capture_output=True, text=True, timeout=1800, env=env)
     if gd.returncode != 0:
         return True, "domain and fuzz gate (exit %d)" % gd.returncode
+    if " q" in ranges:
+        gq = subprocess.run([PY, str(ROOT / "scripts" / "gate_qprops.py"), "--driver", driver, "--n", "400"], capture_output=True, text=True, timeout=1800, env=env)
+        if gq.returncode != 0:
+            return True, "properties of the quantiles (exit %d)" % gq.returncode
     # thread check: the bytes of --threads T equal the sequential bytes
     sys.path.insert(0, str(ROOT / "scripts"))
     import gate_special as g
@@ -205,6 +242,12 @@ def main():
     if not pathlib.Path(REFS).exists():
         print("mutants_special: no cached references %s (run scripts/gate_special.py --fast first)" % REFS)
         return 2
+    # the control (docs: mutants-need-a-control): the same gates on the UNMUTATED build must pass, or every kill below would be a gate that cannot run
+    dead, why = checks(str(ROOT / "build" / "special-check"), ROOT, R_QALL + ",erf,gamma_p,beta_lo")
+    if dead:
+        print("mutants_special: the unmutated build fails the gates (%s): refusing to count kills" % why)
+        return 1
+    print("control (unmutated) passes the gates")
     survivors, invalid, killed, explained = [], [], 0, 0
     for name, file, old, new, ranges in MUTANTS:
         if only and only not in name:
