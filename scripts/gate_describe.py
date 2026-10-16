@@ -213,6 +213,33 @@ def same(a, b):
     return a == b
 
 
+GROUP_VALUES = ["a", "b", "", "c c", '"a"', "\u00e9", "B", "zz", '""', "10"]
+
+
+def cmp_column(got, want, tag, bad, fi):
+    """one column of a group against expected(): every key of `want`, and no key that it does not have"""
+    for k, wv in want.items():
+        if k == "histogram":
+            gh = got.get("histogram", {})
+            ok = gh.get("bins") == wv[0] and gh.get("counts") == wv[2] and len(gh.get("edges", [])) == len(wv[1]) and all(same(x, y) for x, y in zip(gh.get("edges", []), wv[1]))
+        elif k == "quantiles":
+            gq = [q["value"] for q in got.get("quantiles", [])]
+            ok = len(gq) == len(wv) and all(same(x, y) for x, y in zip(gq, wv))
+        elif k == "levels_all":
+            ok = [(q["value"], q["count"]) for q in got.get("levels", [])] == wv[:10] and got.get("levels_capped") is False
+        else:
+            ok = same(got.get(k), wv)
+        if not ok:
+            bad.append((fi, "%s key %s: want %r got %r" % (tag, k, wv, got.get(k))))
+    for k in ("min", "max", "mean", "variance", "sd", "skewness", "kurtosis", "quantiles", "distinct", "histogram", "levels", "levels_capped"):
+        if k not in want and k in got and not (k in ("levels", "levels_capped") and "levels_all" in want):
+            bad.append((fi, "%s: unexpected key %s" % (tag, k)))
+
+
+def group_key(c):
+    return None if c == "" else (c[1:-1] if c.startswith('"') else c)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bin", default=str(ROOT / "build" / "stats"))
@@ -348,6 +375,39 @@ def main():
                                 gl = [(q["value"], q["count"]) for q in g.get("levels", [])]
                                 if g.get("levels_capped") is not False or g.get("distinct") != wants[j]["distinct"] or gl != wants[j]["levels_all"][:10]:
                                     bad.append((fi, "%s --max-levels %d: want exact levels, got %r" % (names[j], ml, g)))
+                    # --by: every group is the description of the rows of that group by themselves, the groups in the order of their bytes, the missing one last
+                    gcells = [r.pick(GROUP_VALUES[: [2, 3, 5, 10][int(r.next() % 4)]]) for _ in range(n)]
+                    gpos = int(r.next() % (ncols + 1))
+                    grows = [rows[i][:gpos] + [gcells[i]] + rows[i][gpos:] for i in range(n)]
+                    gnames = names[:gpos] + ["grp"] + names[gpos:]
+                    pg = run(a.bin, tmp, gnames, grows, 1, ["--by", "grp"])
+                    if pg.returncode != 0:
+                        bad.append((fi, "--by: exit %d: %s" % (pg.returncode, pg.stdout[:120])))
+                    else:
+                        gdoc = json.loads(pg.stdout)["data"]
+                        keys = sorted({group_key(c) for c in gcells if group_key(c) is not None}, key=lambda x: x.encode("utf-8"))
+                        if any(group_key(c) is None for c in gcells):
+                            keys.append(None)
+                        if gdoc.get("by") != "grp" or [g["value"] for g in gdoc["groups"]] != keys or "columns" in gdoc or "rows" in gdoc:
+                            bad.append((fi, "--by groups: want %r got %r" % (keys, [g["value"] for g in gdoc["groups"]])))
+                        else:
+                            for g in gdoc["groups"]:
+                                idx = [i for i in range(n) if group_key(gcells[i]) == g["value"]]
+                                checked += 1
+                                if g["rows"] != len(idx) or len(g["columns"]) != ncols + 1:
+                                    bad.append((fi, "--by group %r: rows %r of %d" % (g["value"], g["rows"], len(idx))))
+                                    continue
+                                for j in range(ncols + 1):
+                                    sub = [(gcells[i] if j == gpos else cols[j - (1 if j > gpos else 0)][i]) for i in idx]
+                                    cmp_column(g["columns"][j], expected(sub, 1), "--by group %r column %s" % (g["value"], gnames[j]), bad, fi)
+                                    checked += 1
+                        order2 = list(range(n))
+                        for i in range(n - 1, 0, -1):
+                            k2 = int(r.next() % (i + 1))
+                            order2[i], order2[k2] = order2[k2], order2[i]
+                        pg2 = run(a.bin, tmp, gnames, [grows[i] for i in order2], 1, ["--by", "grp"])
+                        if pg2.stdout != pg.stdout:
+                            bad.append((fi, "--by: shuffled rows give other bytes"))
                     # row order cannot change a byte
                     order = list(range(n))
                     for i in range(n - 1, 0, -1):

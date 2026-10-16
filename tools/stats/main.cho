@@ -32,15 +32,15 @@ import toolbox.place;
 import toolbox.text;
 
 fn flag_table() -> [] &static [byte] {
-    return "root||path|root||resolve FILE relative to this directory and refuse paths outside it;delim|d|text|none|,|the one byte that separates fields (default comma);ddof||nat|none|1|the divisor of the variance is n minus this (1 is the sample variance, 0 the population variance);max-rows||nat|none|1000000|the most data rows read, one more is limit.too-many-rows (ceiling 10000000);max-cols||nat|none|256|the most columns, more is limit.too-many-columns (ceiling 4096);max-line-bytes||nat|none|1048576|the longest line read, a longer one is limit.line-too-long (ceiling 16777216);max-cells||nat|none|20000000|the most cells (rows times columns) held for the quantiles, more is limit.too-many-cells (ceiling 100000000);quantiles||text|none|0,0.25,0.5,0.75,1|the probabilities of the quantiles, comma separated decimals from 0 to 1 with at most 9 decimals (at most 99 of them);quantile-type||nat|none|7|which of the nine Hyndman-Fan definitions, 1 to 9 (7 is the default of R and numpy);bins||nat|none|10|the number of equal-width histogram bins over [min, max], 0 for none (ceiling 1000);levels||nat|none|10|how many of the most frequent levels of a text column to print, 0 for none and no second pass (ceiling 100);max-levels||nat|none|100000|the most distinct (column, level) pairs held for all text columns together, a column that would need one more is levels_capped (ceiling 1000000)";
+    return "root||path|root||resolve FILE relative to this directory and refuse paths outside it;delim|d|text|none|,|the one byte that separates fields (default comma);ddof||nat|none|1|the divisor of the variance is n minus this (1 is the sample variance, 0 the population variance);max-rows||nat|none|1000000|the most data rows read, one more is limit.too-many-rows (ceiling 10000000);max-cols||nat|none|256|the most columns, more is limit.too-many-columns (ceiling 4096);max-line-bytes||nat|none|1048576|the longest line read, a longer one is limit.line-too-long (ceiling 16777216);max-cells||nat|none|20000000|the most cells (rows times columns) held for the quantiles, more is limit.too-many-cells (ceiling 100000000);quantiles||text|none|0,0.25,0.5,0.75,1|the probabilities of the quantiles, comma separated decimals from 0 to 1 with at most 9 decimals (at most 99 of them);quantile-type||nat|none|7|which of the nine Hyndman-Fan definitions, 1 to 9 (7 is the default of R and numpy);bins||nat|none|10|the number of equal-width histogram bins over [min, max], 0 for none (ceiling 1000);levels||nat|none|10|how many of the most frequent levels of a text column to print, 0 for none and no second pass (ceiling 100);max-levels||nat|none|100000|the most distinct (column, level) pairs held for all text columns together, a column that would need one more is levels_capped (ceiling 1000000);by||text|none||the header name of a column: describe each group of rows that have the same value in it, one after the other;max-groups||nat|none|50|the most groups with --by, one more is limit.too-many-groups (ceiling 1000)";
 }
 
 fn extra() -> [] &static [byte] {
-    return "stats.csv-ragged|8|never|a record with a different number of fields than the header;stats.csv-multiline|8|never|a record that continues on the next line, which this version does not read;stats.csv-bad-quote|8|never|a quote that opens or closes where it may not;stats.no-header|8|never|a file with no header line;stats.bad-verb|2|never|the first operand is not a verb this tool has;limit.too-many-rows|8|never|more data rows than --max-rows;limit.too-many-columns|8|never|more columns than --max-cols;limit.too-many-cells|8|never|more cells than --max-cells;stats.file-changed|8|never|the file is not the same on the second pass that counts the levels of a text column";
+    return "stats.csv-ragged|8|never|a record with a different number of fields than the header;stats.csv-multiline|8|never|a record that continues on the next line, which this version does not read;stats.csv-bad-quote|8|never|a quote that opens or closes where it may not;stats.no-header|8|never|a file with no header line;stats.bad-verb|2|never|the first operand is not a verb this tool has;limit.too-many-rows|8|never|more data rows than --max-rows;limit.too-many-columns|8|never|more columns than --max-cols;limit.too-many-cells|8|never|more cells than --max-cells;stats.file-changed|8|never|the file is not the same on the second pass that counts the levels of a text column;stats.no-such-column|2|never|--by names no column of the header;stats.ambiguous-column|2|never|--by names a header that two or more columns have;limit.too-many-groups|8|never|more groups than --max-groups";
 }
 
 fn tool() -> [] describe.Tool {
-    return describe.Tool { name: "stats", version: "0.1.0", summary: "Describe the columns of a CSV file: counts, minimum, maximum, mean, variance and standard deviation from exact sums rounded once; the same bytes on every platform and at any thread count.", usage: "stats describe [--root DIR] [--delim D] [--ddof N] [--max-rows N] [--max-cols N] [--max-line-bytes N] [--max-cells N] [--quantiles P,P,..] [--quantile-type N] [--bins N] FILE", output: "document", schema: "stats.v1", flags: flag_table(), operands: "VERB|none|1|1|describe;FILE|path-read|1|1|the CSV file to describe", rules: "args.unknown-flag;args.missing-value;args.bad-value;args.duplicate-flag;args.missing-operand;args.too-many-operands;path.empty;path.dotdot;path.absolute;path.outside-root;path.too-long;path.symlink;io.not-found;io.not-a-directory;io.is-a-directory;io.permission-denied;io.read-failed;limit.line-too-long;stats.csv-ragged;stats.csv-multiline;stats.csv-bad-quote;stats.no-header;stats.bad-verb;limit.too-many-rows;limit.too-many-columns;limit.too-many-cells", extra_rules: extra(), limits: "max-rows|1000000|10000000;max-cols|256|4096;max-line-bytes|1048576|16777216;max-cells|20000000|100000000;bins|10|1000", reversibility: "reversible-cheap", stdin: "never", guarantees: "deterministic;idempotent;bounded_memory" };
+    return describe.Tool { name: "stats", version: "0.1.0", summary: "Describe the columns of a CSV file: counts, minimum, maximum, mean, variance and standard deviation from exact sums rounded once; the same bytes on every platform and at any thread count.", usage: "stats describe [--root DIR] [--delim D] [--ddof N] [--max-rows N] [--max-cols N] [--max-line-bytes N] [--max-cells N] [--quantiles P,P,..] [--quantile-type N] [--bins N] FILE", output: "document", schema: "stats.v1", flags: flag_table(), operands: "VERB|none|1|1|describe;FILE|path-read|1|1|the CSV file to describe", rules: "args.unknown-flag;args.missing-value;args.bad-value;args.duplicate-flag;args.missing-operand;args.too-many-operands;path.empty;path.dotdot;path.absolute;path.outside-root;path.too-long;path.symlink;io.not-found;io.not-a-directory;io.is-a-directory;io.permission-denied;io.read-failed;limit.line-too-long;stats.csv-ragged;stats.csv-multiline;stats.csv-bad-quote;stats.no-header;stats.bad-verb;limit.too-many-rows;limit.too-many-columns;limit.too-many-cells;stats.file-changed;stats.no-such-column;stats.ambiguous-column;limit.too-many-groups", extra_rules: extra(), limits: "max-rows|1000000|10000000;max-cols|256|4096;max-line-bytes|1048576|16777216;max-cells|20000000|100000000;bins|10|1000;levels|10|100;max-levels|100000|1000000;max-groups|50|1000", reversibility: "reversible-cheap", stdin: "never", guarantees: "deterministic;idempotent;bounded_memory" };
 }
 
 fn built() -> [] describe.Built {
@@ -118,8 +118,22 @@ fn drop_cols[&h](heap: &!h Heap, c: Cols) -> [heap] int {
     return 0;
 }
 
-// One data record. 0 when it was taken, 1 ragged, 2 continues on the next line, 3 a bad quote.
-fn take_row[&c, &l](c: &!c Cols, line: &l [byte], delim: int, ncols: int) -> [] int {
+// Whether the record whose cells are in `cs` belongs to the group: its cell `by` is missing (the group `null`) or has the bytes of `key`.
+fn in_group[&c, &l, &k](cs: &c [int], line: &l [byte], by: int, key: &k [byte], by_null: bool) -> [] bool {
+    let from = cs[3 * by];
+    let to = cs[3 * by + 1];
+    let missing = to == from && cs[3 * by + 2] == 0;
+    if by_null {
+        return missing;
+    }
+    if missing {
+        return false;
+    }
+    return bytes.equal(line[from..to], key);
+}
+
+// One data record. 0 when it was taken, 1 ragged, 2 continues on the next line, 3 a bad quote, 4 not in the group (`by` < 0 means no group), 5 or 6 in the group but `room` says the rows (1) or the cells (2) are full.
+fn take_row[&c, &l, &k](c: &!c Cols, line: &l [byte], delim: int, ncols: int, by: int, key: &k [byte], by_null: bool, room: int) -> [] int {
     let cells = contents(c.cells);
     let (n, inside, badq) = reader.fields(line, delim, cells, ncols);
     if inside {
@@ -130,6 +144,12 @@ fn take_row[&c, &l](c: &!c Cols, line: &l [byte], delim: int, ncols: int) -> [] 
     }
     if n != ncols {
         return 1;
+    }
+    if by >= 0 && !in_group(cells, line, by, key, by_null) {
+        return 4;
+    }
+    if room != 0 {
+        return 4 + room;
     }
     let nonmiss = contents(c.nonmiss);
     let numeric = contents(c.numeric);
@@ -492,7 +512,7 @@ fn rank_levels[&m, &t, &b](m: &m map.Map[int], ncols: int, k: int, top: &!t [int
 }
 
 // The second pass: the file again, and every non-missing cell of a text column counted. `expected` is the number of data rows the first pass took; a different file is `stats.file-changed`.
-fn level_pass[&h, &f, &s, &c](heap: &!h Heap, file: &!f File, shown: &s [byte], cols: &c Cols, ncols: int, expected: int, delim: int, cap: int, k: int, max_levels: int, lv0: Levels, errs: fail.Errors) -> [heap, file_read] (Levels, fail.Errors) {
+fn level_pass[&h, &f, &s, &c, &k](heap: &!h Heap, file: &!f File, shown: &s [byte], cols: &c Cols, ncols: int, by: int, key: &k [byte], by_null: bool, expected: int, delim: int, cap: int, k: int, max_levels: int, lv0: Levels, errs: fail.Errors) -> [heap, file_read] (Levels, fail.Errors) {
     let Levels { m, distinct, capped, top, cells } = lv0;
     var mm = m;
     var e = errs;
@@ -522,7 +542,13 @@ fn level_pass[&h, &f, &s, &c](heap: &!h Heap, file: &!f File, shown: &s [byte], 
                     borrow mut cells as &!cw in {
                         let cs = contents(cw);
                         let (n, inside, badq) = reader.fields(line, delim, cs, ncols);
-                        if inside || badq || n != ncols || rows > expected {
+                        var mine = true;
+                        if by >= 0 && !inside && !badq && n == ncols {
+                            mine = in_group(cs, line, by, key, by_null);
+                        }
+                        if !mine {
+                            rows = rows - 1;
+                        } else if inside || badq || n != ncols || rows > expected {
                             changed = true;
                             going = false;
                         } else {
@@ -630,17 +656,8 @@ fn level_list[&h, &lv](heap: &!h Heap, w0: json.Writer, lv: &lv Levels, j: int, 
     return w;
 }
 
-fn report[&h, &c, &nm, &en, &sv, &q, &lv](heap: &!h Heap, c: &c Cols, names: &nm [byte], ends: &en vec.Vec[int], store: &sv vec.Vec[int], ncols: int, rows: int, ddof: int, qtype: int, qtext: &q [byte], bins: int, lv: &lv Levels, k: int, counted: bool) -> [heap] buffer.Buffer {
-    var w = json.writer(heap, 1024);
-    w = json.begin_object(heap, w);
-    w = json.put_key(heap, w, "rows");
-    w = json.put_int(heap, w, rows);
-    w = json.put_key(heap, w, "ddof");
-    w = json.put_int(heap, w, ddof);
-    w = json.put_key(heap, w, "quantile_type");
-    w = json.put_int(heap, w, qtype);
-    w = json.put_key(heap, w, "rounding");
-    w = json.put_string(heap, w, "mean, variance, skewness, excess kurtosis, quantiles: exact, rounded once; sd: the square root of the rounded variance, two roundings");
+fn report_columns[&h, &c, &nm, &en, &sv, &q, &lv](heap: &!h Heap, w0: json.Writer, c: &c Cols, names: &nm [byte], ends: &en vec.Vec[int], store: &sv vec.Vec[int], ncols: int, rows: int, ddof: int, qtype: int, qtext: &q [byte], bins: int, lv: &lv Levels, k: int, counted: bool) -> [heap] json.Writer {
+    var w = w0;
     w = json.put_key(heap, w, "columns");
     w = json.begin_array(heap, w);
     var j = 0;
@@ -708,11 +725,227 @@ fn report[&h, &c, &nm, &en, &sv, &q, &lv](heap: &!h Heap, c: &c Cols, names: &nm
         j = j + 1;
     }
     w = json.end_array(heap, w);
-    w = json.end_object(heap, w);
-    return json.finish(w);
+    return w;
 }
 
 // ------------------------------------------------------------------------------------------------ reading the file
+
+// The settings every answer states.
+fn put_settings[&h](heap: &!h Heap, w0: json.Writer, ddof: int, qtype: int) -> [heap] json.Writer {
+    var w = w0;
+    w = json.put_key(heap, w, "ddof");
+    w = json.put_int(heap, w, ddof);
+    w = json.put_key(heap, w, "quantile_type");
+    w = json.put_int(heap, w, qtype);
+    w = json.put_key(heap, w, "rounding");
+    w = json.put_string(heap, w, "mean, variance, skewness, excess kurtosis, quantiles: exact, rounded once; sd: the square root of the rounded variance, two roundings");
+    return w;
+}
+
+// ------------------------------------------------------------------------------------------------ the groups of --by
+
+// The distinct values of the `by` column, as a map (key the bytes of the cell), `order` the entries by their bytes ascending, `nulls` how many records have the cell missing.
+res struct Groups {
+    m: map.Map[int],
+    order: Box[[int]],
+    nulls: int,
+}
+
+fn drop_groups[&h](heap: &!h Heap, g: Groups) -> [heap] int {
+    let Groups { m, order, nulls } = g;
+    map.drop(heap, m);
+    unbox_slice(heap, order);
+    return nulls;
+}
+
+// Pass 0 of --by: the header names the column (exactly one match), then every record is read and its value noted. The answer is the groups, the index of the column (-1 when refused) and the errors.
+fn discover[&h, &f, &s, &n](heap: &!h Heap, file: &!f File, shown: &s [byte], byname: &n [byte], delim: int, cap: int, max_rows: int, max_cols: int, max_groups: int, errs: fail.Errors) -> [heap, file_read] (Groups, int, fail.Errors) {
+    var m = map.empty(heap, 64, 0, 11);
+    var e = errs;
+    var by = 0 - 1;
+    var ncols = 0;
+    var nulls = 0;
+    var cells = box_slice(heap, 4, 0);
+    var r = lines.start(heap, cap);
+    var going = true;
+    var have_header = false;
+    var number = 0;
+    var rows = 0;
+    while going {
+        let (stepped, status) = lines.next(heap, r);
+        r = stepped;
+        if status == lines.need() {
+            r = lines.fill_file(r, file);
+        } else if status == lines.done() {
+            going = false;
+        } else if status == lines.long() {
+            e = refuse(heap, e, "limit.line-too-long", "a line is longer than --max-line-bytes", "raise --max-line-bytes", "file", shown);
+            going = false;
+        } else {
+            number = number + 1;
+            var stop = false;
+            borrow r as &rr in {
+                let line = lines.text(rr);
+                if !have_header {
+                    let (open, seps, badq) = reader.scan(line, delim, false, 0);
+                    if open {
+                        e = refuse(heap, e, "stats.csv-multiline", "the header continues on the next line", "put the header on one line", "file", shown);
+                        stop = true;
+                    } else if badq {
+                        e = refuse(heap, e, "stats.csv-bad-quote", "a quote in the header opens or closes where it may not", "write the header as RFC 4180", "file", shown);
+                        stop = true;
+                    } else if seps + 1 > max_cols {
+                        e = refuse_int(heap, e, "limit.too-many-columns", "more columns than --max-cols", "raise --max-cols", "limit", max_cols, "columns", seps + 1);
+                        stop = true;
+                    } else {
+                        let (nb, ne) = reader.split_header(heap, line, delim);
+                        var matches = 0;
+                        borrow nb as &nbr in {
+                            borrow ne as &ner in {
+                                var j = 0;
+                                while j < seps + 1 {
+                                    var from = 0;
+                                    if j > 0 {
+                                        from = vec.get(ner, j - 1);
+                                    }
+                                    if bytes.equal(buffer.bytes(nbr)[from..vec.get(ner, j)], byname) {
+                                        if matches == 0 {
+                                            by = j;
+                                        }
+                                        matches = matches + 1;
+                                    }
+                                    j = j + 1;
+                                }
+                            }
+                        }
+                        buffer.drop(heap, nb);
+                        vec.drop(heap, ne);
+                        if matches == 0 {
+                            e = refuse(heap, e, "stats.no-such-column", "--by names no column of the header", "the header names are the first line of the file; the match is exact", "by", byname);
+                            by = 0 - 1;
+                            stop = true;
+                        } else if matches > 1 {
+                            e = refuse(heap, e, "stats.ambiguous-column", "two or more columns have the name given to --by", "rename the columns so that the name is unique", "by", byname);
+                            by = 0 - 1;
+                            stop = true;
+                        } else {
+                            ncols = seps + 1;
+                            unbox_slice(heap, cells);
+                            cells = box_slice(heap, 3 * ncols + 4, 0);
+                            have_header = true;
+                        }
+                    }
+                } else if len(line) > 0 || ncols == 1 {
+                    if rows >= max_rows {
+                        e = refuse_int(heap, e, "limit.too-many-rows", "more data rows than --max-rows", "raise --max-rows", "limit", max_rows, "line", number);
+                        stop = true;
+                    } else {
+                        rows = rows + 1;
+                        borrow mut cells as &!cw in {
+                            let cs = contents(cw);
+                            let (n, inside, badq) = reader.fields(line, delim, cs, ncols);
+                            if inside {
+                                e = record_refusal(heap, e, 2, number, ncols, max_rows, 0);
+                                stop = true;
+                            } else if badq {
+                                e = record_refusal(heap, e, 3, number, ncols, max_rows, 0);
+                                stop = true;
+                            } else if n != ncols {
+                                e = record_refusal(heap, e, 1, number, ncols, max_rows, 0);
+                                stop = true;
+                            } else {
+                                let from = cs[3 * by];
+                                let to = cs[3 * by + 1];
+                                if to == from && cs[3 * by + 2] == 0 {
+                                    nulls = nulls + 1;
+                                } else {
+                                    var known = false;
+                                    var room = false;
+                                    borrow m as &mr in {
+                                        known = map.has(mr, line[from..to]);
+                                        room = map.size(mr) < max_groups;
+                                    }
+                                    if known {
+                                    } else if room {
+                                        m = map.put(heap, m, line[from..to], 1);
+                                    } else {
+                                        e = refuse_int(heap, e, "limit.too-many-groups", "more groups than --max-groups", "raise --max-groups or group by a column with fewer values", "limit", max_groups, "line", number);
+                                        stop = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if stop {
+                going = false;
+            }
+        }
+    }
+    var errno = 0;
+    borrow r as &rr in {
+        errno = lines.failed(rr);
+    }
+    lines.drop(heap, r);
+    unbox_slice(heap, cells);
+    if errno != 0 {
+        e = fail.io_error(heap, e, errno, false, shown);
+    }
+    if !have_header {
+        by = 0 - 1;
+        var refused = false;
+        borrow e as &er in {
+            refused = fail.count(er) > 0;
+        }
+        if !refused {
+            e = refuse(heap, e, "stats.no-header", "the file has no header line", "give a CSV file whose first line names the columns", "file", shown);
+        }
+    }
+    // the groups in the order of their bytes: an insertion sort of the entry numbers (at most --max-groups of them)
+    var ng = 0;
+    borrow m as &mr0 in {
+        ng = map.size(mr0);
+    }
+    let order = box_slice(heap, ng + 1, 0);
+    borrow m as &mr1 in {
+        borrow mut order as &!ow in {
+            let o = contents(ow);
+            var k = 0;
+            var en = 0;
+            while en < map.entries(mr1) {
+                if map.is_live(mr1, en) {
+                    var pos = k;
+                    while pos > 0 && bytes.compare(map.key_at(mr1, o[pos - 1]), map.key_at(mr1, en)) > 0 {
+                        o[pos] = o[pos - 1];
+                        pos = pos - 1;
+                    }
+                    o[pos] = en;
+                    k = k + 1;
+                }
+                en = en + 1;
+            }
+        }
+    }
+    return (Groups { m: m, order: order, nulls: nulls }, by, e);
+}
+
+// The refusal for a record `take_row` did not take: 1 ragged, 2 continues on the next line, 3 a bad quote, 5 the rows limit, 6 the cells limit.
+fn record_refusal[&h](heap: &!h Heap, e: fail.Errors, st: int, number: int, ncols: int, max_rows: int, max_cells: int) -> [heap] fail.Errors {
+    if st == 1 {
+        return refuse_int(heap, e, "stats.csv-ragged", "a record has a different number of fields than the header", "check the delimiter and the quoting of that line", "line", number, "columns", ncols);
+    }
+    if st == 2 {
+        return refuse_int(heap, e, "stats.csv-multiline", "a record continues on the next line, which this version does not read", "join the record onto one line", "line", number, "columns", ncols);
+    }
+    if st == 3 {
+        return refuse_int(heap, e, "stats.csv-bad-quote", "a quote opens or closes where it may not", "write the line as RFC 4180", "line", number, "columns", ncols);
+    }
+    if st == 5 {
+        return refuse_int(heap, e, "limit.too-many-rows", "more data rows than --max-rows", "raise --max-rows", "limit", max_rows, "line", number);
+    }
+    return refuse_int(heap, e, "limit.too-many-cells", "more cells than --max-cells are needed to hold the columns for the quantiles", "raise --max-cells or describe fewer rows", "limit", max_cells, "line", number);
+}
 
 struct Scanned {
     rows: int,
@@ -720,7 +953,7 @@ struct Scanned {
 }
 
 // the file, line by line: the header, then the records
-fn read_file[&h, &g, &p, &f, &s](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, file: &!f File, shown: &s [byte], errs: fail.Errors) -> [heap, args, file_read] (buffer.Buffer, vec.Vec[int], Cols, vec.Vec[int], Scanned, fail.Errors) {
+fn read_file[&h, &g, &p, &f, &s, &k](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, file: &!f File, shown: &s [byte], by: int, key: &k [byte], by_null: bool, errs: fail.Errors) -> [heap, args, file_read] (buffer.Buffer, vec.Vec[int], Cols, vec.Vec[int], Scanned, fail.Errors) {
     let table = flag_table();
     let cap = cli.nat(args, parsed, table, "max-line-bytes");
     let delim = int_of(cli.text(args, parsed, table, "delim")[0]);
@@ -780,32 +1013,24 @@ fn read_file[&h, &g, &p, &f, &s](heap: &!h Heap, args: &g Args, parsed: &p cli.P
                     }
                 } else if len(line) > 0 || info.ncols == 1 {
                     // a blank line is skipped, except in a file of one column, where it is one empty cell
+                    var room = 0;
                     if info.rows >= max_rows {
-                        e = refuse_int(heap, e, "limit.too-many-rows", "more data rows than --max-rows", "raise --max-rows", "limit", max_rows, "line", number);
-                        stop = true;
+                        room = 1;
                     } else if (info.rows + 1) * info.ncols > max_cells {
-                        e = refuse_int(heap, e, "limit.too-many-cells", "more cells than --max-cells are needed to hold the columns for the quantiles", "raise --max-cells or describe fewer rows", "limit", max_cells, "line", number);
-                        stop = true;
-                    } else {
-                        borrow mut cols as &!cw in {
-                            let st = take_row(cw, line, delim, info.ncols);
-                            if st == 0 {
-                                info = Scanned { rows: info.rows + 1, ncols: info.ncols };
-                                var jj = 0;
-                                while jj < info.ncols {
-                                    store = vec.push(heap, store, contents(cw.rowkeys)[jj]);
-                                    jj = jj + 1;
-                                }
-                            } else if st == 1 {
-                                e = refuse_int(heap, e, "stats.csv-ragged", "a record has a different number of fields than the header", "check the delimiter and the quoting of that line", "line", number, "columns", info.ncols);
-                                stop = true;
-                            } else if st == 2 {
-                                e = refuse_int(heap, e, "stats.csv-multiline", "a record continues on the next line, which this version does not read", "join the record onto one line", "line", number, "columns", info.ncols);
-                                stop = true;
-                            } else {
-                                e = refuse_int(heap, e, "stats.csv-bad-quote", "a quote opens or closes where it may not", "write the line as RFC 4180", "line", number, "columns", info.ncols);
-                                stop = true;
+                        room = 2;
+                    }
+                    borrow mut cols as &!cw in {
+                        let st = take_row(cw, line, delim, info.ncols, by, key, by_null, room);
+                        if st == 0 {
+                            info = Scanned { rows: info.rows + 1, ncols: info.ncols };
+                            var jj = 0;
+                            while jj < info.ncols {
+                                store = vec.push(heap, store, contents(cw.rowkeys)[jj]);
+                                jj = jj + 1;
                             }
+                        } else if st != 4 {
+                            e = record_refusal(heap, e, st, number, info.ncols, max_rows, max_cells);
+                            stop = true;
                         }
                     }
                 }
@@ -827,6 +1052,109 @@ fn read_file[&h, &g, &p, &f, &s](heap: &!h Heap, args: &g Args, parsed: &p cli.P
         e = refuse(heap, e, "stats.no-header", "the file has no header line", "give a CSV file whose first line names the columns", "file", shown);
     }
     return (names, ends, cols, store, info, e);
+}
+
+// One description: the file opened and read (only the records of the group when `by` >= 0), the levels of its text columns, and what is written to `w0`: with `as_group` an object of the group, without it the `rows`, the settings and the `columns` of the whole file.
+fn describe_one[&h, &g, &p, &f, &r, &sh, &fu, &k](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], by: int, key: &k [byte], by_null: bool, as_group: bool, w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
+    let table = flag_table();
+    var w = w0;
+    var e = errs;
+    match place.open_operand(fs, root, rel, full) {
+        Opened::Failed(reason) => {
+            e = fail.io_error(heap, e, reason, false, rel);
+        }
+        Opened::Ok(opened) => {
+            var file = opened;
+            borrow mut file as &!handle in {
+                let (names, ends, cols, store, info, e2) = read_file(heap, args, parsed, handle, rel, by, key, by_null, e);
+                e = e2;
+                var clean = false;
+                borrow e as &er2 in {
+                    clean = fail.count(er2) == 0;
+                }
+                if clean {
+                    let k = cli.nat(args, parsed, table, "levels");
+                    var lv = make_levels(heap, 1, 1);
+                    var counted = false;
+                    var any_text = false;
+                    borrow cols as &c0 in {
+                        var jt = 0;
+                        while jt < info.ncols {
+                            if contents(c0.nonmiss)[jt] > 0 && contents(c0.bad)[jt] == 1 {
+                                any_text = true;
+                            }
+                            jt = jt + 1;
+                        }
+                    }
+                    if k > 0 && any_text {
+                        counted = true;
+                        match place.open_operand(fs, root, rel, full) {
+                            Opened::Failed(reason) => {
+                                e = fail.io_error(heap, e, reason, false, rel);
+                            }
+                            Opened::Ok(again) => {
+                                var file2 = again;
+                                borrow mut file2 as &!handle2 in {
+                                    borrow cols as &c1 in {
+                                        let fresh = make_levels(heap, info.ncols, k);
+                                        drop_levels(heap, lv);
+                                        let (lv2, e4) = level_pass(heap, handle2, rel, c1, info.ncols, by, key, by_null, info.rows, int_of(cli.text(args, parsed, table, "delim")[0]), cli.nat(args, parsed, table, "max-line-bytes"), k, cli.nat(args, parsed, table, "max-levels"), fresh, e);
+                                        lv = lv2;
+                                        e = e4;
+                                    }
+                                }
+                                file_close(file2);
+                            }
+                        }
+                    }
+                    var clean2 = false;
+                    borrow e as &er3 in {
+                        clean2 = fail.count(er3) == 0;
+                    }
+                    if clean2 {
+                        let ddof = cli.nat(args, parsed, table, "ddof");
+                        let qtype = cli.nat(args, parsed, table, "quantile-type");
+                        borrow names as &nb in {
+                            borrow ends as &eb in {
+                                borrow cols as &cb in {
+                                    borrow store as &sb in {
+                                        borrow lv as &lb in {
+                                            if as_group {
+                                                w = json.begin_object(heap, w);
+                                                w = json.put_key(heap, w, "value");
+                                                if by_null {
+                                                    w = json.put_null(heap, w);
+                                                } else {
+                                                    w = text.put(heap, w, key);
+                                                }
+                                                w = json.put_key(heap, w, "rows");
+                                                w = json.put_int(heap, w, info.rows);
+                                            } else {
+                                                w = json.put_key(heap, w, "rows");
+                                                w = json.put_int(heap, w, info.rows);
+                                                w = put_settings(heap, w, ddof, qtype);
+                                            }
+                                            w = report_columns(heap, w, cb, buffer.bytes(nb), eb, sb, info.ncols, info.rows, ddof, qtype, cli.text(args, parsed, table, "quantiles"), cli.nat(args, parsed, table, "bins"), lb, k, counted);
+                                            if as_group {
+                                                w = json.end_object(heap, w);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    drop_levels(heap, lv);
+                }
+                buffer.drop(heap, names);
+                vec.drop(heap, ends);
+                drop_cols(heap, cols);
+                vec.drop(heap, store);
+            }
+            file_close(file);
+        }
+    }
+    return (w, e);
 }
 
 fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), io: &!i Io, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read, io_write, err_write] int {
@@ -868,6 +1196,9 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
     if cli.nat(args, parsed, table, "max-levels") > 1000000 || cli.nat(args, parsed, table, "max-levels") < 1 {
         e = refuse(heap, e, "args.bad-value", "--max-levels is outside 1 to 1000000", "1000000 is the most pairs this tool holds", "flag", "--max-levels");
     }
+    if cli.nat(args, parsed, table, "max-groups") > 1000 || cli.nat(args, parsed, table, "max-groups") < 1 {
+        e = refuse(heap, e, "args.bad-value", "--max-groups is outside 1 to 1000", "1000 is the most groups this tool describes", "flag", "--max-groups");
+    }
     if !valid_list(cli.text(args, parsed, table, "quantiles")) {
         e = refuse(heap, e, "args.bad-value", "--quantiles takes at most 99 comma separated decimals from 0 to 1 with at most 9 decimals", "--quantiles 0.25,0.5,0.75", "flag", "--quantiles");
     }
@@ -887,81 +1218,72 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
             e = checked;
             borrow target as &tp in {
                 if path.ok(tp) {
-                    match place.open_operand(fs, buffer.bytes(rr), path.shown(tp), path.full(tp)) {
-                        Opened::Failed(reason) => {
-                            e = fail.io_error(heap, e, reason, false, path.shown(tp));
-                        }
-                        Opened::Ok(opened) => {
-                            var file = opened;
-                            borrow mut file as &!handle in {
-                                let (names, ends, cols, store, info, e2) = read_file(heap, args, parsed, handle, path.shown(tp), e);
-                                e = e2;
-                                var clean = false;
-                                borrow e as &er2 in {
-                                    clean = fail.count(er2) == 0;
-                                }
-                                if clean {
-                                    let k = cli.nat(args, parsed, table, "levels");
-                                    var lv = make_levels(heap, 1, 1);
-                                    var counted = false;
-                                    var any_text = false;
-                                    borrow cols as &c0 in {
-                                        var jt = 0;
-                                        while jt < info.ncols {
-                                            if contents(c0.nonmiss)[jt] > 0 && contents(c0.bad)[jt] == 1 {
-                                                any_text = true;
-                                            }
-                                            jt = jt + 1;
-                                        }
-                                    }
-                                    if k > 0 && any_text {
-                                        counted = true;
-                                        match place.open_operand(fs, buffer.bytes(rr), path.shown(tp), path.full(tp)) {
-                                            Opened::Failed(reason) => {
-                                                e = fail.io_error(heap, e, reason, false, path.shown(tp));
-                                            }
-                                            Opened::Ok(again) => {
-                                                var file2 = again;
-                                                borrow mut file2 as &!handle2 in {
-                                                    borrow cols as &c1 in {
-                                                        let fresh = make_levels(heap, info.ncols, k);
-                                                        drop_levels(heap, lv);
-                                                        let (lv2, e4) = level_pass(heap, handle2, path.shown(tp), c1, info.ncols, info.rows, int_of(cli.text(args, parsed, table, "delim")[0]), cli.nat(args, parsed, table, "max-line-bytes"), k, cli.nat(args, parsed, table, "max-levels"), fresh, e);
-                                                        lv = lv2;
-                                                        e = e4;
-                                                    }
-                                                }
-                                                file_close(file2);
-                                            }
-                                        }
-                                    }
-                                    var clean2 = false;
-                                    borrow e as &er3 in {
-                                        clean2 = fail.count(er3) == 0;
-                                    }
-                                    if clean2 {
-                                        borrow names as &nb in {
-                                            borrow ends as &eb in {
-                                                borrow cols as &cb in {
-                                                    buffer.drop(heap, data);
-                                                    borrow store as &sb in {
-                                                        borrow lv as &lb in {
-                                                            data = report(heap, cb, buffer.bytes(nb), eb, sb, info.ncols, info.rows, cli.nat(args, parsed, table, "ddof"), cli.nat(args, parsed, table, "quantile-type"), cli.text(args, parsed, table, "quantiles"), cli.nat(args, parsed, table, "bins"), lb, k, counted);
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    drop_levels(heap, lv);
-                                }
-                                buffer.drop(heap, names);
-                                vec.drop(heap, ends);
-                                drop_cols(heap, cols);
-                                vec.drop(heap, store);
+                    var w = json.writer(heap, 1024);
+                    w = json.begin_object(heap, w);
+                    let ddof = cli.nat(args, parsed, table, "ddof");
+                    let qtype = cli.nat(args, parsed, table, "quantile-type");
+                    if !cli.has(parsed, table, "by") {
+                        let (w2, e2) = describe_one(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), 0 - 1, "", false, false, w, e);
+                        w = w2;
+                        e = e2;
+                    } else {
+                        w = put_settings(heap, w, ddof, qtype);
+                        w = json.put_key(heap, w, "by");
+                        w = json.put_string(heap, w, cli.text(args, parsed, table, "by"));
+                        w = json.put_key(heap, w, "groups");
+                        w = json.begin_array(heap, w);
+                        match place.open_operand(fs, buffer.bytes(rr), path.shown(tp), path.full(tp)) {
+                            Opened::Failed(reason) => {
+                                e = fail.io_error(heap, e, reason, false, path.shown(tp));
                             }
-                            file_close(file);
+                            Opened::Ok(opened) => {
+                                var file = opened;
+                                borrow mut file as &!handle in {
+                                    let (groups, by, e5) = discover(heap, handle, path.shown(tp), cli.text(args, parsed, table, "by"), int_of(cli.text(args, parsed, table, "delim")[0]), cli.nat(args, parsed, table, "max-line-bytes"), cli.nat(args, parsed, table, "max-rows"), cli.nat(args, parsed, table, "max-cols"), cli.nat(args, parsed, table, "max-groups"), e);
+                                    e = e5;
+                                    borrow groups as &gr in {
+                                        let ng = map.size(gr.m);
+                                        var gi = 0;
+                                        while gi < ng {
+                                            var clean = false;
+                                            borrow e as &er4 in {
+                                                clean = fail.count(er4) == 0;
+                                            }
+                                            if clean {
+                                                let (w3, e3) = describe_one(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), by, map.key_at(gr.m, contents(gr.order)[gi]), false, true, w, e);
+                                                w = w3;
+                                                e = e3;
+                                            }
+                                            gi = gi + 1;
+                                        }
+                                        var clean_null = false;
+                                        borrow e as &er5 in {
+                                            clean_null = fail.count(er5) == 0;
+                                        }
+                                        if clean_null && gr.nulls > 0 {
+                                            let (w4, e4) = describe_one(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), by, "", true, true, w, e);
+                                            w = w4;
+                                            e = e4;
+                                        }
+                                    }
+                                    drop_groups(heap, groups);
+                                }
+                                file_close(file);
+                            }
                         }
+                        w = json.end_array(heap, w);
+                    }
+                    w = json.end_object(heap, w);
+                    let doc = json.finish(w);
+                    var ok = false;
+                    borrow e as &er6 in {
+                        ok = fail.count(er6) == 0;
+                    }
+                    if ok {
+                        buffer.drop(heap, data);
+                        data = doc;
+                    } else {
+                        buffer.drop(heap, doc);
                     }
                 }
             }
