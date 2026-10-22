@@ -25,6 +25,7 @@ M = [
     ("ragged-check", "    if n != ncols {\n        return 1;", "    if n < ncols {\n        return 1;"),
     ("row-limit-edge", "if info.rows >= max_rows {", "if info.rows > max_rows {"),
     ("column-limit-edge", "} else if seps + 1 > max_cols {", "} else if seps + 1 >= max_cols {"),
+    ("column-limit-edge-pass2", "} else if seps + 1 > max_cols {", "} else if seps + 1 >= max_cols {"),
     ("empty-kind", "            if nonmiss == 0 {\n                w = json.put_string(heap, w, \"empty\");", "            if nonmiss == 1 {\n                w = json.put_string(heap, w, \"empty\");"),
     ("verb-name", "!bytes.equal(cli.operand(args, parsed, 0), \"describe\")", "!bytes.equal(cli.operand(args, parsed, 0), \"describe \")"),
     ("delimiter-fixed", "let delim = int_of(cli.text(args, parsed, table, \"delim\")[0]);\n    let max_rows", "let delim = 44;\n    let max_rows"),
@@ -35,8 +36,16 @@ M = [
 ]
 
 EXPLAINED = {}
-# the header scanner is written twice (the first pass and the second pass that counts the levels): a mutant of it is applied to the first copy only, and the pattern is said to occur twice
-OCCURS = {"column-limit-edge": 2}
+# the header scanner is written twice (the first pass and the second pass that counts the levels): a mutant of it is applied to the first copy only, and the pattern is said to occur twice and the second mutant takes the second copy
+OCCURS = {"column-limit-edge": 2, "column-limit-edge-pass2": 2}
+
+
+def apply(text, n, o, w):
+    """the mutant n applied to its first occurrence of o, or to the second for a name ending in -pass2"""
+    i = text.index(o)
+    if n.endswith("-pass2"):
+        i = text.index(o, i + 1)
+    return text[:i] + w + text[i + len(o):]
 
 
 def control():
@@ -66,7 +75,7 @@ def main():
             for x in ("lib", "tools", "generated"): shutil.copytree(ROOT / x, d / x)
             shutil.copy(ROOT / "cancho.toml", d / "cancho.toml")
             (d / "build").mkdir(); shutil.copytree(ROOT / "build" / "deps", d / "build" / "deps")
-            f = d / F; f.write_text(f.read_text().replace(o, w, 1))
+            f = d / F; f.write_text(apply(f.read_text(), n, o, w))
             r = subprocess.run([CANCHO, "build", "--bin", "stats"], cwd=d, capture_output=True, text=True)
             if r.returncode != 0:
                 bad.append(n); print("%-28s INVALID: %s" % (n, r.stderr[-120:].replace("\n", " "))); continue
