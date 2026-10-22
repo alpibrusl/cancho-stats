@@ -11,8 +11,8 @@ exact histogram; per non-numeric column `count`, `missing`, `distinct` and the m
 
 ## 2. Definitions **[choice]**
 
-* **mean** = `S1 / n`, one rounding. **variance** = `(n S2 - S1^2) / (n (n - ddof))`, exact numerator, one rounding; default `ddof = 1` (the sample variance, as R and pandas; numpy's default is 0), refused with
-  `stats.sample-too-small` when `n - ddof < 1`. **sd** = the correctly rounded square root of the *rounded* variance is a second rounding; instead sd is `sqrt` of the exact variance rounded once to 106 bits
+* **mean** = `S1 / n`, one rounding. **variance** = `(n S2 - S1^2) / (n (n - ddof))`, exact numerator, one rounding; default `ddof = 1` (the sample variance, as R and pandas; numpy's default is 0), `null` (as built; the design said refused with
+  `stats.sample-too-small`) when `n - ddof < 1`. **sd** = the correctly rounded square root of the *rounded* variance is a second rounding; instead sd is `sqrt` of the exact variance rounded once to 106 bits
   (double-double) and then rounded: **[open]** whether the single-rounding claim covers sd (the square root of a rational is not a rational; the answer is correctly rounded only if the 106-bit value is not within 2^-106 of a tie, which is checked and, if it happens, refused as `stats.sd-tie`).
 * **skewness** = `m3 / m2^(3/2)` and **excess kurtosis** = `m4 / m2^2 - 3`, with `m_k = (1/n) sum (x - mean)^k` (the biased moments; the adjusted G1 and G2 are flags `--skew-kind`): the central moments are exact rationals
   from the power sums `S1..S4` (`n^k m_k` is an integer combination of `S_j S1^(k-j)`), so the rounding happens in the root and the quotient only, and the answer says which (`rounding: "exact-then-2"`).
@@ -33,8 +33,7 @@ exact histogram; per non-numeric column `count`, `missing`, `distinct` and the m
 
 ## 4. Refusals (every one has a `stats.` tag, an exit code, a repair where safe)
 
-`stats.sample-too-small` (n - ddof < 1), `stats.variance-zero` (skewness, kurtosis of a constant column: `m2 = 0`), `stats.sum-overflow`, `stats.non-numeric` (a column asked for as numeric has a cell that is not a number: the row and
-column are named, no cell value is printed), `stats.quantile-type`, `stats.bins-limit`, `stats.rows-limit`, `stats.cols-limit`, plus the reader's, the limits' and the arguments' tags of the contract package. Bounded resources: rows, columns,
+**As built (the first design, with refusals for an undefined statistic, was not followed):** a statistic that is undefined is `null`, not a refusal: the variance and `sd` when `n - ddof < 1` or when the exact variance is beyond the largest double, the skewness and kurtosis when `n` is 1 or the variance is zero. A column with a cell that is not a number is reported as `text`, not refused. So `stats.sample-too-small`, `stats.variance-zero`, `stats.sum-overflow`, `stats.non-numeric`, `stats.quantile-type`, `stats.bins-limit`, `stats.rows-limit` and `stats.cols-limit` of the design do not exist. The tags that do are listed in `rules` of `stats introspect`: `stats.csv-ragged`, `stats.csv-multiline`, `stats.csv-bad-quote`, `stats.no-header`, `stats.bad-verb`, `stats.file-changed`, `stats.no-such-column`, `stats.ambiguous-column`, `limit.too-many-rows`, `limit.too-many-columns`, `limit.too-many-cells`, `limit.too-many-groups`, plus the reader's, the limits' and the arguments' tags of the contract package (`args.bad-value` for a flag out of its range). Bounded resources: rows, columns,
 distinct levels and bins each have a flag, a default and a ceiling, checked before anything sized by the input.
 
 ## 5. Gates (written before the code, each able to fail)

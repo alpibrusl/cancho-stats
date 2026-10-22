@@ -25,7 +25,7 @@ M = [
     ("ragged-check", "    if n != ncols {\n        return 1;", "    if n < ncols {\n        return 1;"),
     ("row-limit-edge", "if info.rows >= max_rows {", "if info.rows > max_rows {"),
     ("column-limit-edge", "} else if seps + 1 > max_cols {", "} else if seps + 1 >= max_cols {"),
-    ("empty-kind", "        if nonmiss == 0 {\n            w = json.put_string(heap, w, \"empty\");", "        if nonmiss == 1 {\n            w = json.put_string(heap, w, \"empty\");"),
+    ("empty-kind", "            if nonmiss == 0 {\n                w = json.put_string(heap, w, \"empty\");", "            if nonmiss == 1 {\n                w = json.put_string(heap, w, \"empty\");"),
     ("verb-name", "!bytes.equal(cli.operand(args, parsed, 0), \"describe\")", "!bytes.equal(cli.operand(args, parsed, 0), \"describe \")"),
     ("delimiter-fixed", "let delim = int_of(cli.text(args, parsed, table, \"delim\")[0]);\n    let max_rows", "let delim = 44;\n    let max_rows"),
     ("ddof-ceiling", "if cli.nat(args, parsed, table, \"ddof\") > 1 {", "if cli.nat(args, parsed, table, \"ddof\") > 2 {"),
@@ -35,6 +35,8 @@ M = [
 ]
 
 EXPLAINED = {}
+# the header scanner is written twice (the first pass and the second pass that counts the levels): a mutant of it is applied to the first copy only, and the pattern is said to occur twice
+OCCURS = {"column-limit-edge": 2}
 
 
 def control():
@@ -48,7 +50,7 @@ def control():
 def main():
     t = (ROOT / F).read_text()
     for n, o, w in M:
-        if t.count(o) != 1 or o == w:
+        if t.count(o) != OCCURS.get(n, 1) or o == w:
             print("mutant %s: pattern occurs %d times" % (n, t.count(o)))
             return 1
     if "--check" in sys.argv:
