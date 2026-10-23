@@ -6,33 +6,33 @@ import os, pathlib, shutil, subprocess, sys, tempfile
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CANCHO = os.environ.get("CANCHO", str(ROOT.parent / "cancho-compiler-a4572ea" / "target" / "release" / "cancho"))
 F = "tools/stats/main.cho"
-F = "tools/stats/main.cho"
-F = "tools/stats/main.cho"
+PICK = "lib/csvx/pick.cho"  # --cols matching, moved out of main.cho
+FLAT = "lib/csvx/flat.cho"  # the text form, likewise
 M = [
-    ("cols-start-all-selected", F, "while j < ncols {\n        sel[j] = 0;", "while j < ncols {\n        sel[j] = 1;"),
-    ("cols-empty-item-accepted", F, "if len(tok) == 0 {\n            return (3, i);", "if len(tok) == 99 {\n            return (3, i);"),
-    ("cols-ambiguity-not-detected", F, "if matches > 1 {\n            return (2, i);", "if matches > 2 {\n            return (2, i);"),
-    ("cols-no-match-wrong", F, "if matches == 0 {\n            return (1, i);", "if matches == 1 {\n            return (1, i);"),
-    ("cols-selects-wrong-column", F, "sel[at] = 1;", "sel[0] = 1;"),
-    ("cols-name-compare", F, "if bytes.equal(names[from..vec.get(ends, j)], tok) {", "if !bytes.equal(names[from..vec.get(ends, j)], tok) {"),
+    ("cols-start-all-selected", PICK, "while j < ncols {\n        sel[j] = 0;", "while j < ncols {\n        sel[j] = 1;"),
+    ("cols-empty-item-accepted", PICK, "if len(tok) == 0 {\n            return (3, i);", "if len(tok) == 99 {\n            return (3, i);"),
+    ("cols-ambiguity-not-detected", PICK, "if matches > 1 {\n            return (2, i);", "if matches > 2 {\n            return (2, i);"),
+    ("cols-no-match-wrong", PICK, "if matches == 0 {\n            return (1, i);", "if matches == 1 {\n            return (1, i);"),
+    ("cols-selects-wrong-column", PICK, "sel[at] = 1;", "sel[0] = 1;"),
+    ("cols-name-compare", PICK, "if bytes.equal(names[from..vec.get(ends, j)], tok) {", "if !bytes.equal(names[from..vec.get(ends, j)], tok) {"),
     ("cols-report-skips-selected", F, "if sel[j] == 1 {\n            var from = 0;", "if sel[j] == 0 {\n            var from = 0;"),
     ("cols-levels-count-unselected", F, "if bad[j] == 1 && sel[j] == 1 &&", "if bad[j] == 1 &&"),
     ("text-mode-ignored", F, 'let text_mode = bytes.equal(cli.text(args, parsed, table, "format"), "text");', "let text_mode = false;"),
-    ("flat-index-step", F, "f[6 * (depth - 1) + 1] = f[6 * (depth - 1) + 1] + 1;", "f[6 * (depth - 1) + 1] = f[6 * (depth - 1) + 1] + 2;"),
-    ("flat-path-leading-dot", F, "if k > 0 {\n                o = buffer.push(heap, o, byte_of(46));", "if k >= 0 {\n                o = buffer.push(heap, o, byte_of(46));"),
-    ("flat-bracket-open", F, "o = buffer.push(heap, o, byte_of(91));", "o = buffer.push(heap, o, byte_of(40));"),
-    ("flat-bracket-close", F, "o = buffer.push(heap, o, byte_of(93));", "o = buffer.push(heap, o, byte_of(41));"),
-    ("flat-empty-array-not-shown", F, "if f[6 * depth + 4] == 0 {\n                    if c == 125 {", "if f[6 * depth + 4] == 7 {\n                    if c == 125 {"),
-    ("flat-empty-is-object", F, 'out = put_line(heap, out, doc, f, depth, "[]");', 'out = put_line(heap, out, doc, f, depth, "{}");'),
-    ("flat-string-escape-ignored", F, "if int_of(doc[i]) == 92 {\n                            i = i + 1;\n                        }", ""),
-    ("flat-key-expected-after-comma", F, "f[6 * (depth - 1) + 5] = 1;\n                }\n                i = i + 1;", "f[6 * (depth - 1) + 5] = 0;\n                }\n                i = i + 1;"),
-    ("flat-literal-end-bracket", F, "&& int_of(doc[i]) != 93 {", "{"),
-    ("flat-literal-end-brace", F, "&& int_of(doc[i]) != 125", ""),
-    ("flat-key-start", F, "f[6 * top + 2] = start + 1;", "f[6 * top + 2] = start;"),
-    ("flat-key-end", F, "f[6 * top + 3] = i - 1;", "f[6 * top + 3] = i;"),
-    ("flat-children-not-counted", F, "f[6 * top + 4] = f[6 * top + 4] + 1;\n                    out = put_line", "f[6 * top + 4] = f[6 * top + 4] + 0;\n                    out = put_line"),
-    ("flat-container-not-counted", F, "if depth > 0 {\n                    f[6 * (depth - 1) + 4] = f[6 * (depth - 1) + 4] + 1;", "if depth > 99 {\n                    f[6 * (depth - 1) + 4] = f[6 * (depth - 1) + 4] + 1;"),
-    ("flat-array-kind", F, "f[6 * depth] = 0;\n                if c == 91 {\n                    f[6 * depth] = 1;", "f[6 * depth] = 0;\n                if c == 91 {\n                    f[6 * depth] = 0;"),
+    ("flat-index-step", FLAT, "f[6 * (depth - 1) + 1] = f[6 * (depth - 1) + 1] + 1;", "f[6 * (depth - 1) + 1] = f[6 * (depth - 1) + 1] + 2;"),
+    ("flat-path-leading-dot", FLAT, "if k > 0 {\n                o = buffer.push(heap, o, byte_of(46));", "if k >= 0 {\n                o = buffer.push(heap, o, byte_of(46));"),
+    ("flat-bracket-open", FLAT, "o = buffer.push(heap, o, byte_of(91));", "o = buffer.push(heap, o, byte_of(40));"),
+    ("flat-bracket-close", FLAT, "o = buffer.push(heap, o, byte_of(93));", "o = buffer.push(heap, o, byte_of(41));"),
+    ("flat-empty-array-not-shown", FLAT, "if f[6 * depth + 4] == 0 {\n                    if c == 125 {", "if f[6 * depth + 4] == 7 {\n                    if c == 125 {"),
+    ("flat-empty-is-object", FLAT, 'out = put_line(heap, out, doc, f, depth, "[]");', 'out = put_line(heap, out, doc, f, depth, "{}");'),
+    ("flat-string-escape-ignored", FLAT, "if int_of(doc[i]) == 92 {\n                            i = i + 1;\n                        }", ""),
+    ("flat-key-expected-after-comma", FLAT, "f[6 * (depth - 1) + 5] = 1;\n                }\n                i = i + 1;", "f[6 * (depth - 1) + 5] = 0;\n                }\n                i = i + 1;"),
+    ("flat-literal-end-bracket", FLAT, "&& int_of(doc[i]) != 93 {", "{"),
+    ("flat-literal-end-brace", FLAT, "&& int_of(doc[i]) != 125", ""),
+    ("flat-key-start", FLAT, "f[6 * top + 2] = start + 1;", "f[6 * top + 2] = start;"),
+    ("flat-key-end", FLAT, "f[6 * top + 3] = i - 1;", "f[6 * top + 3] = i;"),
+    ("flat-children-not-counted", FLAT, "f[6 * top + 4] = f[6 * top + 4] + 1;\n                    out = put_line", "f[6 * top + 4] = f[6 * top + 4] + 0;\n                    out = put_line"),
+    ("flat-container-not-counted", FLAT, "if depth > 0 {\n                    f[6 * (depth - 1) + 4] = f[6 * (depth - 1) + 4] + 1;", "if depth > 99 {\n                    f[6 * (depth - 1) + 4] = f[6 * (depth - 1) + 4] + 1;"),
+    ("flat-array-kind", FLAT, "f[6 * depth] = 0;\n                if c == 91 {\n                    f[6 * depth] = 1;", "f[6 * depth] = 0;\n                if c == 91 {\n                    f[6 * depth] = 0;"),
 ]
 
 EXPLAINED = {}

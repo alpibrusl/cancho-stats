@@ -224,7 +224,7 @@ out = "build/psum-check"
 # S1: the command line (docs/describe.md). `cancho build --bin stats`.
 [[bin]]
 name = "stats"
-sources = ["lib/acc", "tools/stats", "generated/stats"]
+sources = ["lib/acc", "lib/csvx", "tools/stats", "generated/stats"]
 std = true
 out = "build/stats"
 

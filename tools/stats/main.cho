@@ -18,6 +18,8 @@ import acc.central;
 import acc.psum;
 import acc.histogram;
 import acc.quantile;
+import csvx.flat;
+import csvx.pick;
 import metrics.rank;
 import flt;
 import reader;
@@ -1056,154 +1058,6 @@ fn read_file[&h, &g, &p, &f, &s, &k](heap: &!h Heap, args: &g Args, parsed: &p c
     return (names, ends, cols, store, info, e);
 }
 
-// The columns named by --cols: `sel[j]` is 1 for each named column and 0 for the others. Answers (0, _) when all is well, else (1, i) no column of the header has the name of item i, (2, i) two or more have, (3, i) item i is empty.
-fn select_columns[&n, &en, &t, &o](names: &n [byte], ends: &en vec.Vec[int], ncols: int, list: &t [byte], sel: &!o [int]) -> [] (int, int) {
-    var j = 0;
-    while j < ncols {
-        sel[j] = 0;
-        j = j + 1;
-    }
-    let count = bytes.count_byte(list, ',') + 1;
-    var i = 0;
-    while i < count {
-        let tok = bytes.field(list, ',', i + 1);
-        if len(tok) == 0 {
-            return (3, i);
-        }
-        var matches = 0;
-        var at = 0;
-        j = 0;
-        while j < ncols {
-            var from = 0;
-            if j > 0 {
-                from = vec.get(ends, j - 1);
-            }
-            if bytes.equal(names[from..vec.get(ends, j)], tok) {
-                matches = matches + 1;
-                at = j;
-            }
-            j = j + 1;
-        }
-        if matches == 0 {
-            return (1, i);
-        }
-        if matches > 1 {
-            return (2, i);
-        }
-        sel[at] = 1;
-        i = i + 1;
-    }
-    return (0, 0);
-}
-
-// ------------------------------------------------------------------------------------------------ the text form
-
-// The path of the value that the frames `f[0..count]` lead to: `.key` for an object (no dot first), `[i]` for an array item. A frame is six integers: kind (0 object, 1 array), the index, the start and end of the current key in `doc`, how many values it has had, and whether a key is expected.
-fn put_path[&h, &d, &fr](heap: &!h Heap, out: buffer.Buffer, doc: &d [byte], f: &fr [int], count: int) -> [heap] buffer.Buffer {
-    var o = out;
-    var k = 0;
-    while k < count {
-        if f[6 * k] == 0 {
-            if k > 0 {
-                o = buffer.push(heap, o, byte_of(46));
-            }
-            o = buffer.append(heap, o, doc[f[6 * k + 2]..f[6 * k + 3]]);
-        } else {
-            o = buffer.push(heap, o, byte_of(91));
-            o = buffer.push_nat(heap, o, f[6 * k + 1]);
-            o = buffer.push(heap, o, byte_of(93));
-        }
-        k = k + 1;
-    }
-    return o;
-}
-
-fn put_line[&h, &d, &fr, &l](heap: &!h Heap, out: buffer.Buffer, doc: &d [byte], f: &fr [int], count: int, lit: &l [byte]) -> [heap] buffer.Buffer {
-    var o = put_path(heap, out, doc, f, count);
-    o = buffer.append(heap, o, " = ");
-    o = buffer.append(heap, o, lit);
-    o = buffer.push(heap, o, byte_of(10));
-    return o;
-}
-
-// The document (the compact JSON this tool writes: no white space between tokens) as one line `path = value` per value, in document order, an empty array or object as `[]` or `{}`. Made from the bytes of the document, so a value cannot differ from the JSON's.
-fn flatten[&h, &d](heap: &!h Heap, doc: &d [byte]) -> [heap] buffer.Buffer {
-    var out = buffer.empty(heap, 1024);
-    let frames = box_slice(heap, 6 * 64 + 6, 0);
-    let n = len(doc);
-    var depth = 0;
-    var i = 0;
-    borrow mut frames as &!fw in {
-        let f = contents(fw);
-        while i < n && depth < 63 {
-            let c = int_of(doc[i]);
-            if c == 123 || c == 91 {
-                if depth > 0 {
-                    f[6 * (depth - 1) + 4] = f[6 * (depth - 1) + 4] + 1;
-                }
-                f[6 * depth] = 0;
-                if c == 91 {
-                    f[6 * depth] = 1;
-                }
-                f[6 * depth + 1] = 0;
-                f[6 * depth + 4] = 0;
-                f[6 * depth + 5] = 0;
-                if c == 123 {
-                    f[6 * depth + 5] = 1;
-                }
-                depth = depth + 1;
-                i = i + 1;
-            } else if c == 125 || c == 93 {
-                depth = depth - 1;
-                if f[6 * depth + 4] == 0 {
-                    if c == 125 {
-                        out = put_line(heap, out, doc, f, depth, "{}");
-                    } else {
-                        out = put_line(heap, out, doc, f, depth, "[]");
-                    }
-                }
-                i = i + 1;
-            } else if c == 44 {
-                if f[6 * (depth - 1)] == 1 {
-                    f[6 * (depth - 1) + 1] = f[6 * (depth - 1) + 1] + 1;
-                } else {
-                    f[6 * (depth - 1) + 5] = 1;
-                }
-                i = i + 1;
-            } else if c == 58 {
-                i = i + 1;
-            } else {
-                let start = i;
-                if c == 34 {
-                    i = i + 1;
-                    while i < n && int_of(doc[i]) != 34 {
-                        if int_of(doc[i]) == 92 {
-                            i = i + 1;
-                        }
-                        i = i + 1;
-                    }
-                    i = i + 1;
-                } else {
-                    while i < n && int_of(doc[i]) != 44 && int_of(doc[i]) != 125 && int_of(doc[i]) != 93 {
-                        i = i + 1;
-                    }
-                }
-                let top = depth - 1;
-                if c == 34 && f[6 * top] == 0 && f[6 * top + 5] == 1 {
-                    f[6 * top + 2] = start + 1;
-                    f[6 * top + 3] = i - 1;
-                    f[6 * top + 5] = 0;
-                } else {
-                    f[6 * top + 4] = f[6 * top + 4] + 1;
-                    out = put_line(heap, out, doc, f, depth, doc[start..i]);
-                }
-            }
-        }
-    }
-    unbox_slice(heap, frames);
-    return out;
-}
-
 // One description: the file opened and read (only the records of the group when `by` >= 0), the levels of its text columns, and what is written to `w0`: with `as_group` an object of the group, without it the `rows`, the settings and the `columns` of the whole file.
 fn describe_one[&h, &g, &p, &f, &r, &sh, &fu, &k](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], by: int, key: &k [byte], by_null: bool, as_group: bool, w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
     let table = flag_table();
@@ -1235,7 +1089,7 @@ fn describe_one[&h, &g, &p, &f, &r, &sh, &fu, &k](heap: &!h Heap, args: &g Args,
                         borrow names as &nb0 in {
                             borrow ends as &eb0 in {
                                 borrow mut sel as &!sw0 in {
-                                    let (s1, i1) = select_columns(buffer.bytes(nb0), eb0, info.ncols, cli.text(args, parsed, table, "cols"), contents(sw0));
+                                    let (s1, i1) = pick.select(buffer.bytes(nb0), eb0, info.ncols, cli.text(args, parsed, table, "cols"), contents(sw0));
                                     st = s1;
                                     item = i1;
                                 }
@@ -1470,7 +1324,7 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
                         if text_mode {
                             buffer.drop(heap, plain);
                             borrow data as &dd in {
-                                plain = flatten(heap, buffer.bytes(dd));
+                                plain = flat.flatten(heap, buffer.bytes(dd));
                             }
                         }
                     } else {
