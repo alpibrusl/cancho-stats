@@ -55,10 +55,8 @@ With `n` the rows used for a pair, `Sx = sum x`, `Sy = sum y`, `Sxx = sum x^2`, 
 1. **S2.0, no behaviour change.** `tools/stats/main.cho` is 1,534 lines of the 2,000 allowed (`CLAUDE.md`): the reader loop, `discover` and `read_file` (the header scanner is written twice, which the mutants of 2026-10-22 showed) move to a module shared by `describe` and `corr`. Gate: the existing gates and the fingerprint unchanged.
 2. **S2.1** `acc.xsum` and C-A. 3. **S2.2** Pearson with its p-value (C-B, C-C, C-D, C-E, C-F for Pearson). 4. **S2.3** ranks and Spearman. 5. **S2.4** Kendall. 6. **S2.5** mutants, fuzz, fingerprint, the page and the skill text.
 
-## 7. Open points for the maintainer
+## 7. Decisions of 2026-10-23
 
-1. `--missing pairwise` as the default (the usual choice of `pandas.DataFrame.corr` and `cor(use="pairwise")`), against `listwise` (one `n` for the table, ranks computed once).
-2. Spearman by the t-approximation and Kendall by the normal approximation in S2, the exact permutation p-values waiting for S4's machinery: confirm, or move S4's enumeration earlier.
-3. `--max-pairs` default 1,000 and the pair list instead of a square matrix: a square `matrix` of `r` could be added for `--format text` readers.
-4. Whether `acc.xsum`, `acc.psum` and `acc.bigint` become published stores now that a second consumer exists (point 3 of `docs/describe.md` section 6, which had waited for one): proposed yes, after S2.1, so `cancho-ml` can pin them.
-5. Whether a Fisher-`z` interval is also printed by `corr`, or only by `stats ci correlation` (proposed: only by `ci`).
+The maintainer accepted the proposals of the design, each as written in sections 2 to 4: (1) `--missing pairwise` is the default; (2) Spearman by the t-approximation and Kendall by the normal approximation in S2, the exact permutation p-values with S4; (3) a pair list, `--max-pairs` 1,000, no square matrix; (4) `acc.xsum`, `acc.psum` and `acc.bigint` are published as stores after S2.1 so that `cancho-ml` can pin them; (5) the Fisher-`z` interval is `stats ci correlation` (S5) only, not `corr`.
+
+Still open: whether S4 adds `--exact` to `corr`.
