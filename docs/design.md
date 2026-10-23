@@ -1,6 +1,6 @@
 # cancho-stats: design draft
 
-**Status: accepted by the maintainer on 2026-10-15 (new repository, formula grammar in v1, the whole test table in v1, the numeric stores of `cancho-ml` pinned, `exp` and `ln` from cancho). No code exists and nothing here has been measured for stats.** Tags: **[read]** read from a
+**Status: accepted by the maintainer on 2026-10-15 (new repository, formula grammar in v1, the whole test table in v1, the numeric stores of `cancho-ml` pinned, `exp` and `ln` from cancho). This is the design as accepted; what has been built since (S0, S0b and most of S1) is in `docs/numerics.md`, `docs/describe.md` and the issues, and a paragraph here that the code has overtaken says so.** Tags: **[read]** read from a
 repository or document, **[measured]** printed by a script, **[choice]** a decision the maintainer can overturn, **[open]** not decided. A repository is created only
 when the maintainer says so. Written 2026-10-15.
 
@@ -101,7 +101,7 @@ Every verb prints one JSON document: `{"ok":true,"command":"stats","schema":"sta
 *facts* (sample sizes, variance ratio, number of ties, expected counts below 5), never a verdict. Numbers are decimal text; `--format text` prints a table.
 
 Rule tags **[choice]** (illustrative): `stats.sample-too-small`, `stats.variance-zero`, `stats.table-sparse`, `stats.exact-too-large`, `stats.family-too-large`,
-`stats.formula`, `stats.collinear`, `stats.replicates-limit`, plus the reader's, the limits' and the arguments' tags shared with `table`.
+`stats.formula`, `stats.collinear`, `stats.replicates-limit`; `describe` as built uses none of the first two (an undefined statistic is `null`, see `docs/describe.md` section 4), plus the reader's, the limits' and the arguments' tags shared with `table`.
 
 ## 7. Authority and surface
 
@@ -125,8 +125,8 @@ model file, no server. An MCP surface is derived from the flag table later, as `
 
 * **[choice]** `alpibrusl/cancho-stats`, public, EUPL-1.2, copyright Alpibru S.L. (the maintainer's standing rule for new repositories; `cancho-ml` carries the same text **[read]**).
 * **Pins, never copies:** `cancho-table`'s `facc`, `flt`, `reader` stores (as `cancho-ml` pins them, **[read]**); `cancho-tools`' contract package; and from `cancho-ml` the
-  modules `lib/core` (RNG, matrix, exact helpers), `lib/linalg` (Cholesky, solves, lane-ordered sums) and `lib/metrics` (ranks, sums). **The last needs the prerequisite issue
-  (cancho-ml#46):** those folders are not yet published as stores.
+  modules `lib/core` (RNG, matrix, exact helpers), `lib/linalg` (Cholesky, solves, lane-ordered sums) and `lib/metrics` (ranks, sums). **The last needed the prerequisite issue
+  (cancho-ml#46), which is done:** `tools.toml` pins its 23 numeric modules as stores (`docs/numerics.md` section 2, checked by `scripts/check_pins.sh`).
 * **Compiler:** the revision the siblings pin, moved only deliberately.
 * **CI:** the workflow `cancho-ml` is getting (a branch in progress), with the same fingerprint method.
 
@@ -136,7 +136,7 @@ model file, no server. An MCP surface is derived from the flag table later, as `
 |---|---|---|
 | S0 | accuracy harness: exact accumulation of products, special functions, the determinism of `exp`/`ln`, the stores consumed | mpmath agreement bounds written first; the platform-math question answered |
 | S1 | `describe` | oracle bytes for every exact statistic; quantile types vs a Python implementation |
-| S2 | `corr` | oracle bytes (Pearson from exact sums, ranks); scipy bounds |
+| S2 | `corr` (design: `docs/corr.md`) | oracle bytes (Pearson from exact sums, ranks); scipy bounds |
 | S3 | `test` t family, `chisq`, `prop`, corrections | calibration + oracle |
 | S4 | `test` rank tests, `anova`, `kruskal`, `ks`, `fisher` | calibration + exact-test oracles |
 | S5 | `ci`, `resample` | thread-invariant seeded streams; coverage gate (an interval covers the truth at its nominal rate) |

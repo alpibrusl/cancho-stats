@@ -44,6 +44,9 @@ CASES = [
     ("too many rows", b"a\n1\n2\n3\n", ["describe", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
     ("columns exactly at the limit", b"a,b\n1,2\n", ["describe", "--max-cols", "2", "f.csv"], None, 0),
     ("too many columns", b"a,b,c\n1,2,3\n", ["describe", "--max-cols", "2", "f.csv"], "limit.too-many-columns", 8),
+    # --by reads the header in a pass of its own (discover), with its own copy of the column limit
+    ("by: columns exactly at the limit", b"a,b\n1,2\n", ["describe", "--by", "a", "--max-cols", "2", "f.csv"], None, 0),
+    ("by: too many columns", b"a,b,c\n1,2,3\n", ["describe", "--by", "a", "--max-cols", "2", "f.csv"], "limit.too-many-columns", 8),
     ("line too long", b"a\n" + b"1" * 200 + b"\n", ["describe", "--max-line-bytes", "100", "f.csv"], "limit.line-too-long", 8),
     ("header continues", b'"a\nb",c\n1,2\n', ["describe", "f.csv"], "stats.csv-multiline", 8),
     ("quantile type 0", b"a\n1\n", ["describe", "--quantile-type", "0", "f.csv"], "args.bad-value", 2),

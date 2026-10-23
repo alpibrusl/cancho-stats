@@ -550,6 +550,23 @@ def main():
                 gl = [(q["value"], q["count"]) for q in got[j].get("levels", [])]
                 if gl != want["levels_all"][:10] or got[j].get("distinct") != want["distinct"]:
                     bad.append((-1, "wide column %d: want %r got %r" % (j, want["levels_all"][:10], gl)))
+    # --delim: the same table with each delimiter must give the bytes of the comma run (a value with a comma or a semicolon is quoted)
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        names = ["x", "y", "g"]
+        rows = [["1.5", "2", "p,q"], ["-3", "", "r;s"], ["4", "7", "p,q"], ["0.25", "1", "tab\\t"]]
+        def table(d):
+            q = lambda c: '"%s"' % c if (d in c or "," in c or ";" in c) else c
+            return d.join(names) + "\n" + "\n".join(d.join(q(c) for c in r) for r in rows) + "\n"
+        outs = {}
+        for d in (",", ";", "|", "\t"):
+            (tmp / "f.csv").write_text(table(d))
+            p = subprocess.run([a.bin, "describe", "--root", str(tmp), "--delim", d, "f.csv"], capture_output=True, text=True, timeout=120)
+            outs[d] = (p.returncode, p.stdout)
+        checked += 3
+        for d in (";", "|", "\t"):
+            if outs[d] != outs[","] or outs[d][0] != 0:
+                bad.append((-1, "--delim %r: exit %d, bytes differ from the comma run: %s" % (d, outs[d][0], outs[d][1][:80])))
     print("gate_describe: %d files, %d values compared, %d differ" % (a.files, checked, len(bad)))
     for b in bad[:6]:
         print("  file %d: %s" % b)

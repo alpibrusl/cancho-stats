@@ -293,6 +293,10 @@ jobs:
           cancho install
           cancho build --bin special-check
           cancho build --bin acc-check
+          cancho build --bin bigint-check
+          cancho build --bin psum-check
+          cancho build --bin quantile-check
+          cancho build --bin stats
 
       - name: Accuracy sweeps at full size
         run: python3 scripts/gate_special.py --workers 3
@@ -302,3 +306,15 @@ jobs:
 
       - name: Mutants of the special functions
         run: python3 scripts/mutants_special.py
+
+      - name: Mutants of the big integers, the power sums and stats describe
+        run: |
+          python3 scripts/mutants_bigint.py
+          python3 scripts/mutants_psum.py
+          python3 scripts/mutants_stats.py
+          python3 scripts/mutants_central.py
+          python3 scripts/mutants_quantile.py
+          python3 scripts/mutants_histogram.py
+          python3 scripts/mutants_levels.py
+          python3 scripts/mutants_by.py
+          python3 scripts/mutants_cols.py
