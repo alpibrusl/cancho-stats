@@ -29,7 +29,7 @@ M = [
     ("sqrt-too-few-bits", "lib/acc/central.cho", "var k = (132 + bd - bn + 1) / 2;", "var k = (60 + bd - bn + 1) / 2;"),
     ("sqrt-equality", "lib/acc/central.cho", "contents(bw), ns) <= 0 {", "contents(bw), ns) < 0 {"),
     ("sqrt-sticky", "lib/acc/central.cho", "contents(bw), ns) != 0 {\n                            sticky = 1;", "contents(bw), ns) == 0 {\n                            sticky = 1;"),
-    ("sqrt-exponent", "lib/acc/central.cho", "round_bits(contents(sw), sl, 0 - k, sticky)", "round_bits(contents(sw), sl, 1 - k, sticky)"),
+    ("sqrt-exponent", "lib/acc/central.cho", "round_bits(contents(sw), sl, e - k, sticky)", "round_bits(contents(sw), sl, e + 1 - k, sticky)"),
     ("ratio-too-few-bits", "lib/acc/central.cho", "    var k = 66 + bd - bn;", "    var k = 40 + bd - bn;"),
     ("limbs-of-shift", "lib/acc/central.cho", "    out[1] = v >> 26 & 67108863;", "    out[1] = v >> 25 & 67108863;"),
     ("shl-limb-index", "lib/acc/bigint.cho", "        out[q + i] = v & mask();\n        carry = v >> 26;", "        out[q + i] = v & mask();\n        carry = v >> 25;"),

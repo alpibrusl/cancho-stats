@@ -50,6 +50,8 @@ def _t(*cols):
 # hand cases that every run includes: |t| beyond the largest double (n = 3, the tiny third row decides the last digits), r exactly -1 and +1, n = 2, subnormals, a huge exact pair
 FIXED = [
     _t([1.0, 2.0, 2.0 ** -1000], [2.0, 4.0, 2 * 2.0 ** -1000 * (1 + 2.0 ** -52)]),
+    # |t| about 1e257 with df = 1: the tail, 6.1e-258, is representable (the Student t survival function answered 0 here until the correction of docs/numerics.md section 3.2)
+    _t([1.0, 2.0, 2.0 ** -800], [2.0, 4.0, 2 * 2.0 ** -800 * (1 + 2.0 ** -52)]),
     _t([1, 2, 3, 4], [-2, -4, -6, -8]),
     _t([1, 2], [3, 5]),
     _t([1e300, 2e300, -3e300], [1e300, 2e300, -3e300]),

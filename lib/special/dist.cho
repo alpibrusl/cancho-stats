@@ -277,6 +277,17 @@ fn t_both(t: float, nu: float) -> [] (float, float, int) {
         x = r / (r + at);
         y = at / (r + at);
     }
+    if x < 1.0e-200 && at > 1.0e100 && nu >= 0.01 {
+        // x = nu / (nu + t^2) is below 1e-200, or has underflowed to a subnormal or to 0, with t above 1e100 and nu at least 0.01 (the contract starts at 0.1; a tail is still representable up to t = 1e300 for nu below about 1): I_x(nu/2, 1/2) = x^a / (a B(a, 1/2)) (1 + O(x)) with a = nu/2 and
+        // O(x) below 1e-200, evaluated in the log domain (docs/numerics.md section 3.3, corrected after docs/test.md found the answer 0 where the tail is 5e-254)
+        let a = nu / 2.0;
+        let lo_log = a * (math.log(nu) - 2.0 * math.log(at)) - math.log(a) - lgam.lgamma_pos(a) - 0.5723649429247001 + lgam.lgamma_pos(a + 0.5);
+        let tiny_tail = math.exp(lo_log) / 2.0;
+        if t > 0.0 {
+            return (1.0 - tiny_tail, tiny_tail, 0);
+        }
+        return (tiny_tail, 1.0 - tiny_tail, 0);
+    }
     let (lo, up, code) = ibeta.beta_xy(nu / 2.0, 0.5, x, y);
     if code != 0 {
         return (nan(), nan(), code);

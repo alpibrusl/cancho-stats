@@ -247,6 +247,22 @@ def g_t(r, i):
     return (t, nu)
 
 
+def g_t_huge(r, i):
+    """|t| from 1e100 to 1e300 with nu small enough that the tail, about t^-nu, is at least 1e-290 (the contract of docs/numerics.md section 3.2 reaches there; the first sweeps stopped at |t| = 1e4, and a
+    t above 1e154 made x = nu / (nu + t^2) underflow to 0 and the survival function answer 0 where the tail is 5e-254)"""
+    nu = r.logu(0.1, 3.0)
+    top = min(300.0, 290.0 / nu)
+    lo = 100.0
+    if top < lo:
+        top = lo
+    if i % 4 == 3:
+        # the regime where the upper tail is not negligible next to 1 (a tail near 1e-11, so cdf = 1 - tail differs from 1 beyond the bound): nu just above 0.1, t from 1e100 to 1e120
+        nu = r.logu(0.1, 0.13)
+        top = 120.0
+    t = 10.0 ** r.uni(lo, top)
+    return (t * (1.0 if r.u() < 0.5 else -1.0), nu)
+
+
 def g_chi2_mid(r, i):
     nu = r.logu(1e-2, 1e4)
     if i % 2 == 0:
@@ -368,6 +384,8 @@ RANGES = [
     ("qnorm", "qnorm", 20000, g_qnorm, "qnorm", 0.0, False),
     ("t_cdf", "t_cdf", 20000, g_t, "rel", 1e-12, False),
     ("t_sf", "t_sf", 20000, g_t, "rel", 1e-12, False),
+    ("t_sf_huge", "t_sf", 4000, g_t_huge, "rel", 1e-12, False),
+    ("t_cdf_huge", "t_cdf", 4000, g_t_huge, "rel", 1e-12, False),
     ("chi2_cdf mid", "chi2_cdf", 20000, g_chi2_mid, "rel", 2e-13, False),
     ("chi2_sf mid", "chi2_sf", 20000, g_chi2_mid, "rel", 2e-13, False),
     ("chi2_cdf big", "chi2_cdf", 2000, g_chi2_big, "rel", 2e-12, True),

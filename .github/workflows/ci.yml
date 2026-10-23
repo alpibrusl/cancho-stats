@@ -207,6 +207,12 @@ jobs:
           python3 scripts/gate_corr_calibration.py --replicates 2000 --method spearman
           python3 scripts/gate_corr_calibration.py --replicates 2000 --method kendall
 
+      - name: stats test (t1) against Fractions and mpmath, scipy, calibration, power and coverage
+        if: steps.stores.outputs.fetchable == 'yes'
+        run: |
+          python3 scripts/gate_test.py --files 200 --scipy
+          python3 scripts/gate_test_calibration.py --replicates 2000
+
       - name: Quantiles (nine definitions) against an independent exact reference
         if: steps.stores.outputs.fetchable == 'yes'
         run: python3 scripts/gate_quantile.py --cases 3000
@@ -334,3 +340,4 @@ jobs:
           python3 scripts/mutants_by.py
           python3 scripts/mutants_cols.py
           python3 scripts/mutants_corr.py
+          python3 scripts/mutants_test.py
