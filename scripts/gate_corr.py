@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""S2.2 and S2.3 gates C-B, C-C and C-D (docs/corr.md section 5), for `stats corr` (Pearson, and with --method spearman the average-rank coefficient): generated CSV files against
+"""S2.2 and S2.3 gates C-B, C-C and C-D (docs/corr.md section 5), for `stats corr` (Pearson, with --method spearman the average-rank coefficient, with --method kendall tau-b): generated CSV files against
 
-    python3 scripts/gate_corr.py [--bin build/stats] [--files 200] [--seed 1] [--scipy] [--method pearson|spearman]
+    python3 scripts/gate_corr.py [--bin build/stats] [--files 200] [--seed 1] [--scipy] [--method pearson|spearman|kendall]
 
 With --method spearman the oracle ranks the rows used for each pair by counting (twice the average rank = 2 (values below) + (values equal, itself included) + 1, an independent method from the program's
-binary search), takes the exact Pearson coefficient of those ranks, and expects the key `rho`, the p-method `t-approximation`, the tie groups per column, and the reason `all-tied` for a column of equal ranks. Controls: ties broken
+binary search), takes the exact Pearson coefficient of those ranks, and expects the key `rho`, the p-method `t-approximation`, the tie groups per column, and the reason `all-tied` for a column of equal ranks. With --method kendall the oracle counts concordant, discordant and tied pairs over ALL pairs (O(n^2)), takes the tie-corrected variance from the group sizes in Kendall's textbook form, and expects the key `tau`,
+`s` (= C - D), `ties` with the rule `tau-b`, the p-method `normal-approximation`, no degrees of freedom, and the reasons `all-tied`, `too-few-rows` (n < 3: no statistic) and `variance-zero`; its p-value bound is relative
+1e-12 + (z^2 + 1) 2^-53 (the rounding of z amplified by z^2). Controls: the untied variance on tied data, tau-a, a one-sided tail. For spearman: ties broken
 by position, and ranks taken over the whole column before the rows with a missing partner are dropped; each must give another coefficient on the cases where it applies.
 
 Oracle, from `fractions.Fraction`, of the doubles the text reads as: for every pair of numeric columns (both modes `--missing pairwise` and `listwise`) the rows used, n, the exact integers
@@ -37,8 +39,8 @@ import gate_describe as gd  # noqa: E402
 
 mpmath.mp.dps = 60
 EPS = 2.0 ** -53
-GOOD = ("uniform", "ints", "lin", "tied")
-SHAPES = ["uniform", "ints", "tied", "lin", "offset", "offset-neg", "wide", "tiny", "huge", "const", "gappy", "empty", "text", "mixed", "lin", "lin", "ints", "uniform"]
+GOOD = ("uniform", "ints", "lin", "tied", "tied3")
+SHAPES = ["uniform", "ints", "tied", "tied3", "tied3", "lin", "offset", "offset-neg", "wide", "tiny", "huge", "const", "gappy", "empty", "text", "mixed", "lin", "lin", "ints", "uniform"]
 
 
 def _t(*cols):
@@ -54,12 +56,18 @@ FIXED = [
     _t([5e-324, 1e-323, 1.5e-323, 2e-323], [1e-323, 3e-323, 2e-323, 4e-323]),
     _t([1.0, 2.0, 3.0], [1.0, 2.0, 3.0000000000000004]),
     _t([1e8, 1e8 + 1, 1e8 + 2, 1e8 + 4], [3.0, 1.0, 2.0, 5.0], [7.0, 7.0, 7.0, 7.0]),
+    # groups of ties of sizes 5, 3, 2, 1, 1 in x and 4, 4, 2, 2 in y: every term of the variance of tau-b (v0, vt, vu, v1, v2) is nonzero and none is a special case
+    _t([1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 5], [1, 1, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4], [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8]),
+    _t([1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5, 5], [2, 2, 2, 2, 1, 1, 1, 3, 3, 3, 3, 3, 1, 2, 3], [5, 4, 3, 2, 1, 5, 4, 3, 2, 1, 5, 4, 3, 2, 1]),
     _t([1, 2, 3, 4, 5], [1, 2, 3, 2, 1], [1, 2, 3, 2, 1.0000000000000002]),  # r = 0 exactly, and r about 1e-17: the p-value is 1, never above it
 ]
 
 
 def column(r, shape, n, prev):
     """the cells of one column; `lin` follows the previous column (a correlated pair, with noise); `tied` takes four values (many ties)"""
+    if shape == "tied3":
+        # three values, so groups of ties of many sizes, in both columns of a pair: the terms of Kendall's variance that need groups of size 3 and more
+        return [r.pick(["1", "1", "1", "2", "2", "3"]) for _ in range(n)]
     if shape == "tied":
         return [r.pick(["1", "2", "2.5", "4"]) if r.next() % 9 else "" for _ in range(n)]
     if shape == "lin":
@@ -167,6 +175,60 @@ def expected(xs, ys):
     return out
 
 
+def expected_kendall(xs, ys):
+    """the oracle of Kendall's tau-b for one pair, by the O(n^2) count over all pairs (no merge sort, no sorting): concordant, discordant, pairs tied in x, pairs tied in y; the tie-corrected variance
+    of S = C - D from the sizes of the groups of ties, in its textbook form (Kendall 1970, not the common denominator the program uses); tau = S / sqrt((n0 - n1)(n0 - n2)) and z = S / sqrt(V) each rounded
+    once, the two-sided normal p-value from the exact z at 60 digits."""
+    n = len(xs)
+    c = d = tx = ty = 0
+    for i in range(n):
+        for j in range(i + 1, n):
+            sx = (xs[i] > xs[j]) - (xs[i] < xs[j])
+            sy = (ys[i] > ys[j]) - (ys[i] < ys[j])
+            if sx == 0:
+                tx += 1
+            if sy == 0:
+                ty += 1
+            if sx * sy > 0:
+                c += 1
+            elif sx * sy < 0:
+                d += 1
+    S = c - d
+    n0 = n * (n - 1) // 2
+    out = {"n": n, "r": None, "statistic": None, "df": None, "p": None, "one": False, "reason": None, "s": S, "zz": 0.0, "n0": n0, "tx": tx, "ty": ty}
+    dx, dy = n0 - tx, n0 - ty
+    if dx == 0 or dy == 0:
+        out["reason"] = "all-tied"
+        return out
+    tau = gd.sqrt_round(Fraction(S * S, dx * dy))
+    out["r"] = -tau if S < 0 else tau
+    if n < 3:
+        out["reason"] = "too-few-rows"
+        return out
+    def groups(vs):
+        cnt = {}
+        for v in vs:
+            cnt[v] = cnt.get(v, 0) + 1
+        return [t for t in cnt.values() if t > 1]
+    gx, gy = groups(xs), groups(ys)
+    v0 = n * (n - 1) * (2 * n + 5)
+    vt = sum(t * (t - 1) * (2 * t + 5) for t in gx)
+    vu = sum(t * (t - 1) * (2 * t + 5) for t in gy)
+    v1 = sum(t * (t - 1) for t in gx) * sum(t * (t - 1) for t in gy)
+    v2 = sum(t * (t - 1) * (t - 2) for t in gx) * sum(t * (t - 1) * (t - 2) for t in gy)
+    V = Fraction(v0 - vt - vu, 18) + Fraction(v1, 2 * n * (n - 1)) + Fraction(v2, 9 * n * (n - 1) * (n - 2))
+    out["V"] = V
+    if V <= 0:
+        out["reason"] = "variance-zero"
+        return out
+    z = gd.sqrt_round(Fraction(S * S) / V)
+    out["statistic"] = -z if S < 0 else z
+    out["zz"] = z * z
+    zexact = mpmath.mpf(abs(S)) / mpmath.sqrt(mpmath.mpf(V.numerator) / V.denominator)
+    out["p"] = mpmath.erfc(zexact / mpmath.sqrt(2))
+    return out
+
+
 def welford_r(xs, ys):
     """control: the float one-pass (Welford) coefficient"""
     n = 0
@@ -185,13 +247,14 @@ def welford_r(xs, ys):
     return sxy / math.sqrt(sxx * syy)
 
 
-def p_ok(got, want, n):
-    """the bound of C-C"""
+def p_ok(got, want, n, z2=None):
+    """the bound of C-C; for the normal approximation of Kendall the rounding of z is amplified by z^2 instead of n - 1"""
     if want == 0:
         return got == 0
     if want < mpmath.mpf("1e-300"):
         return got is not None and got < 1e-290
-    return got is not None and abs(mpmath.mpf(got) - want) <= (mpmath.mpf("1e-12") + (n - 1) * EPS) * want
+    slack = (n - 1) * EPS if z2 is None else (z2 + 1.0) * EPS
+    return got is not None and abs(mpmath.mpf(got) - want) <= (mpmath.mpf("1e-12") + slack) * want
 
 
 def run(binary, tmp, names, rows, extra=()):
@@ -206,17 +269,20 @@ def main():
     ap.add_argument("--files", type=int, default=200)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--scipy", action="store_true")
-    ap.add_argument("--method", choices=["pearson", "spearman"], default="pearson")
+    ap.add_argument("--method", choices=["pearson", "spearman", "kendall"], default="pearson")
     a = ap.parse_args()
     r = SM64(a.seed)
     spear = a.method == "spearman"
-    key = "rho" if spear else "r"
-    pmeth = "t-approximation" if spear else "t"
+    kend = a.method == "kendall"
+    key = "rho" if spear else ("tau" if kend else "r")
+    pmeth = "t-approximation" if spear else ("normal-approximation" if kend else "t")
     bad = []
     checked = 0
     ctl = {"df-n": [0, 0], "one-sided": [0, 0], ("ordinal-rank" if spear else "welford"): [0, 0]}  # [outside the bound, cases]
     if spear:
         ctl["rank-before-deletion"] = [0, 0]
+    if kend:
+        ctl = {"one-sided": [0, 0], "untied-variance": [0, 0], "tau-a": [0, 0]}
     sp = {"r": 0.0, "p": 0.0, "n": 0, "skipped": 0}
     pst = {"max": 0.0, "ratio": 0.0, "n": 0}  # the largest relative error of a p-value against mpmath, and its largest fraction of the bound
     with tempfile.TemporaryDirectory() as t:
@@ -273,6 +339,9 @@ def main():
                         if w["reason"] == "constant-column":
                             w["reason"] = "all-tied"
                         want_ties = {"x": tie_groups(xs), "y": tie_groups(ys), "rule": "average"}
+                    elif kend:
+                        w = expected_kendall(xs, ys)
+                        want_ties = {"x": tie_groups(xs), "y": tie_groups(ys), "rule": "tau-b"}
                     else:
                         w = expected(xs, ys)
                     tag = "%s %s~%s" % (mode, names[x], names[y])
@@ -281,7 +350,9 @@ def main():
                         bad.append((fi, "%s n: want %r got %r" % (tag, w["n"], g["n"])))
                     if not gd.same(g.get(key), w["r"]):
                         bad.append((fi, "%s %s: want %r got %r" % (tag, key, w["r"], g.get(key))))
-                    if spear and g.get("ties") != want_ties:
+                    if kend and g.get("s") != w["s"]:
+                        bad.append((fi, "%s s: want %r got %r" % (tag, w["s"], g.get("s"))))
+                    if (spear or kend) and g.get("ties") != want_ties:
                         bad.append((fi, "%s ties: want %r got %r" % (tag, want_ties, g.get("ties"))))
                     if not gd.same(g.get("statistic"), w["statistic"]):
                         bad.append((fi, "%s statistic: want %r got %r" % (tag, w["statistic"], g.get("statistic"))))
@@ -290,7 +361,7 @@ def main():
                     if w["p"] is None:
                         if g.get("p_value") is not None:
                             bad.append((fi, "%s p_value: want null got %r" % (tag, g.get("p_value"))))
-                    elif not p_ok(g.get("p_value"), w["p"], w["n"]):
+                    elif not p_ok(g.get("p_value"), w["p"], w["n"], w["zz"] if kend else None):
                         bad.append((fi, "%s p_value: want %s got %r" % (tag, mpmath.nstr(w["p"], 17), g.get("p_value"))))
                     if g.get("reason") != w["reason"]:
                         bad.append((fi, "%s reason: want %r got %r" % (tag, w["reason"], g.get("reason"))))
@@ -299,14 +370,28 @@ def main():
                     if g.get("p_value") is not None and w["p"] is not None and w["p"] > mpmath.mpf("1e-300"):
                         err = float(abs(mpmath.mpf(g["p_value"]) - w["p"]) / w["p"])
                         pst["max"] = max(pst["max"], err)
-                        pst["ratio"] = max(pst["ratio"], err / (1e-12 + (w["n"] - 1) * EPS))
+                        pst["ratio"] = max(pst["ratio"], err / (1e-12 + ((w["zz"] + 1.0) if kend else (w["n"] - 1)) * EPS))
                         pst["n"] += 1
                     if g.get("p_value") is not None and not (0.0 <= g["p_value"] <= 1.0):
                         bad.append((fi, "%s p_value %r is not in [0, 1]" % (tag, g["p_value"])))
                     if g.get("p_method") != pmeth:
                         bad.append((fi, "%s p_method %r" % (tag, g.get("p_method"))))
                     # the controls: a wrong degrees of freedom, a one-sided tail, a float one-pass r must each leave the bound on the cases where they differ
-                    if w["p"] is not None and w["p"] > mpmath.mpf("1e-250") and not w["one"] and w["n"] >= 4:
+                    if kend and w["p"] is not None and w["p"] > mpmath.mpf("1e-250"):
+                        ctl["one-sided"][1] += 1
+                        ctl["one-sided"][0] += 0 if p_ok(float(w["p"] / 2), w["p"], w["n"], w["zz"]) else 1
+                        if w["tx"] or w["ty"]:
+                            # control: the variance of the untied case n (n - 1) (2 n + 5) / 18 where there are ties
+                            nn_ = w["n"]
+                            v_untied = Fraction(nn_ * (nn_ - 1) * (2 * nn_ + 5), 18)
+                            zu = mpmath.mpf(abs(w["s"])) / mpmath.sqrt(mpmath.mpf(v_untied.numerator) / v_untied.denominator)
+                            ctl["untied-variance"][1] += 1
+                            ctl["untied-variance"][0] += 0 if p_ok(float(mpmath.erfc(zu / mpmath.sqrt(2))), w["p"], nn_, w["zz"]) else 1
+                            # control: tau-a, S / n0, in place of tau-b
+                            ta = gd.sqrt_round(Fraction(w["s"] * w["s"], w["n0"] * w["n0"]))
+                            ctl["tau-a"][1] += 1
+                            ctl["tau-a"][0] += 0 if gd.same(-ta if w["s"] < 0 else ta, w["r"]) else 1
+                    if not kend and w["p"] is not None and w["p"] > mpmath.mpf("1e-250") and not w["one"] and w["n"] >= 4:
                         nn_ = w["n"]
                         xq = Fraction(1) - Fraction(w["r"]) ** 2
                         wrong = mpmath.betainc(mpmath.mpf(nn_) / 2, mpmath.mpf(1) / 2, 0, mpmath.mpf(xq.numerator) / xq.denominator, regularized=True)
@@ -314,7 +399,7 @@ def main():
                         ctl["df-n"][0] += 0 if p_ok(float(wrong), w["p"], nn_) else 1
                         ctl["one-sided"][1] += 1
                         ctl["one-sided"][0] += 0 if p_ok(float(w["p"] / 2), w["p"], nn_) else 1
-                    if w["r"] is not None and w["n"] >= 3 and not spear:
+                    if w["r"] is not None and w["n"] >= 3 and not spear and not kend:
                         wr = welford_r(xs, ys)
                         ctl["welford"][1] += 1
                         ctl["welford"][0] += 0 if (wr is not None and wr == w["r"]) else 1
@@ -335,7 +420,7 @@ def main():
                         ctl["rank-before-deletion"][0] += 0 if gd.same(wd["r"], w["r"]) else 1
                     if a.scipy and w["r"] is not None and w["n"] >= 3 and not w["one"] and g.get("p_value") is not None:
                         import scipy.stats as ss
-                        res = ss.spearmanr(xs, ys) if spear else ss.pearsonr(xs, ys)
+                        res = ss.spearmanr(xs, ys) if spear else (ss.kendalltau(xs, ys, variant="b", method="asymptotic") if kend else ss.pearsonr(xs, ys))
                         dr = abs(res[0] - g[key])
                         dp = abs(res[1] - g["p_value"]) / max(abs(res[1]), 1e-300)
                         if shapes[x] in GOOD and shapes[y] in GOOD and abs(g[key]) <= 0.999:
@@ -375,8 +460,35 @@ def main():
                                 if g0 is None or not gd.same(g0.get(k), g4.get(k)):
                                     bad.append((fi, "mirrored file: %s~%s key %s differs" % (g4["x"], g4["y"], k)))
                                     break
+    if kend:
+        # the variance of S is positive whenever tau-b is defined and n >= 3: exhaustively for every pair of columns of n <= 5 rows over the values 1, 2, 3 (the branch `variance-zero` of the program is then
+        # a refusal that no input of this range reaches); checked on the oracle, and a sample of those inputs through the program
+        import itertools
+        count = bad_v = 0
+        sample = []
+        for nn_ in range(3, 6):
+            for xs_ in itertools.product((1.0, 2.0, 3.0), repeat=nn_):
+                for ys_ in itertools.product((1.0, 2.0, 3.0), repeat=nn_):
+                    w_ = expected_kendall(list(xs_), list(ys_))
+                    if w_["reason"] is None or w_["reason"] == "variance-zero":
+                        count += 1
+                        if w_["reason"] == "variance-zero":
+                            bad_v += 1
+                            bad.append((-1, "variance-zero for x=%r y=%r" % (xs_, ys_)))
+                    if r.next() % 997 == 0:
+                        sample.append((xs_, ys_))
+        with tempfile.TemporaryDirectory() as t2:
+            tmp2 = pathlib.Path(t2)
+            for xs_, ys_ in sample[:200]:
+                w_ = expected_kendall(list(xs_), list(ys_))
+                p_ = run(a.bin, tmp2, ["x", "y"], [[repr(u), repr(v)] for u, v in zip(xs_, ys_)], ["--method", "kendall"])
+                g_ = json.loads(p_.stdout)["data"]["pairs"][0]
+                checked += 1
+                if g_.get("reason") != w_["reason"] or not gd.same(g_.get("tau"), w_["r"]) or not gd.same(g_.get("statistic"), w_["statistic"]) or g_.get("s") != w_["s"]:
+                    bad.append((-1, "exhaustive sample x=%r y=%r: want %r got %r" % (xs_, ys_, (w_["reason"], w_["r"], w_["statistic"], w_["s"]), g_)))
+        print("gate_corr: variance of S positive for all %d pairs of columns with tau-b defined (n 3 to 5, values 1 to 3): %d violations; %d of them run through the program" % (count, bad_v, min(len(sample), 200)))
     for k, (outside, total) in ctl.items():
-        if k in ("ordinal-rank", "rank-before-deletion") and total < 5:
+        if k in ("ordinal-rank", "rank-before-deletion", "untied-variance", "tau-a") and total < 5:
             bad.append((-1, "control %s had only %d applicable cases" % (k, total)))
         if total and outside * 10 < total:
             bad.append((-1, "control %s left the bound on only %d of %d cases: the gate cannot tell it from the program" % (k, outside, total)))

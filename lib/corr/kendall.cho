@@ -1,0 +1,353 @@
+edition 5;
+
+module corr.kendall;
+
+import std.vec;
+import acc.bigint;
+import acc.central;
+import metrics.rank;
+
+// Kendall's tau-b of two columns, exact (docs/corr.md sections 2 and 3). With n the rows used (both cells present, `mask` allowing the row), C and D the concordant and discordant pairs, n0 = n (n - 1) / 2,
+// n1 the pairs tied in x, n2 the pairs tied in y and n3 the pairs tied in both, S = C - D = n0 - n1 - n2 + n3 - 2 W where W is the number of inversions of the y values in the order of (x, y) (Knight): the rows
+// are sorted by (x, y) with a merge sort and W is counted by a merge sort of the y values, so everything is an integer found in O(n log n), and
+//     tau-b = S / sqrt((n0 - n1) (n0 - n2))              one rounding of an exact rational (central.sqrt_ratio_bits)
+//     z     = S / sqrt(V),  V = (v0 - vt - vu) / 18 + v1 / (2 n (n - 1)) + v2 / (9 n (n - 1) (n - 2))
+// with v0 = n (n - 1) (2 n + 5), vt = sum over the groups of x ties of t (t - 1) (2 t + 5), vu likewise for y, v1 = (sum t (t - 1)) (sum u (u - 1)), v2 = (sum t (t - 1) (t - 2)) (sum u (u - 1) (u - 2)).
+// Over the common denominator D = 18 n (n - 1) (n - 2):  V = Num / D, Num = (v0 - vt - vu) n (n - 1) (n - 2) + 9 (n - 2) v1 + 2 v2, so z = sign(S) sqrt(S^2 D / Num) is one rounding too. Num, D, v2 reach 2^140 and
+// more for the largest inputs (n = 10^7): they are carried in acc.bigint, never in 64-bit integers.
+
+// merge sort of the pairs (ax[i], ay[i]), i < m, ascending by x then y; bx and by are scratch of m
+fn sort_pairs[&a, &b, &c, &d](ax: &!a [int], ay: &!b [int], bx: &!c [int], by: &!d [int], m: int) -> [] int {
+    var width = 1;
+    while width < m {
+        var lo = 0;
+        while lo < m {
+            var mid = lo + width;
+            if mid > m {
+                mid = m;
+            }
+            var hi = lo + 2 * width;
+            if hi > m {
+                hi = m;
+            }
+            var i = lo;
+            var j = mid;
+            var k = lo;
+            while i < mid && j < hi {
+                if ax[i] < ax[j] || (ax[i] == ax[j] && ay[i] <= ay[j]) {
+                    bx[k] = ax[i];
+                    by[k] = ay[i];
+                    i = i + 1;
+                } else {
+                    bx[k] = ax[j];
+                    by[k] = ay[j];
+                    j = j + 1;
+                }
+                k = k + 1;
+            }
+            while i < mid {
+                bx[k] = ax[i];
+                by[k] = ay[i];
+                i = i + 1;
+                k = k + 1;
+            }
+            while j < hi {
+                bx[k] = ax[j];
+                by[k] = ay[j];
+                j = j + 1;
+                k = k + 1;
+            }
+            k = lo;
+            while k < hi {
+                ax[k] = bx[k];
+                ay[k] = by[k];
+                k = k + 1;
+            }
+            lo = lo + 2 * width;
+        }
+        width = 2 * width;
+    }
+    return 0;
+}
+
+// the number of pairs i < j with a[i] > a[j] (strictly) by a merge sort that leaves a sorted; b is scratch of m
+fn inversions[&a, &b](a: &!a [int], b: &!b [int], m: int) -> [] int {
+    var swaps = 0;
+    var width = 1;
+    while width < m {
+        var lo = 0;
+        while lo < m {
+            var mid = lo + width;
+            if mid > m {
+                mid = m;
+            }
+            var hi = lo + 2 * width;
+            if hi > m {
+                hi = m;
+            }
+            var i = lo;
+            var j = mid;
+            var k = lo;
+            while i < mid && j < hi {
+                if a[i] <= a[j] {
+                    b[k] = a[i];
+                    i = i + 1;
+                } else {
+                    swaps = swaps + (mid - i);
+                    b[k] = a[j];
+                    j = j + 1;
+                }
+                k = k + 1;
+            }
+            while i < mid {
+                b[k] = a[i];
+                i = i + 1;
+                k = k + 1;
+            }
+            while j < hi {
+                b[k] = a[j];
+                j = j + 1;
+                k = k + 1;
+            }
+            k = lo;
+            while k < hi {
+                a[k] = b[k];
+                k = k + 1;
+            }
+            lo = lo + 2 * width;
+        }
+        width = 2 * width;
+    }
+    return swaps;
+}
+
+// acc += p * q for p and q below 2^78 (acc is central.cap() limbs); `work` is 12 ints of scratch
+fn add_prod[&a, &w](acc: &!a [int], work: &!w [int], p: int, q: int) -> [] int {
+    bigint.clear(work, 12);
+    central.limbs_of(p, work[0..3]);
+    central.limbs_of(q, work[3..6]);
+    bigint.mul(work[6..12], work[0..3], 3, work[3..6], 3);
+    bigint.add_in(acc, central.cap(), work[6..12], 6);
+    return 0;
+}
+
+// Answers (n, status, tau bits, tau code, z bits, z code, S, groups of ties in x, groups of ties in y). status 0: tau and z answered; 1: tau is undefined (a column all tied, which includes n < 2); 2: n < 3, tau
+// answered and no z; 3: the variance Num is not positive, tau answered and no z. The bits are those of the magnitude, with the sign of S set.
+pub fn pair[&h, &k, &m](heap: &!h Heap, keys: &k vec.Vec[int], ncols: int, ca: int, cb: int, rows: int, mask: &m [int]) -> [heap] (int, int, int, int, int, int, int, int, int) {
+    var used = 0;
+    var i = 0;
+    while i < rows {
+        if mask[i] != 0 && vec.get(keys, i * ncols + ca) != rank.min_int() && vec.get(keys, i * ncols + cb) != rank.min_int() {
+            used = used + 1;
+        }
+        i = i + 1;
+    }
+    let n = used;
+    let ax = box_slice(heap, n + 1, 0);
+    let ay = box_slice(heap, n + 1, 0);
+    let bx = box_slice(heap, n + 1, 0);
+    let by = box_slice(heap, n + 1, 0);
+    var swaps = 0;
+    var n1 = 0;
+    var n2 = 0;
+    var n3 = 0;
+    var a1x = 0;
+    var a1y = 0;
+    var gx = 0;
+    var gy = 0;
+    let c = central.cap();
+    // regions of `t`, each `c` limbs: 0 A2x, 1 A3x, 2 A2y, 3 A3y, 4 V0, 5 K, 6 Tm, 7 TK, 8 V1, 9 X1, 10 V2, 11 X2, 12 Num, 13 S^2, 14 D, 15 num of z, 16 tau num, 17 tau den, 18 scratch, 19 small factors
+    let tmp = box_slice(heap, 20 * c + 1, 0);
+    let pos = box_slice(heap, c, 0);
+    let neg = box_slice(heap, c, 0);
+    let work = box_slice(heap, 13, 0);
+    var status = 0;
+    var tb = 0;
+    var tc = 0;
+    var zb = 0;
+    var zc = 0;
+    var s = 0;
+    borrow mut tmp as &!tw in {
+        borrow mut pos as &!pw in {
+            borrow mut neg as &!nw in {
+                borrow mut work as &!ww in {
+                    borrow mut ax as &!xw in {
+                        borrow mut ay as &!yw in {
+                            borrow mut bx as &!bxw in {
+                                borrow mut by as &!byw in {
+                                    let t = contents(tw);
+                                    let p = contents(pw);
+                                    let q = contents(nw);
+                                    let wk = contents(ww);
+                                    let xs = contents(xw);
+                                    let ys = contents(yw);
+                                    var u = 0;
+                                    i = 0;
+                                    while i < rows {
+                                        if mask[i] != 0 && vec.get(keys, i * ncols + ca) != rank.min_int() && vec.get(keys, i * ncols + cb) != rank.min_int() {
+                                            xs[u] = vec.get(keys, i * ncols + ca);
+                                            ys[u] = vec.get(keys, i * ncols + cb);
+                                            u = u + 1;
+                                        }
+                                        i = i + 1;
+                                    }
+                                    sort_pairs(xs, ys, contents(bxw), contents(byw), n);
+                                    // groups of equal x, and of equal (x, y), in the sorted order
+                                    let r_a2x = 0;
+                                    let r_a3x = c;
+                                    let r_a2y = 2 * c;
+                                    let r_a3y = 3 * c;
+                                    var at = 0;
+                                    while at < n {
+                                        var end = at + 1;
+                                        while end < n && xs[end] == xs[at] {
+                                            end = end + 1;
+                                        }
+                                        let tt = end - at;
+                                        if tt > 1 {
+                                            gx = gx + 1;
+                                            n1 = n1 + tt * (tt - 1) / 2;
+                                            a1x = a1x + tt * (tt - 1);
+                                            add_prod(t[r_a2x..r_a2x + c], wk, tt * (tt - 1), tt - 2);
+                                            add_prod(t[r_a3x..r_a3x + c], wk, tt * (tt - 1), 2 * tt + 5);
+                                        }
+                                        // within this group of x the y are ascending: the runs of equal y are the joint ties
+                                        var from = at;
+                                        while from < end {
+                                            var upto = from + 1;
+                                            while upto < end && ys[upto] == ys[from] {
+                                                upto = upto + 1;
+                                            }
+                                            let ww2 = upto - from;
+                                            n3 = n3 + ww2 * (ww2 - 1) / 2;
+                                            from = upto;
+                                        }
+                                        at = end;
+                                    }
+                                    swaps = inversions(ys, contents(byw), n);
+                                    // ys is now sorted: the groups of equal y
+                                    at = 0;
+                                    while at < n {
+                                        var end = at + 1;
+                                        while end < n && ys[end] == ys[at] {
+                                            end = end + 1;
+                                        }
+                                        let uu = end - at;
+                                        if uu > 1 {
+                                            gy = gy + 1;
+                                            n2 = n2 + uu * (uu - 1) / 2;
+                                            a1y = a1y + uu * (uu - 1);
+                                            add_prod(t[r_a2y..r_a2y + c], wk, uu * (uu - 1), uu - 2);
+                                            add_prod(t[r_a3y..r_a3y + c], wk, uu * (uu - 1), 2 * uu + 5);
+                                        }
+                                        at = end;
+                                    }
+                                    let n0 = n * (n - 1) / 2;
+                                    s = n0 - n1 - n2 + n3 - 2 * swaps;
+                                    let dx = n0 - n1;
+                                    let dy = n0 - n2;
+                                    if dx == 0 || dy == 0 {
+                                        status = 1;
+                                    } else {
+                                        var abs_s = s;
+                                        if s < 0 {
+                                            abs_s = 0 - s;
+                                        }
+                                        let r_s2 = 13 * c;
+                                        let r_tn = 16 * c;
+                                        let r_td = 17 * c;
+                                        let r_f = 19 * c;
+                                        // tau-b = sign(S) sqrt(S^2 / (dx dy))
+                                        central.limbs_of(abs_s, t[r_f..r_f + 8]);
+                                        bigint.mul(t[r_s2..r_s2 + c], t[r_f..r_f + 3], 3, t[r_f..r_f + 3], 3);
+                                        bigint.clear(t[r_tn..r_tn + c], c);
+                                        bigint.copy(t[r_tn..r_tn + c], t[r_s2..r_s2 + c], 6);
+                                        central.limbs_of(dx, t[r_f..r_f + 8]);
+                                        central.limbs_of(dy, t[r_f + 8..r_f + 16]);
+                                        bigint.mul(t[r_td..r_td + c], t[r_f..r_f + 3], 3, t[r_f + 8..r_f + 11], 3);
+                                        let (b1, c1) = central.sqrt_ratio_bits(heap, t[r_tn..r_tn + c], 6, t[r_td..r_td + c], 6);
+                                        tb = b1;
+                                        tc = c1;
+                                        if s < 0 && c1 == 0 {
+                                            tb = tb | 0 - 9223372036854775807 - 1;
+                                        }
+                                        if n < 3 {
+                                            status = 2;
+                                        } else {
+                                            let r_v0 = 4 * c;
+                                            let r_k = 5 * c;
+                                            let r_tm = 6 * c;
+                                            let r_tk = 7 * c;
+                                            let r_v1 = 8 * c;
+                                            let r_x1 = 9 * c;
+                                            let r_v2 = 10 * c;
+                                            let r_x2 = 11 * c;
+                                            let r_num = 12 * c;
+                                            let r_d = 14 * c;
+                                            let r_zn = 15 * c;
+                                            let r_sc = 18 * c;
+                                            // v0 = n (n - 1) (2 n + 5), K = n (n - 1) (n - 2)
+                                            add_prod(t[r_v0..r_v0 + c], wk, n * (n - 1), 2 * n + 5);
+                                            add_prod(t[r_k..r_k + c], wk, n * (n - 1), n - 2);
+                                            // Tm = |v0 - vt - vu| and its sign
+                                            bigint.clear(p, c);
+                                            bigint.clear(q, c);
+                                            central.put(p, q, t[r_v0..r_v0 + c], 6, false);
+                                            central.put(p, q, t[r_a3x..r_a3x + c], 6, true);
+                                            central.put(p, q, t[r_a3y..r_a3y + c], 6, true);
+                                            let st = central.settle(p, q, t[r_tm..r_tm + c]);
+                                            let lt = central.mag_len(t[r_tm..r_tm + c], c);
+                                            let lk = central.mag_len(t[r_k..r_k + c], c);
+                                            bigint.mul(t[r_tk..r_tk + c], t[r_tm..r_tm + c], lt, t[r_k..r_k + c], lk);
+                                            // v1 = (sum t (t - 1)) (sum u (u - 1)), X1 = 9 (n - 2) v1
+                                            add_prod(t[r_v1..r_v1 + c], wk, a1x, a1y);
+                                            central.limbs_of(9 * (n - 2), t[r_f..r_f + 8]);
+                                            bigint.mul(t[r_x1..r_x1 + c], t[r_v1..r_v1 + 6], 6, t[r_f..r_f + 3], 3);
+                                            // v2 = (sum t (t - 1) (t - 2)) (sum u (u - 1) (u - 2)), X2 = 2 v2
+                                            let l2x = central.mag_len(t[r_a2x..r_a2x + c], c);
+                                            let l2y = central.mag_len(t[r_a2y..r_a2y + c], c);
+                                            bigint.mul(t[r_v2..r_v2 + c], t[r_a2x..r_a2x + c], l2x, t[r_a2y..r_a2y + c], l2y);
+                                            central.limbs_of(2, t[r_f..r_f + 8]);
+                                            bigint.mul(t[r_x2..r_x2 + c], t[r_v2..r_v2 + c], l2x + l2y, t[r_f..r_f + 3], 3);
+                                            // Num = sign(Tm) Tm K + X1 + X2
+                                            bigint.clear(p, c);
+                                            bigint.clear(q, c);
+                                            central.put(p, q, t[r_tk..r_tk + c], lt + lk, st < 0);
+                                            central.put(p, q, t[r_x1..r_x1 + c], 9, false);
+                                            central.put(p, q, t[r_x2..r_x2 + c], l2x + l2y + 3, false);
+                                            let sn = central.settle(p, q, t[r_num..r_num + c]);
+                                            if sn <= 0 {
+                                                status = 3;
+                                            } else {
+                                                // D = 18 K, z = sign(S) sqrt(S^2 D / Num)
+                                                central.limbs_of(18, t[r_f..r_f + 8]);
+                                                bigint.mul(t[r_d..r_d + c], t[r_k..r_k + c], lk, t[r_f..r_f + 3], 3);
+                                                bigint.mul(t[r_zn..r_zn + c], t[r_s2..r_s2 + c], 6, t[r_d..r_d + c], lk + 3);
+                                                let ln = central.mag_len(t[r_num..r_num + c], c);
+                                                let (b2, c2) = central.sqrt_ratio_bits(heap, t[r_zn..r_zn + c], 6 + lk + 3, t[r_num..r_num + c], ln);
+                                                zb = b2;
+                                                zc = c2;
+                                                if s < 0 && c2 == 0 {
+                                                    zb = zb | 0 - 9223372036854775807 - 1;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    unbox_slice(heap, tmp);
+    unbox_slice(heap, pos);
+    unbox_slice(heap, neg);
+    unbox_slice(heap, work);
+    unbox_slice(heap, ax);
+    unbox_slice(heap, ay);
+    unbox_slice(heap, bx);
+    unbox_slice(heap, by);
+    return (n, status, tb, tc, zb, zc, s, gx, gy);
+}

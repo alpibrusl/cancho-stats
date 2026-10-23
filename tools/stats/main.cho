@@ -18,6 +18,7 @@ import acc.central;
 import acc.psum;
 import acc.histogram;
 import acc.quantile;
+import corr.kendall;
 import corr.pearson;
 import corr.ranks;
 import csvx.flat;
@@ -37,7 +38,7 @@ import toolbox.place;
 import toolbox.text;
 
 fn flag_table() -> [] &static [byte] {
-    return "root||path|root||resolve FILE relative to this directory and refuse paths outside it;delim|d|text|none|,|the one byte that separates fields (default comma);ddof||nat|none|1|the divisor of the variance is n minus this (1 is the sample variance, 0 the population variance);max-rows||nat|none|1000000|the most data rows read, one more is limit.too-many-rows (ceiling 10000000);max-cols||nat|none|256|the most columns, more is limit.too-many-columns (ceiling 4096);max-line-bytes||nat|none|1048576|the longest line read, a longer one is limit.line-too-long (ceiling 16777216);max-cells||nat|none|20000000|the most cells (rows times columns) held for the quantiles, more is limit.too-many-cells (ceiling 100000000);quantiles||text|none|0,0.25,0.5,0.75,1|the probabilities of the quantiles, comma separated decimals from 0 to 1 with at most 9 decimals (at most 99 of them);quantile-type||nat|none|7|which of the nine Hyndman-Fan definitions, 1 to 9 (7 is the default of R and numpy);bins||nat|none|10|the number of equal-width histogram bins over [min, max], 0 for none (ceiling 1000);levels||nat|none|10|how many of the most frequent levels of a text column to print, 0 for none and no second pass (ceiling 100);max-levels||nat|none|100000|the most distinct (column, level) pairs held for all text columns together, a column that would need one more is levels_capped (ceiling 1000000);by||text|none||the header name of a column: describe each group of rows that have the same value in it, one after the other;max-groups||nat|none|50|the most groups with --by, one more is limit.too-many-groups (ceiling 1000);cols||text|none||describe only these columns: header names separated by commas, printed in the order of the file;format||choice:json/text|none|json|json for a program, text (one line per value, path = value) for a person;method||choice:pearson/spearman|none|pearson|corr: the coefficient: pearson, or spearman (the Pearson coefficient of the average ranks; kendall is not built yet);missing||choice:pairwise/listwise|none|pairwise|corr: pairwise uses, for each pair, the rows where both cells are numbers, listwise only the rows where every chosen column has a number;max-pairs||nat|none|1000|corr: the most pairs of columns, more is limit.too-many-pairs (ceiling 32640)";
+    return "root||path|root||resolve FILE relative to this directory and refuse paths outside it;delim|d|text|none|,|the one byte that separates fields (default comma);ddof||nat|none|1|the divisor of the variance is n minus this (1 is the sample variance, 0 the population variance);max-rows||nat|none|1000000|the most data rows read, one more is limit.too-many-rows (ceiling 10000000);max-cols||nat|none|256|the most columns, more is limit.too-many-columns (ceiling 4096);max-line-bytes||nat|none|1048576|the longest line read, a longer one is limit.line-too-long (ceiling 16777216);max-cells||nat|none|20000000|the most cells (rows times columns) held for the quantiles, more is limit.too-many-cells (ceiling 100000000);quantiles||text|none|0,0.25,0.5,0.75,1|the probabilities of the quantiles, comma separated decimals from 0 to 1 with at most 9 decimals (at most 99 of them);quantile-type||nat|none|7|which of the nine Hyndman-Fan definitions, 1 to 9 (7 is the default of R and numpy);bins||nat|none|10|the number of equal-width histogram bins over [min, max], 0 for none (ceiling 1000);levels||nat|none|10|how many of the most frequent levels of a text column to print, 0 for none and no second pass (ceiling 100);max-levels||nat|none|100000|the most distinct (column, level) pairs held for all text columns together, a column that would need one more is levels_capped (ceiling 1000000);by||text|none||the header name of a column: describe each group of rows that have the same value in it, one after the other;max-groups||nat|none|50|the most groups with --by, one more is limit.too-many-groups (ceiling 1000);cols||text|none||describe only these columns: header names separated by commas, printed in the order of the file;format||choice:json/text|none|json|json for a program, text (one line per value, path = value) for a person;method||choice:pearson/spearman/kendall|none|pearson|corr: the coefficient: pearson, spearman (the Pearson coefficient of the average ranks) or kendall (tau-b);missing||choice:pairwise/listwise|none|pairwise|corr: pairwise uses, for each pair, the rows where both cells are numbers, listwise only the rows where every chosen column has a number;max-pairs||nat|none|1000|corr: the most pairs of columns, more is limit.too-many-pairs (ceiling 32640)";
 }
 
 fn extra() -> [] &static [byte] {
@@ -1222,6 +1223,82 @@ fn p_two_sided(t: float, df: int) -> [] (float, int) {
 }
 
 // One pair of columns of the answer (docs/corr.md section 4): n, r, statistic (t with the sign of r), df, p_value, p_method, p_exact_zero when |r| = 1, reason when something is null.
+// One pair of the answer for Kendall's tau-b (docs/corr.md section 4): n, tau, statistic (z, with the sign of tau), df (null), p_value, p_method, s (concordant minus discordant), ties, reason.
+fn put_pair_kendall[&h, &n, &en, &k, &m](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], store: &k vec.Vec[int], ncols: int, ja: int, jb: int, rows: int, mask: &m [int]) -> [heap] json.Writer {
+    var w = w0;
+    let (n, status, tb, tc, zb, zc, sv, gx, gy) = kendall.pair(heap, store, ncols, ja, jb, rows, mask);
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "x");
+    w = put_name(heap, w, names, ends, ja);
+    w = json.put_key(heap, w, "y");
+    w = put_name(heap, w, names, ends, jb);
+    w = json.put_key(heap, w, "n");
+    w = json.put_int(heap, w, n);
+    w = json.put_key(heap, w, "tau");
+    var reason = "";
+    var have_z = false;
+    var p = 0.0;
+    var have_p = false;
+    if status == 1 {
+        w = json.put_null(heap, w);
+        reason = "all-tied";
+    } else {
+        w = json.put_float(heap, w, float_of_bits(tb));
+        if status == 2 {
+            reason = "too-few-rows";
+        } else if status == 3 {
+            reason = "variance-zero";
+        } else if zc != 0 {
+            reason = "statistic-beyond-double";
+        } else {
+            have_z = true;
+            let (sf, code) = dist.norm_sf(float_of_bits(zb & 9223372036854775807));
+            if code == 0 {
+                have_p = true;
+                p = 2.0 * sf;
+                if p > 1.0 {
+                    p = 1.0;
+                }
+            } else {
+                reason = "p-not-computed";
+            }
+        }
+    }
+    w = json.put_key(heap, w, "statistic");
+    if have_z {
+        w = json.put_float(heap, w, float_of_bits(zb));
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "df");
+    w = json.put_null(heap, w);
+    w = json.put_key(heap, w, "p_value");
+    if have_p {
+        w = json.put_float(heap, w, p);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_method");
+    w = json.put_string(heap, w, "normal-approximation");
+    w = json.put_key(heap, w, "s");
+    w = json.put_int(heap, w, sv);
+    w = json.put_key(heap, w, "ties");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "x");
+    w = json.put_int(heap, w, gx);
+    w = json.put_key(heap, w, "y");
+    w = json.put_int(heap, w, gy);
+    w = json.put_key(heap, w, "rule");
+    w = json.put_string(heap, w, "tau-b");
+    w = json.end_object(heap, w);
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}
+
 fn put_pair[&h, &n, &en, &k, &m](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], store: &k vec.Vec[int], ncols: int, ja: int, jb: int, rows: int, mask: &m [int], method: int) -> [heap] json.Writer {
     var w = w0;
     var n = 0;
@@ -1506,12 +1583,18 @@ fn corr_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed:
                                             var method = 0;
                                             if bytes.equal(cli.text(args, parsed, table, "method"), "spearman") {
                                                 method = 1;
+                                            } else if bytes.equal(cli.text(args, parsed, table, "method"), "kendall") {
+                                                method = 2;
                                             }
                                             var ia = 0;
                                             while ia < m {
                                                 var ib = ia + 1;
                                                 while ib < m {
-                                                    w = put_pair(heap, w, buffer.bytes(nb), eb, sb, nc, contents(ir)[ia], contents(ir)[ib], info.rows, contents(mr), method);
+                                                    if method == 2 {
+                                                        w = put_pair_kendall(heap, w, buffer.bytes(nb), eb, sb, nc, contents(ir)[ia], contents(ir)[ib], info.rows, contents(mr));
+                                                    } else {
+                                                        w = put_pair(heap, w, buffer.bytes(nb), eb, sb, nc, contents(ir)[ia], contents(ir)[ib], info.rows, contents(mr), method);
+                                                    }
                                                     ib = ib + 1;
                                                 }
                                                 ia = ia + 1;

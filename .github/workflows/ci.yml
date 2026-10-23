@@ -197,13 +197,15 @@ jobs:
           python3 scripts/manifest.py --check
           python3 scripts/update_replay.py --check
 
-      - name: stats corr (Pearson and Spearman) against Fractions and mpmath, scipy, calibration and power
+      - name: stats corr (Pearson, Spearman and Kendall) against Fractions and mpmath, scipy, calibration and power
         if: steps.stores.outputs.fetchable == 'yes'
         run: |
           python3 scripts/gate_corr.py --files 200 --scipy
           python3 scripts/gate_corr.py --files 200 --scipy --method spearman
+          python3 scripts/gate_corr.py --files 200 --scipy --method kendall
           python3 scripts/gate_corr_calibration.py --replicates 2000 --power-replicates 2000
           python3 scripts/gate_corr_calibration.py --replicates 2000 --method spearman
+          python3 scripts/gate_corr_calibration.py --replicates 2000 --method kendall
 
       - name: Quantiles (nine definitions) against an independent exact reference
         if: steps.stores.outputs.fetchable == 'yes'

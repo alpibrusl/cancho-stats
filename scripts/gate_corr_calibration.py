@@ -58,7 +58,7 @@ def corr_p(binary, d, xs, ys):
     if p.returncode != 0:
         raise RuntimeError("exit %d: %s" % (p.returncode, p.stdout[:200]))
     pair = json.loads(p.stdout)["data"]["pairs"][0]
-    return pair["rho" if METHOD == "spearman" else "r"], pair["p_value"]
+    return pair[{"spearman": "rho", "kendall": "tau"}.get(METHOD, "r")], pair["p_value"]
 
 
 def run_many(binary, jobs, workers):
@@ -102,13 +102,15 @@ def main():
     ap.add_argument("--power-replicates", type=int, default=4000)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--workers", type=int, default=8)
-    ap.add_argument("--method", choices=["pearson", "spearman"], default="pearson")
+    ap.add_argument("--method", choices=["pearson", "spearman", "kendall"], default="pearson")
     a = ap.parse_args()
     global METHOD
     METHOD = a.method
     bad = []
     lo, hi = binom_interval(a.replicates)
     refused = {"one-sided": False, "normal": False, "df-n": False}
+    if a.method == "kendall":
+        refused = {"one-sided": False}  # the normal-for-t and n-degrees-of-freedom controls are controls of a t test, not of the normal approximation of tau
     lines = []
     try:
         for n in NS:
@@ -118,9 +120,12 @@ def main():
             ps = [p for _, p in res]
             rej = sum(1 for p in ps if p < 0.05)
             ks = ss.kstest(ps, "uniform").pvalue
-            ok = lo <= rej <= hi and ks > ALPHA_TEST
             gated = a.method == "pearson" or n >= 30
-            lines.append("n=%d: rejected %d of %d (interval %d..%d), KS p %.3f%s" % (n, rej, a.replicates, lo, hi, ks, ("" if gated else "  (printed, not gated: the t approximation of Spearman is rough at small n)") if ok else ("  <-- FAILS" if gated else "  (outside; printed, not gated)")))
+            # the p-values of Kendall's tau at n = 30 are on a lattice of about 400 values and the normal approximation to them is visibly not uniform to a KS test at these replicates (KS p 0.001, 0.000, 0.023 for
+            # seeds 1 to 3, the rejection rate at 0.05 inside its interval every time): the rate is gated from n = 30, the uniformity from n = 100
+            ks_gated = ks > ALPHA_TEST or (a.method == "kendall" and n < 100)
+            ok = lo <= rej <= hi and ks_gated
+            lines.append("n=%d: rejected %d of %d (interval %d..%d), KS p %.3f%s" % (n, rej, a.replicates, lo, hi, ks, ("" if gated else "  (printed, not gated: the approximation of the p-value is rough at small n)") if ok else ("  <-- FAILS" if gated else "  (outside; printed, not gated)")))
             if not ok and gated:
                 bad.append("n=%d null calibration" % n)
             # controls: the same r, a wrong p
