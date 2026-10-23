@@ -18,9 +18,11 @@ import acc.central;
 import acc.psum;
 import acc.histogram;
 import acc.quantile;
+import corr.pearson;
 import csvx.flat;
 import csvx.pick;
 import metrics.rank;
+import special.dist;
 import flt;
 import reader;
 import toolbox.built;
@@ -34,15 +36,15 @@ import toolbox.place;
 import toolbox.text;
 
 fn flag_table() -> [] &static [byte] {
-    return "root||path|root||resolve FILE relative to this directory and refuse paths outside it;delim|d|text|none|,|the one byte that separates fields (default comma);ddof||nat|none|1|the divisor of the variance is n minus this (1 is the sample variance, 0 the population variance);max-rows||nat|none|1000000|the most data rows read, one more is limit.too-many-rows (ceiling 10000000);max-cols||nat|none|256|the most columns, more is limit.too-many-columns (ceiling 4096);max-line-bytes||nat|none|1048576|the longest line read, a longer one is limit.line-too-long (ceiling 16777216);max-cells||nat|none|20000000|the most cells (rows times columns) held for the quantiles, more is limit.too-many-cells (ceiling 100000000);quantiles||text|none|0,0.25,0.5,0.75,1|the probabilities of the quantiles, comma separated decimals from 0 to 1 with at most 9 decimals (at most 99 of them);quantile-type||nat|none|7|which of the nine Hyndman-Fan definitions, 1 to 9 (7 is the default of R and numpy);bins||nat|none|10|the number of equal-width histogram bins over [min, max], 0 for none (ceiling 1000);levels||nat|none|10|how many of the most frequent levels of a text column to print, 0 for none and no second pass (ceiling 100);max-levels||nat|none|100000|the most distinct (column, level) pairs held for all text columns together, a column that would need one more is levels_capped (ceiling 1000000);by||text|none||the header name of a column: describe each group of rows that have the same value in it, one after the other;max-groups||nat|none|50|the most groups with --by, one more is limit.too-many-groups (ceiling 1000);cols||text|none||describe only these columns: header names separated by commas, printed in the order of the file;format||choice:json/text|none|json|json for a program, text (one line per value, path = value) for a person";
+    return "root||path|root||resolve FILE relative to this directory and refuse paths outside it;delim|d|text|none|,|the one byte that separates fields (default comma);ddof||nat|none|1|the divisor of the variance is n minus this (1 is the sample variance, 0 the population variance);max-rows||nat|none|1000000|the most data rows read, one more is limit.too-many-rows (ceiling 10000000);max-cols||nat|none|256|the most columns, more is limit.too-many-columns (ceiling 4096);max-line-bytes||nat|none|1048576|the longest line read, a longer one is limit.line-too-long (ceiling 16777216);max-cells||nat|none|20000000|the most cells (rows times columns) held for the quantiles, more is limit.too-many-cells (ceiling 100000000);quantiles||text|none|0,0.25,0.5,0.75,1|the probabilities of the quantiles, comma separated decimals from 0 to 1 with at most 9 decimals (at most 99 of them);quantile-type||nat|none|7|which of the nine Hyndman-Fan definitions, 1 to 9 (7 is the default of R and numpy);bins||nat|none|10|the number of equal-width histogram bins over [min, max], 0 for none (ceiling 1000);levels||nat|none|10|how many of the most frequent levels of a text column to print, 0 for none and no second pass (ceiling 100);max-levels||nat|none|100000|the most distinct (column, level) pairs held for all text columns together, a column that would need one more is levels_capped (ceiling 1000000);by||text|none||the header name of a column: describe each group of rows that have the same value in it, one after the other;max-groups||nat|none|50|the most groups with --by, one more is limit.too-many-groups (ceiling 1000);cols||text|none||describe only these columns: header names separated by commas, printed in the order of the file;format||choice:json/text|none|json|json for a program, text (one line per value, path = value) for a person;method||choice:pearson|none|pearson|corr: the coefficient (pearson so far; spearman and kendall are not built yet);missing||choice:pairwise/listwise|none|pairwise|corr: pairwise uses, for each pair, the rows where both cells are numbers, listwise only the rows where every chosen column has a number;max-pairs||nat|none|1000|corr: the most pairs of columns, more is limit.too-many-pairs (ceiling 32640)";
 }
 
 fn extra() -> [] &static [byte] {
-    return "stats.csv-ragged|8|never|a record with a different number of fields than the header;stats.csv-multiline|8|never|a record that continues on the next line, which this version does not read;stats.csv-bad-quote|8|never|a quote that opens or closes where it may not;stats.no-header|8|never|a file with no header line;stats.bad-verb|2|never|the first operand is not a verb this tool has;limit.too-many-rows|8|never|more data rows than --max-rows;limit.too-many-columns|8|never|more columns than --max-cols;limit.too-many-cells|8|never|more cells than --max-cells;stats.file-changed|8|never|the file is not the same on the second pass that counts the levels of a text column;stats.no-such-column|2|never|--by names no column of the header;stats.ambiguous-column|2|never|--by names a header that two or more columns have;limit.too-many-groups|8|never|more groups than --max-groups";
+    return "stats.csv-ragged|8|never|a record with a different number of fields than the header;stats.csv-multiline|8|never|a record that continues on the next line, which this version does not read;stats.csv-bad-quote|8|never|a quote that opens or closes where it may not;stats.no-header|8|never|a file with no header line;stats.bad-verb|2|never|the first operand is not a verb this tool has;limit.too-many-rows|8|never|more data rows than --max-rows;limit.too-many-columns|8|never|more columns than --max-cols;limit.too-many-cells|8|never|more cells than --max-cells;stats.file-changed|8|never|the file is not the same on the second pass that counts the levels of a text column;stats.no-such-column|2|never|--by names no column of the header;stats.ambiguous-column|2|never|--by names a header that two or more columns have;limit.too-many-groups|8|never|more groups than --max-groups;stats.corr-columns|2|never|fewer than two numeric columns to correlate;stats.non-numeric|2|never|--cols names a column that has no numbers or has a cell that is not a number;limit.too-many-pairs|8|never|more pairs of columns than --max-pairs";
 }
 
 fn tool() -> [] describe.Tool {
-    return describe.Tool { name: "stats", version: "0.1.0", summary: "Describe the columns of a CSV file: counts, minimum, maximum, mean, variance and standard deviation from exact sums rounded once; the same bytes on every platform and at any thread count.", usage: "stats describe [--root DIR] [--delim D] [--ddof N] [--max-rows N] [--max-cols N] [--max-line-bytes N] [--max-cells N] [--quantiles P,P,..] [--quantile-type N] [--bins N] [--levels N] [--max-levels N] [--by COL] [--max-groups N] [--cols A,B,..] [--format json|text] FILE", output: "document", schema: "stats.v1", flags: flag_table(), operands: "VERB|none|1|1|describe;FILE|path-read|1|1|the CSV file to describe", rules: "args.unknown-flag;args.missing-value;args.bad-value;args.duplicate-flag;args.missing-operand;args.too-many-operands;path.empty;path.dotdot;path.absolute;path.outside-root;path.too-long;path.symlink;io.not-found;io.not-a-directory;io.is-a-directory;io.permission-denied;io.read-failed;limit.line-too-long;stats.csv-ragged;stats.csv-multiline;stats.csv-bad-quote;stats.no-header;stats.bad-verb;limit.too-many-rows;limit.too-many-columns;limit.too-many-cells;stats.file-changed;stats.no-such-column;stats.ambiguous-column;limit.too-many-groups", extra_rules: extra(), limits: "max-rows|1000000|10000000;max-cols|256|4096;max-line-bytes|1048576|16777216;max-cells|20000000|100000000;bins|10|1000;levels|10|100;max-levels|100000|1000000;max-groups|50|1000", reversibility: "reversible-cheap", stdin: "never", guarantees: "deterministic;idempotent;bounded_memory" };
+    return describe.Tool { name: "stats", version: "0.1.0", summary: "Describe the columns of a CSV file: counts, minimum, maximum, mean, variance and standard deviation from exact sums rounded once; the same bytes on every platform and at any thread count.", usage: "stats describe [--root DIR] [--delim D] [--ddof N] [--max-rows N] [--max-cols N] [--max-line-bytes N] [--max-cells N] [--quantiles P,P,..] [--quantile-type N] [--bins N] [--levels N] [--max-levels N] [--by COL] [--max-groups N] [--cols A,B,..] [--format json|text] FILE; stats corr [--cols A,B,..] [--missing pairwise|listwise] [--max-pairs N] FILE", output: "document", schema: "stats.v1", flags: flag_table(), operands: "VERB|none|1|1|describe or corr;FILE|path-read|1|1|the CSV file to describe", rules: "args.unknown-flag;args.missing-value;args.bad-value;args.duplicate-flag;args.missing-operand;args.too-many-operands;path.empty;path.dotdot;path.absolute;path.outside-root;path.too-long;path.symlink;io.not-found;io.not-a-directory;io.is-a-directory;io.permission-denied;io.read-failed;limit.line-too-long;stats.csv-ragged;stats.csv-multiline;stats.csv-bad-quote;stats.no-header;stats.bad-verb;limit.too-many-rows;limit.too-many-columns;limit.too-many-cells;stats.file-changed;stats.no-such-column;stats.ambiguous-column;limit.too-many-groups;stats.corr-columns;stats.non-numeric;limit.too-many-pairs", extra_rules: extra(), limits: "max-rows|1000000|10000000;max-cols|256|4096;max-line-bytes|1048576|16777216;max-cells|20000000|100000000;bins|10|1000;levels|10|100;max-levels|100000|1000000;max-groups|50|1000;max-pairs|1000|32640", reversibility: "reversible-cheap", stdin: "never", guarantees: "deterministic;idempotent;bounded_memory" };
 }
 
 fn built() -> [] describe.Built {
@@ -1194,13 +1196,292 @@ fn describe_one[&h, &g, &p, &f, &r, &sh, &fu, &k](heap: &!h Heap, args: &g Args,
     return (w, e);
 }
 
+// ------------------------------------------------------------------------------------------------ corr (docs/corr.md)
+
+// the header name of column j as a JSON string
+fn put_name[&h, &n, &en](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], j: int) -> [heap] json.Writer {
+    var from = 0;
+    if j > 0 {
+        from = vec.get(ends, j - 1);
+    }
+    return json.put_string(heap, w0, names[from..vec.get(ends, j)]);
+}
+
+// the two-sided p-value of a statistic |t| on df degrees of freedom, and the code of the special function (0 is an answer)
+fn p_two_sided(t: float, df: int) -> [] (float, int) {
+    let (sf, code) = dist.t_sf(t, float_of(df));
+    if code != 0 {
+        return (0.0, code);
+    }
+    var p = 2.0 * sf;
+    if p > 1.0 {
+        p = 1.0;
+    }
+    return (p, 0);
+}
+
+// One pair of columns of the answer (docs/corr.md section 4): n, r, statistic (t with the sign of r), df, p_value, p_method, p_exact_zero when |r| = 1, reason when something is null.
+fn put_pair[&h, &n, &en, &k, &m](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], store: &k vec.Vec[int], ncols: int, ja: int, jb: int, rows: int, mask: &m [int]) -> [heap] json.Writer {
+    var w = w0;
+    let (n, status, rb, rc, tb, tc, exact) = pearson.pair(heap, store, ncols, ja, jb, rows, mask);
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "x");
+    w = put_name(heap, w, names, ends, ja);
+    w = json.put_key(heap, w, "y");
+    w = put_name(heap, w, names, ends, jb);
+    w = json.put_key(heap, w, "n");
+    w = json.put_int(heap, w, n);
+    w = json.put_key(heap, w, "r");
+    var reason = "";
+    var have_t = false;
+    var p = 0.0;
+    var have_p = false;
+    if status == 0 {
+        w = json.put_float(heap, w, float_of_bits(rb));
+        if n < 3 {
+            reason = "too-few-rows";
+        } else if exact == 1 {
+            have_p = true;
+        } else if tc != 0 {
+            // |t| is beyond the largest double: no statistic, and no p-value (it is below 3.6e-309 for every df, and for df = 1 it is not zero as a double)
+            reason = "statistic-beyond-double";
+        } else {
+            have_t = true;
+            let (pv, code) = p_two_sided(float_of_bits(tb), n - 2);
+            if code == 0 {
+                have_p = true;
+                p = pv;
+            } else {
+                reason = "p-not-computed";
+            }
+        }
+    } else {
+        w = json.put_null(heap, w);
+        reason = "constant-column";
+    }
+    w = json.put_key(heap, w, "statistic");
+    if have_t {
+        var tbits = tb;
+        if rb < 0 {
+            tbits = tb | 0 - 9223372036854775807 - 1;
+        }
+        w = json.put_float(heap, w, float_of_bits(tbits));
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "df");
+    if status == 0 && n >= 3 {
+        w = json.put_int(heap, w, n - 2);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_value");
+    if exact == 1 && status == 0 && n >= 3 {
+        w = json.put_float(heap, w, 0.0);
+    } else if have_p {
+        w = json.put_float(heap, w, p);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_method");
+    w = json.put_string(heap, w, "t");
+    if exact == 1 && status == 0 && n >= 3 {
+        w = json.put_key(heap, w, "p_exact_zero");
+        w = json.put_bool(heap, w, true);
+    }
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}
+
+// The pairs of the numeric columns of one file (or of --cols), Pearson. The same file reader as describe: the order-preserving keys of the cells are in `store`.
+fn corr_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
+    let table = flag_table();
+    var w = w0;
+    var e = errs;
+    match place.open_operand(fs, root, rel, full) {
+        Opened::Failed(reason) => {
+            e = fail.io_error(heap, e, reason, false, rel);
+        }
+        Opened::Ok(opened) => {
+            var file = opened;
+            borrow mut file as &!handle in {
+                let (names, ends, cols, store, info, e2) = read_file(heap, args, parsed, handle, rel, 0 - 1, "", false, e);
+                e = e2;
+                var clean = false;
+                borrow e as &er2 in {
+                    clean = fail.count(er2) == 0;
+                }
+                if clean {
+                    let nc = info.ncols;
+                    let sel = box_slice(heap, nc + 1, 0);
+                    var cols_ok = true;
+                    var named = false;
+                    if cli.has(parsed, table, "cols") {
+                        named = true;
+                        var st = 0;
+                        var item = 0;
+                        borrow names as &nb0 in {
+                            borrow ends as &eb0 in {
+                                borrow mut sel as &!sw0 in {
+                                    let (s1, i1) = pick.select(buffer.bytes(nb0), eb0, nc, cli.text(args, parsed, table, "cols"), contents(sw0));
+                                    st = s1;
+                                    item = i1;
+                                }
+                            }
+                        }
+                        let one = bytes.field(cli.text(args, parsed, table, "cols"), ',', item + 1);
+                        if st == 1 {
+                            cols_ok = false;
+                            e = refuse(heap, e, "stats.no-such-column", "--cols names a column the header does not have", "the header names are the first line of the file; the match is exact", "column", one);
+                        } else if st == 2 {
+                            cols_ok = false;
+                            e = refuse(heap, e, "stats.ambiguous-column", "two or more columns have a name given to --cols", "rename the columns so that the name is unique", "column", one);
+                        } else if st == 3 {
+                            cols_ok = false;
+                            e = refuse(heap, e, "args.bad-value", "--cols has an empty item", "--cols name1,name2: no empty item, no leading or trailing comma", "flag", "--cols");
+                        }
+                    }
+                    var m = 0;
+                    if cols_ok {
+                        borrow cols as &c0 in {
+                            borrow mut sel as &!sw1 in {
+                                var j = 0;
+                                while j < nc {
+                                    let numeric = contents(c0.numeric)[j] > 0 && contents(c0.bad)[j] == 0;
+                                    if !named {
+                                        if numeric {
+                                            contents(sw1)[j] = 1;
+                                        }
+                                    } else if contents(sw1)[j] == 1 && !numeric && cols_ok {
+                                        cols_ok = false;
+                                        borrow names as &nb1 in {
+                                            borrow ends as &eb1 in {
+                                                var from = 0;
+                                                if j > 0 {
+                                                    from = vec.get(eb1, j - 1);
+                                                }
+                                                e = refuse(heap, e, "stats.non-numeric", "--cols names a column that has no numbers or has a cell that is not a number", "name numeric columns only", "column", buffer.bytes(nb1)[from..vec.get(eb1, j)]);
+                                            }
+                                        }
+                                    }
+                                    j = j + 1;
+                                }
+                                j = 0;
+                                while j < nc {
+                                    if contents(sw1)[j] == 1 {
+                                        m = m + 1;
+                                    }
+                                    j = j + 1;
+                                }
+                            }
+                        }
+                    }
+                    if cols_ok && m < 2 {
+                        cols_ok = false;
+                        e = refuse_int(heap, e, "stats.corr-columns", "fewer than two numeric columns to correlate", "name two or more numeric columns with --cols", "columns", m, "line", 0);
+                    }
+                    let pairs = m * (m - 1) / 2;
+                    if cols_ok && pairs > cli.nat(args, parsed, table, "max-pairs") {
+                        cols_ok = false;
+                        e = refuse_int(heap, e, "limit.too-many-pairs", "more pairs of columns than --max-pairs", "raise --max-pairs or name fewer columns with --cols", "limit", cli.nat(args, parsed, table, "max-pairs"), "pairs", pairs);
+                    }
+                    if cols_ok {
+                        let idx = box_slice(heap, m + 1, 0);
+                        let mask = box_slice(heap, info.rows + 1, 1);
+                        let listwise = bytes.equal(cli.text(args, parsed, table, "missing"), "listwise");
+                        borrow sel as &sr in {
+                            borrow mut idx as &!iw in {
+                                var j = 0;
+                                var at = 0;
+                                while j < nc {
+                                    if contents(sr)[j] == 1 {
+                                        contents(iw)[at] = j;
+                                        at = at + 1;
+                                    }
+                                    j = j + 1;
+                                }
+                            }
+                        }
+                        borrow store as &sb in {
+                            borrow idx as &ir in {
+                                borrow mut mask as &!mw in {
+                                    if listwise {
+                                        var i = 0;
+                                        while i < info.rows {
+                                            var k = 0;
+                                            while k < m {
+                                                if vec.get(sb, i * nc + contents(ir)[k]) == rank.min_int() {
+                                                    contents(mw)[i] = 0;
+                                                }
+                                                k = k + 1;
+                                            }
+                                            i = i + 1;
+                                        }
+                                    }
+                                }
+                                borrow mask as &mr in {
+                                    borrow names as &nb in {
+                                        borrow ends as &eb in {
+                                            w = json.put_key(heap, w, "rows");
+                                            w = json.put_int(heap, w, info.rows);
+                                            w = json.put_key(heap, w, "method");
+                                            w = json.put_string(heap, w, "pearson");
+                                            w = json.put_key(heap, w, "missing");
+                                            w = json.put_string(heap, w, cli.text(args, parsed, table, "missing"));
+                                            w = json.put_key(heap, w, "adjustment");
+                                            w = json.put_string(heap, w, "none");
+                                            w = json.put_key(heap, w, "columns");
+                                            w = json.begin_array(heap, w);
+                                            var k = 0;
+                                            while k < m {
+                                                w = put_name(heap, w, buffer.bytes(nb), eb, contents(ir)[k]);
+                                                k = k + 1;
+                                            }
+                                            w = json.end_array(heap, w);
+                                            w = json.put_key(heap, w, "pairs");
+                                            w = json.begin_array(heap, w);
+                                            var ia = 0;
+                                            while ia < m {
+                                                var ib = ia + 1;
+                                                while ib < m {
+                                                    w = put_pair(heap, w, buffer.bytes(nb), eb, sb, nc, contents(ir)[ia], contents(ir)[ib], info.rows, contents(mr));
+                                                    ib = ib + 1;
+                                                }
+                                                ia = ia + 1;
+                                            }
+                                            w = json.end_array(heap, w);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        unbox_slice(heap, idx);
+                        unbox_slice(heap, mask);
+                    }
+                    unbox_slice(heap, sel);
+                }
+                buffer.drop(heap, names);
+                vec.drop(heap, ends);
+                drop_cols(heap, cols);
+                vec.drop(heap, store);
+            }
+            file_close(file);
+        }
+    }
+    return (w, e);
+}
+
 fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), io: &!i Io, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read, io_write, err_write] int {
     let table = flag_table();
     var e = errs;
     if cli.operand_count(parsed) == 0 {
         e = refuse(heap, e, "args.missing-operand", "no verb: the first operand names what to do", "stats describe FILE", "", "");
-    } else if !bytes.equal(cli.operand(args, parsed, 0), "describe") {
-        e = refuse(heap, e, "stats.bad-verb", "the first operand is not a verb this tool has", "the verb so far is: describe", "verb", cli.operand(args, parsed, 0));
+    } else if !bytes.equal(cli.operand(args, parsed, 0), "describe") && !bytes.equal(cli.operand(args, parsed, 0), "corr") {
+        e = refuse(heap, e, "stats.bad-verb", "the first operand is not a verb this tool has", "the verbs are: describe, corr", "verb", cli.operand(args, parsed, 0));
     } else if cli.operand_count(parsed) < 2 {
         e = refuse(heap, e, "args.missing-operand", "no FILE to describe", "stats describe FILE", "", "");
     } else if cli.operand_count(parsed) > 2 {
@@ -1239,6 +1520,9 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
     if !valid_list(cli.text(args, parsed, table, "quantiles")) {
         e = refuse(heap, e, "args.bad-value", "--quantiles takes at most 99 comma separated decimals from 0 to 1 with at most 9 decimals", "--quantiles 0.25,0.5,0.75", "flag", "--quantiles");
     }
+    if cli.nat(args, parsed, table, "max-pairs") > 32640 || cli.nat(args, parsed, table, "max-pairs") < 1 {
+        e = refuse(heap, e, "args.bad-value", "--max-pairs is outside 1 to 32640", "32640 is the pairs of 256 columns", "flag", "--max-pairs");
+    }
     if cli.nat(args, parsed, table, "ddof") > 1 {
         e = refuse(heap, e, "args.bad-value", "--ddof is 0 or 1", "0 divides by n, 1 by n - 1", "flag", "--ddof");
     }
@@ -1261,7 +1545,11 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
                     w = json.begin_object(heap, w);
                     let ddof = cli.nat(args, parsed, table, "ddof");
                     let qtype = cli.nat(args, parsed, table, "quantile-type");
-                    if !cli.has(parsed, table, "by") {
+                    if bytes.equal(cli.operand(args, parsed, 0), "corr") {
+                        let (w2, e2) = corr_one(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), w, e);
+                        w = w2;
+                        e = e2;
+                    } else if !cli.has(parsed, table, "by") {
                         let (w2, e2) = describe_one(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), 0 - 1, "", false, false, w, e);
                         w = w2;
                         e = e2;

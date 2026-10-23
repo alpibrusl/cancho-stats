@@ -13,11 +13,11 @@ import acc.psum;
 //     variance = L2 / (n (n - ddof))     excess kurtosis = (K4 - 3 L2^2) / L2^2     skewness = K3 / L2^(3/2) = sign(K3) sqrt(K3^2 / L2^3)
 // are each ONE rounding of an exact rational (the skewness through an exact integer square root with a sticky bit). Signed sums are kept as a positive and a negative magnitude and subtracted once.
 
-fn cap() -> [] int {
+pub fn cap() -> [] int {
     return 1100;
 }
 
-fn mag_len[&a](a: &a [int], n: int) -> [] int {
+pub fn mag_len[&a](a: &a [int], n: int) -> [] int {
     let b = bigint.bit_length(a, n);
     if b == 0 {
         return 1;
@@ -78,11 +78,16 @@ pub fn sqrt_ratio_bits[&h, &n, &d](heap: &!h Heap, num: &n [int], nn: int, den: 
     }
     // the shifted numerator num * 4^k
     let ns = nn + 2 * k / 26 + 3;
-    let big = box_slice(heap, ns, 0);
-    let cc = box_slice(heap, 12, 0);
-    let pr = box_slice(heap, nd + 20, 0);
-    let s = box_slice(heap, 8, 0);
     var top = (bn + 2 * k - bd) / 2 + 2;
+    // the root s has top + 1 bits: 8 limbs (208 bits) hold every root below 2^208, more when the ratio is large (the statistic t of corr reaches 2^1024)
+    var sl = top / 26 + 2;
+    if sl < 8 {
+        sl = 8;
+    }
+    let big = box_slice(heap, ns, 0);
+    let cc = box_slice(heap, sl + 4, 0);
+    let pr = box_slice(heap, nd + 2 * sl + 4, 0);
+    let s = box_slice(heap, sl, 0);
     var bits = 0;
     var code = 0;
     var sticky = 0;
@@ -94,13 +99,13 @@ pub fn sqrt_ratio_bits[&h, &n, &d](heap: &!h Heap, num: &n [int], nn: int, den: 
                     var bit = top;
                     while bit >= 0 {
                         // candidate c = s | 2^bit; keep it when c^2 den <= num 4^k
-                        bigint.copy(contents(cw), contents(sw), 8);
+                        bigint.copy(contents(cw), contents(sw), sl);
                         bigint.set_bit(contents(cw), bit);
-                        let sq = box_slice(heap, 20, 0);
+                        let sq = box_slice(heap, 2 * sl + 4, 0);
                         borrow mut sq as &!qw in {
-                            bigint.mul(contents(qw), contents(cw), 8, contents(cw), 8);
-                            bigint.mul(contents(pw), contents(qw), 16, den, nd);
-                            if bigint.compare(contents(pw), nd + 16, contents(bw), ns) <= 0 {
+                            bigint.mul(contents(qw), contents(cw), sl, contents(cw), sl);
+                            bigint.mul(contents(pw), contents(qw), 2 * sl, den, nd);
+                            if bigint.compare(contents(pw), nd + 2 * sl, contents(bw), ns) <= 0 {
                                 bigint.set_bit(contents(sw), bit);
                             }
                         }
@@ -108,16 +113,16 @@ pub fn sqrt_ratio_bits[&h, &n, &d](heap: &!h Heap, num: &n [int], nn: int, den: 
                         bit = bit - 1;
                     }
                     // sticky: s^2 den != num 4^k
-                    let sq2 = box_slice(heap, 20, 0);
+                    let sq2 = box_slice(heap, 2 * sl + 4, 0);
                     borrow mut sq2 as &!q2 in {
-                        bigint.mul(contents(q2), contents(sw), 8, contents(sw), 8);
-                        bigint.mul(contents(pw), contents(q2), 16, den, nd);
-                        if bigint.compare(contents(pw), nd + 16, contents(bw), ns) != 0 {
+                        bigint.mul(contents(q2), contents(sw), sl, contents(sw), sl);
+                        bigint.mul(contents(pw), contents(q2), 2 * sl, den, nd);
+                        if bigint.compare(contents(pw), nd + 2 * sl, contents(bw), ns) != 0 {
                             sticky = 1;
                         }
                     }
                     unbox_slice(heap, sq2);
-                    let (b, c) = bigint.round_bits(contents(sw), 8, 0 - k, sticky);
+                    let (b, c) = bigint.round_bits(contents(sw), sl, 0 - k, sticky);
                     bits = b;
                     code = c;
                 }
@@ -132,7 +137,7 @@ pub fn sqrt_ratio_bits[&h, &n, &d](heap: &!h Heap, num: &n [int], nn: int, den: 
 }
 
 // add the magnitude m (nm limbs) into the positive or the negative accumulator
-fn put[&p, &q, &m](pos: &!p [int], neg: &!q [int], m: &m [int], nm: int, negative: bool) -> [] int {
+pub fn put[&p, &q, &m](pos: &!p [int], neg: &!q [int], m: &m [int], nm: int, negative: bool) -> [] int {
     if negative {
         bigint.add_in(neg, cap(), m, nm);
     } else {
@@ -142,7 +147,7 @@ fn put[&p, &q, &m](pos: &!p [int], neg: &!q [int], m: &m [int], nm: int, negativ
 }
 
 // out = |pos - neg|; answers the sign (1, 0, -1)
-fn settle[&p, &q, &o](pos: &p [int], neg: &q [int], out: &!o [int]) -> [] int {
+pub fn settle[&p, &q, &o](pos: &p [int], neg: &q [int], out: &!o [int]) -> [] int {
     let c = bigint.compare(pos, cap(), neg, cap());
     if c == 0 {
         bigint.clear(out, cap());

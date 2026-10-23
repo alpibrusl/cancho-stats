@@ -1,0 +1,174 @@
+edition 5;
+
+module corr.pearson;
+
+import std.vec;
+import acc.bigint;
+import acc.central;
+import acc.psum;
+import acc.xsum;
+import flt;
+import metrics.rank;
+
+// Pearson's coefficient of two columns, exact (docs/corr.md sections 2 and 3). `keys` is the row-major table of order-preserving keys of the cells (rank.key_of, flt.float_of_key is its inverse),
+// rank.min_int() for a cell that is missing, `mask[i]` is 1 for a row that may be used (all ones for pairwise; for listwise the rows where every chosen column is present). For the rows where both
+// cells are present the exact sums Sx, Sy (acc.psum k = 1), Sxx, Syy (k = 2) and Sxy (acc.xsum) are accumulated, and with n the rows used the integers
+//     N = n Sxy - Sx Sy       Lx = n Sxx - Sx^2       Ly = n Syy - Sy^2
+// (all in units of 2^-2148) give  r = sign(N) sqrt(N^2 / (Lx Ly))  in ONE rounding (central.sqrt_ratio_bits), and, for n >= 3,  t^2 = N^2 (n - 2) / (Lx Ly - N^2)  likewise (the statistic is
+// |t|, the caller gives it the sign of r). |r| = 1 is decided by N^2 = Lx Ly on the integers, never by a rounded value.
+
+// Answers (n, status, r bits, r code, |t| bits, t code, exact) with status 0 when r is defined and 1 when a column is constant over the rows used (which includes n < 2); `exact` is 1 when |r| = 1
+// exactly (then |t| is not answered), and `t bits` is also not answered when n < 3.
+pub fn pair[&h, &k, &m](heap: &!h Heap, keys: &k vec.Vec[int], ncols: int, ca: int, cb: int, rows: int, mask: &m [int]) -> [heap] (int, int, int, int, int, int, int) {
+    let s1 = psum.size(1);
+    let s2 = psum.size(2);
+    let l1 = psum.limbs(1);
+    let l2 = psum.limbs(2);
+    let ox = 0;
+    let oy = s1;
+    let oxx = 2 * s1;
+    let oyy = 2 * s1 + s2;
+    let oxy = 2 * s1 + 2 * s2;
+    let acc = box_slice(heap, 2 * s1 + 3 * s2 + 1, 0);
+    let work = box_slice(heap, psum.scratch() + 1, 0);
+    var n = 0;
+    var status = 0;
+    var rb = 0;
+    var rc = 0;
+    var tb = 0;
+    var tc = 0;
+    var exact = 0;
+    borrow mut acc as &!aw in {
+        borrow mut work as &!ww in {
+            let a = contents(aw);
+            let wk = contents(ww);
+            var i = 0;
+            while i < rows {
+                let ka = vec.get(keys, i * ncols + ca);
+                let kb = vec.get(keys, i * ncols + cb);
+                if mask[i] != 0 && ka != rank.min_int() && kb != rank.min_int() {
+                    let xb = bits_of(flt.float_of_key(ka));
+                    let yb = bits_of(flt.float_of_key(kb));
+                    psum.add(a[ox..ox + s1], 1, xb, wk);
+                    psum.add(a[oy..oy + s1], 1, yb, wk);
+                    psum.add(a[oxx..oxx + s2], 2, xb, wk);
+                    psum.add(a[oyy..oyy + s2], 2, yb, wk);
+                    xsum.add(a[oxy..oxy + s2], xb, yb, wk);
+                    n = n + 1;
+                }
+                i = i + 1;
+            }
+            let c = central.cap();
+            let tmp = box_slice(heap, 12 * c + 1, 0);
+            let pos = box_slice(heap, c, 0);
+            let neg = box_slice(heap, c, 0);
+            borrow mut tmp as &!tw in {
+                borrow mut pos as &!pw in {
+                    borrow mut neg as &!nw in {
+                        let t = contents(tw);
+                        let p = contents(pw);
+                        let q = contents(nw);
+                        // regions of t, each `c` limbs: 0 Sx, 1 Sy, 2 Sxx, 3 Syy, 4 Sxy, 5 Lx, 6 Ly, 7 N, 8 scratch, 9 N^2, 10 Lx Ly, 11 the small factors
+                        let r_sx = 0;
+                        let r_sy = c;
+                        let r_sxx = 2 * c;
+                        let r_syy = 3 * c;
+                        let r_sxy = 4 * c;
+                        let r_lx = 5 * c;
+                        let r_ly = 6 * c;
+                        let r_n = 7 * c;
+                        let r_t = 8 * c;
+                        let r_nn = 9 * c;
+                        let r_d = 10 * c;
+                        let r_f = 11 * c;
+                        let sx = psum.magnitude(a[ox..ox + s1], 1, t[r_sx..r_sx + c]);
+                        let sy = psum.magnitude(a[oy..oy + s1], 1, t[r_sy..r_sy + c]);
+                        psum.magnitude(a[oxx..oxx + s2], 2, t[r_sxx..r_sxx + c]);
+                        psum.magnitude(a[oyy..oyy + s2], 2, t[r_syy..r_syy + c]);
+                        let sxy = psum.magnitude(a[oxy..oxy + s2], 2, t[r_sxy..r_sxy + c]);
+                        central.limbs_of(n, t[r_f..r_f + 8]);
+                        // Lx = n Sxx - Sx^2
+                        bigint.clear(p, c);
+                        bigint.clear(q, c);
+                        bigint.mul(t[r_t..r_t + c], t[r_sxx..r_sxx + c], l2, t[r_f..r_f + 8], 3);
+                        central.put(p, q, t[r_t..r_t + c], l2 + 3, false);
+                        bigint.mul(t[r_t..r_t + c], t[r_sx..r_sx + c], l1, t[r_sx..r_sx + c], l1);
+                        central.put(p, q, t[r_t..r_t + c], 2 * l1, true);
+                        central.settle(p, q, t[r_lx..r_lx + c]);
+                        // Ly = n Syy - Sy^2
+                        bigint.clear(p, c);
+                        bigint.clear(q, c);
+                        bigint.mul(t[r_t..r_t + c], t[r_syy..r_syy + c], l2, t[r_f..r_f + 8], 3);
+                        central.put(p, q, t[r_t..r_t + c], l2 + 3, false);
+                        bigint.mul(t[r_t..r_t + c], t[r_sy..r_sy + c], l1, t[r_sy..r_sy + c], l1);
+                        central.put(p, q, t[r_t..r_t + c], 2 * l1, true);
+                        central.settle(p, q, t[r_ly..r_ly + c]);
+                        if bigint.is_zero(t[r_lx..r_lx + c], c) || bigint.is_zero(t[r_ly..r_ly + c], c) {
+                            status = 1;
+                        } else {
+                            // N = n Sxy - Sx Sy
+                            bigint.clear(p, c);
+                            bigint.clear(q, c);
+                            bigint.mul(t[r_t..r_t + c], t[r_sxy..r_sxy + c], l2, t[r_f..r_f + 8], 3);
+                            central.put(p, q, t[r_t..r_t + c], l2 + 3, sxy < 0);
+                            bigint.mul(t[r_t..r_t + c], t[r_sx..r_sx + c], l1, t[r_sy..r_sy + c], l1);
+                            // the term is - Sx Sy: negative when Sx and Sy have the same sign
+                            central.put(p, q, t[r_t..r_t + c], 2 * l1, (sx < 0) == (sy < 0));
+                            let sn = central.settle(p, q, t[r_n..r_n + c]);
+                            let ln = central.mag_len(t[r_n..r_n + c], c);
+                            let lx = central.mag_len(t[r_lx..r_lx + c], c);
+                            let ly = central.mag_len(t[r_ly..r_ly + c], c);
+                            bigint.mul(t[r_nn..r_nn + c], t[r_n..r_n + c], ln, t[r_n..r_n + c], ln);
+                            bigint.mul(t[r_d..r_d + c], t[r_lx..r_lx + c], lx, t[r_ly..r_ly + c], ly);
+                            let lnn = 2 * ln;
+                            let ld = lx + ly;
+                            if bigint.compare(t[r_nn..r_nn + c], lnn, t[r_d..r_d + c], ld) == 0 {
+                                // |r| = 1 exactly
+                                exact = 1;
+                                rb = 4607182418800017408;
+                                if sn < 0 {
+                                    rb = rb | 0 - 9223372036854775807 - 1;
+                                }
+                            } else {
+                                let (b1, c1) = central.sqrt_ratio_bits(heap, t[r_nn..r_nn + c], lnn, t[r_d..r_d + c], ld);
+                                rb = b1;
+                                rc = c1;
+                                if sn < 0 && c1 == 0 {
+                                    rb = rb | 0 - 9223372036854775807 - 1;
+                                }
+                                if n >= 3 {
+                                    // t^2 = N^2 (n - 2) / (Lx Ly - N^2)
+                                    central.limbs_of(n - 2, t[r_f..r_f + 8]);
+                                    let num = box_slice(heap, lnn + 4, 0);
+                                    let den = box_slice(heap, lnn + ld + 4, 0);
+                                    borrow mut num as &!numw in {
+                                        borrow mut den as &!denw in {
+                                            bigint.mul(contents(numw), t[r_nn..r_nn + c], lnn, t[r_f..r_f + 8], 3);
+                                            var nd = ld;
+                                            if lnn > nd {
+                                                nd = lnn;
+                                            }
+                                            bigint.copy(contents(denw), t[r_d..r_d + c], nd);
+                                            bigint.sub_in(contents(denw), nd, t[r_nn..r_nn + c], lnn);
+                                            let (b2, c2) = central.sqrt_ratio_bits(heap, contents(numw), lnn + 3, contents(denw), nd);
+                                            tb = b2;
+                                            tc = c2;
+                                        }
+                                    }
+                                    unbox_slice(heap, num);
+                                    unbox_slice(heap, den);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            unbox_slice(heap, tmp);
+            unbox_slice(heap, pos);
+            unbox_slice(heap, neg);
+        }
+    }
+    unbox_slice(heap, acc);
+    unbox_slice(heap, work);
+    return (n, status, rb, rc, tb, tc, exact);
+}
