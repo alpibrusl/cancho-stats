@@ -52,7 +52,7 @@ With `n` the rows used for a pair, `Sx = sum x`, `Sy = sum y`, `Sxx = sum x^2`, 
 
 ## 6. Slices (one pull request each)
 
-1. **S2.0, no behaviour change.** `tools/stats/main.cho` is 1,534 lines of the 2,000 allowed (`CLAUDE.md`): the reader loop, `discover` and `read_file` (the header scanner is written twice, which the mutants of 2026-10-22 showed) move to a module shared by `describe` and `corr`. Gate: the existing gates and the fingerprint unchanged.
+1. **S2.0, no behaviour change (done 2026-10-23).** `tools/stats/main.cho` was 1,534 lines of the 2,000 allowed (`CLAUDE.md`). What `corr` shares with `describe` and that is pure moves out: the `--cols` matching (`lib/csvx/pick.cho`) and the text form of an answer (`lib/csvx/flat.cho`); `main.cho` is 1,388 lines. The reader loop (`take_row`, `discover`, `read_file`) is **not** moved yet: it is built around the accumulators of `describe` (`Cols`), and `corr` holds the cells of its columns in memory instead, so the shared part is found when S2.2 has its second consumer, not guessed now. Gate: the existing gates, the authority manifest and the fingerprint unchanged; the mutants of the moved code point at their new files.
 2. **S2.1** `acc.xsum` and C-A. 3. **S2.2** Pearson with its p-value (C-B, C-C, C-D, C-E, C-F for Pearson). 4. **S2.3** ranks and Spearman. 5. **S2.4** Kendall. 6. **S2.5** mutants, fuzz, fingerprint, the page and the skill text.
 
 ## 7. Decisions of 2026-10-23
