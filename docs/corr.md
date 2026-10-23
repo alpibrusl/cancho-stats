@@ -60,3 +60,9 @@ With `n` the rows used for a pair, `Sx = sum x`, `Sy = sum y`, `Sxx = sum x^2`, 
 The maintainer accepted the proposals of the design, each as written in sections 2 to 4: (1) `--missing pairwise` is the default; (2) Spearman by the t-approximation and Kendall by the normal approximation in S2, the exact permutation p-values with S4; (3) a pair list, `--max-pairs` 1,000, no square matrix; (4) `acc.xsum`, `acc.psum` and `acc.bigint` are published as stores after S2.1 so that `cancho-ml` can pin them; (5) the Fisher-`z` interval is `stats ci correlation` (S5) only, not `corr`.
 
 Still open: whether S4 adds `--exact` to `corr`.
+
+## 8. Results
+
+*(printed by the scripts named; Linux x86-64 container, one run, the pinned compiler a4572ea, 2026-10-23)*
+
+* **S2.1, `acc.xsum`** (`lib/acc/xsum.cho`, driver `tools/xsum-check`). It is the psum accumulator of k = 2 fed the product of two mantissas (106 bits at the offset `fx + fy`), so it shares the unit 2^-2148, the headroom and the order-free carry of `acc.psum`; the code is the layout and `psum.add_shifted`, made `pub`. `scripts/gate_xsum.py --vectors 300`: 311 sums over pairs of the ten families against each other plus the extremes (34 beyond the largest double and flagged), **0 differ from `Fraction`** rounded once, 0 differ after shuffling the rows, 0 differ with `x` and `y` swapped, 0 differ from `psum` k = 2 on `(x, x)`; `--vectors 1000 --seed 7`: 1,011 sums, 98 flagged, 0 differ everywhere. `scripts/mutants_xsum.py` (it first runs the gate on the unmutated build and refuses to count kills if it fails): **17 of 20 killed**, the three survivors equivalent and explained in the file (`product-offset`: the sixth limb of a 106-bit product is always zero; `zero-x-row`, `zero-y-row`: the early return only skips adding a zero product).

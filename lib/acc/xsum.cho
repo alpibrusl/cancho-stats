@@ -1,0 +1,66 @@
+edition 5;
+
+module acc.xsum;
+
+import acc.bigint;
+import acc.psum;
+
+// The exact cross sum sum(x * y) of pairs of finite doubles (docs/corr.md section 3). A finite double is +-m * 2^(f - 1074) with m below 2^53 (the hidden bit included for a normal number) and
+// f in 0..2046, so x * y is +-(mx * my) * 2^(fx + fy - 2148): a 106-bit integer laid at the bit offset fx + fy, in units of 2^-2148. That is the layout and the unit of acc.psum for k = 2 (x * x is
+// m^2 at the offset 2 f), so the accumulator IS a psum accumulator of k = 2, with the same size, the same headroom (2^64 rows), the same order-free carry, and the sum is read with psum.magnitude
+// and psum.rounded: Sxy, Sxx and Syy are in one unit and the numerator n Sxy - Sx Sy and the product Lx Ly of the coefficient need no conversion. The sign of a term is the exclusive or of the two signs.
+
+// the slice length `acc` must have: the positive and the negative accumulators, all zero at the start
+pub fn size() -> [] int {
+    return psum.size(2);
+}
+
+// scratch for one row: mx (3 limbs), my (3 limbs) and their product (6 limbs)
+pub fn scratch() -> [] int {
+    return 12;
+}
+
+fn mask() -> [] int {
+    return 67108863;
+}
+
+// the integer mantissa of the finite double with bits `bits` (the hidden bit included for a normal number) and the exponent field f (max(efield - 1, 0))
+fn mantissa(bits: int) -> [] (int, int) {
+    let ef = bits >> 52 & 2047;
+    var m = bits & 4503599627370495;
+    var f = 0;
+    if ef != 0 {
+        m = m | 4503599627370496;
+        f = ef - 1;
+    }
+    return (m, f);
+}
+
+// Add x * y for the finite doubles with bits bx and by. `work` is `scratch()` ints (overwritten). Answers 1 if the accumulator overflowed its headroom (not reachable below 2^64 rows), else 0.
+pub fn add[&a, &w](acc: &!a [int], bx: int, by: int, work: &!w [int]) -> [] int {
+    let (mx, fx) = mantissa(bx);
+    let (my, fy) = mantissa(by);
+    if mx == 0 || my == 0 {
+        return 0;
+    }
+    bigint.clear(work, 12);
+    work[0] = mx & mask();
+    work[1] = mx >> 26 & mask();
+    work[2] = mx >> 52;
+    work[3] = my & mask();
+    work[4] = my >> 26 & mask();
+    work[5] = my >> 52;
+    bigint.mul(work[6..12], work[0..3], 3, work[3..6], 3);
+    let len = psum.limbs(2);
+    var base = 0;
+    // the product is negative when exactly one of the two numbers is
+    if (bx < 0) != (by < 0) {
+        base = len;
+    }
+    return psum.add_shifted(acc, base, len, work, 6, 6, fx + fy);
+}
+
+// the sum rounded once to a double, as bits (with the sign), and 1 in the second place if it is beyond the largest double. `out` is psum.limbs(2) ints of scratch.
+pub fn rounded[&a, &o](acc: &a [int], out: &!o [int]) -> [] (int, int) {
+    return psum.rounded(acc, 2, out);
+}

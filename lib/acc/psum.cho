@@ -28,7 +28,7 @@ fn mask() -> [] int {
 }
 
 // add pw (npw limbs) shifted left by s bits into acc at base (len limbs)
-fn add_shifted[&a, &p](acc: &!a [int], base: int, len: int, pw: &p [int], poff: int, npw: int, s: int) -> [] int {
+pub fn add_shifted[&a, &p](acc: &!a [int], base: int, len: int, pw: &p [int], poff: int, npw: int, s: int) -> [] int {
     let q = s / 26;
     let r = s % 26;
     var carry = 0;
