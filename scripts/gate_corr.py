@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""S2.2 gates C-B and C-C and C-D (docs/corr.md section 5), for `stats corr` (Pearson): generated CSV files against
+"""S2.2 and S2.3 gates C-B, C-C and C-D (docs/corr.md section 5), for `stats corr` (Pearson, and with --method spearman the average-rank coefficient): generated CSV files against
 
-    python3 scripts/gate_corr.py [--bin build/stats] [--files 200] [--seed 1] [--scipy]
+    python3 scripts/gate_corr.py [--bin build/stats] [--files 200] [--seed 1] [--scipy] [--method pearson|spearman]
+
+With --method spearman the oracle ranks the rows used for each pair by counting (twice the average rank = 2 (values below) + (values equal, itself included) + 1, an independent method from the program's
+binary search), takes the exact Pearson coefficient of those ranks, and expects the key `rho`, the p-method `t-approximation`, the tie groups per column, and the reason `all-tied` for a column of equal ranks. Controls: ties broken
+by position, and ranks taken over the whole column before the rows with a missing partner are dropped; each must give another coefficient on the cases where it applies.
 
 Oracle, from `fractions.Fraction`, of the doubles the text reads as: for every pair of numeric columns (both modes `--missing pairwise` and `listwise`) the rows used, n, the exact integers
 N = n Sxy - Sx Sy, Lx = n Sxx - Sx^2, Ly = n Syy - Sy^2; r = sign(N) sqrt(N^2 / (Lx Ly)) rounded ONCE (bytes compared); |r| = 1 decided by N^2 = Lx Ly; the statistic
@@ -33,8 +37,8 @@ import gate_describe as gd  # noqa: E402
 
 mpmath.mp.dps = 60
 EPS = 2.0 ** -53
-GOOD = ("uniform", "ints", "lin")
-SHAPES = ["uniform", "ints", "lin", "offset", "offset-neg", "wide", "tiny", "huge", "const", "gappy", "empty", "text", "mixed", "lin", "lin", "ints", "uniform"]
+GOOD = ("uniform", "ints", "lin", "tied")
+SHAPES = ["uniform", "ints", "tied", "lin", "offset", "offset-neg", "wide", "tiny", "huge", "const", "gappy", "empty", "text", "mixed", "lin", "lin", "ints", "uniform"]
 
 
 def _t(*cols):
@@ -55,7 +59,9 @@ FIXED = [
 
 
 def column(r, shape, n, prev):
-    """the cells of one column; `lin` follows the previous column (a correlated pair, with noise)"""
+    """the cells of one column; `lin` follows the previous column (a correlated pair, with noise); `tied` takes four values (many ties)"""
+    if shape == "tied":
+        return [r.pick(["1", "2", "2.5", "4"]) if r.next() % 9 else "" for _ in range(n)]
     if shape == "lin":
         out = []
         for i in range(n):
@@ -104,6 +110,28 @@ def exact_pair(xs, ys):
     syy = sum((y * y for y in fy), Fraction(0))
     sxy = sum((x * y for x, y in zip(fx, fy)), Fraction(0))
     return n, n * sxy - sx * sy, n * sxx - sx * sx, n * syy - sy * sy
+
+
+def ranks2(vs):
+    """twice the average rank of each value (1-based), by counting: 2 * (values below) + (values equal, itself included) + 1; -0.0 equals 0.0"""
+    return [2 * sum(1 for u in vs if u < v) + sum(1 for u in vs if u == v) + 1 for v in vs]
+
+
+def tie_groups(vs):
+    """the number of values that occur more than once"""
+    seen = {}
+    for v in vs:
+        seen[v] = seen.get(v, 0) + 1
+    return sum(1 for c in seen.values() if c > 1)
+
+
+def ordinal2(vs):
+    """control: ties broken by position instead of averaged, doubled"""
+    order = sorted(range(len(vs)), key=lambda i: (vs[i], i))
+    out = [0] * len(vs)
+    for rank, i in enumerate(order):
+        out[i] = 2 * (rank + 1)
+    return out
 
 
 def expected(xs, ys):
@@ -178,11 +206,17 @@ def main():
     ap.add_argument("--files", type=int, default=200)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--scipy", action="store_true")
+    ap.add_argument("--method", choices=["pearson", "spearman"], default="pearson")
     a = ap.parse_args()
     r = SM64(a.seed)
+    spear = a.method == "spearman"
+    key = "rho" if spear else "r"
+    pmeth = "t-approximation" if spear else "t"
     bad = []
     checked = 0
-    ctl = {"df-n": [0, 0], "one-sided": [0, 0], "welford": [0, 0]}  # [outside the bound, cases]
+    ctl = {"df-n": [0, 0], "one-sided": [0, 0], ("ordinal-rank" if spear else "welford"): [0, 0]}  # [outside the bound, cases]
+    if spear:
+        ctl["rank-before-deletion"] = [0, 0]
     sp = {"r": 0.0, "p": 0.0, "n": 0, "skipped": 0}
     pst = {"max": 0.0, "ratio": 0.0, "n": 0}  # the largest relative error of a p-value against mpmath, and its largest fraction of the bound
     with tempfile.TemporaryDirectory() as t:
@@ -205,7 +239,7 @@ def main():
             num = numeric_columns(cols)
             for mode in ("pairwise", "listwise"):
                 try:
-                    p = run(a.bin, tmp, names, rows, ["--missing", mode])
+                    p = run(a.bin, tmp, names, rows, ["--missing", mode, "--method", a.method])
                 except subprocess.TimeoutExpired:
                     print("gate_corr: the program did not finish (hang)")
                     return 2
@@ -234,13 +268,21 @@ def main():
                         used = [i for i in range(n) if vals[x][i] is not None and vals[y][i] is not None]
                     xs = [vals[x][i] for i in used]
                     ys = [vals[y][i] for i in used]
-                    w = expected(xs, ys)
+                    if spear:
+                        w = expected([float(v) for v in ranks2(xs)], [float(v) for v in ranks2(ys)])
+                        if w["reason"] == "constant-column":
+                            w["reason"] = "all-tied"
+                        want_ties = {"x": tie_groups(xs), "y": tie_groups(ys), "rule": "average"}
+                    else:
+                        w = expected(xs, ys)
                     tag = "%s %s~%s" % (mode, names[x], names[y])
                     checked += 1
                     if g["n"] != w["n"]:
                         bad.append((fi, "%s n: want %r got %r" % (tag, w["n"], g["n"])))
-                    if not gd.same(g.get("r"), w["r"]):
-                        bad.append((fi, "%s r: want %r got %r" % (tag, w["r"], g.get("r"))))
+                    if not gd.same(g.get(key), w["r"]):
+                        bad.append((fi, "%s %s: want %r got %r" % (tag, key, w["r"], g.get(key))))
+                    if spear and g.get("ties") != want_ties:
+                        bad.append((fi, "%s ties: want %r got %r" % (tag, want_ties, g.get("ties"))))
                     if not gd.same(g.get("statistic"), w["statistic"]):
                         bad.append((fi, "%s statistic: want %r got %r" % (tag, w["statistic"], g.get("statistic"))))
                     if g.get("df") != w["df"]:
@@ -261,7 +303,7 @@ def main():
                         pst["n"] += 1
                     if g.get("p_value") is not None and not (0.0 <= g["p_value"] <= 1.0):
                         bad.append((fi, "%s p_value %r is not in [0, 1]" % (tag, g["p_value"])))
-                    if g.get("p_method") != "t":
+                    if g.get("p_method") != pmeth:
                         bad.append((fi, "%s p_method %r" % (tag, g.get("p_method"))))
                     # the controls: a wrong degrees of freedom, a one-sided tail, a float one-pass r must each leave the bound on the cases where they differ
                     if w["p"] is not None and w["p"] > mpmath.mpf("1e-250") and not w["one"] and w["n"] >= 4:
@@ -272,16 +314,31 @@ def main():
                         ctl["df-n"][0] += 0 if p_ok(float(wrong), w["p"], nn_) else 1
                         ctl["one-sided"][1] += 1
                         ctl["one-sided"][0] += 0 if p_ok(float(w["p"] / 2), w["p"], nn_) else 1
-                    if w["r"] is not None and w["n"] >= 3:
+                    if w["r"] is not None and w["n"] >= 3 and not spear:
                         wr = welford_r(xs, ys)
                         ctl["welford"][1] += 1
                         ctl["welford"][0] += 0 if (wr is not None and wr == w["r"]) else 1
+                    if spear and w["r"] is not None and w["n"] >= 3 and (want_ties["x"] or want_ties["y"]):
+                        # control: ties broken by position; its coefficient must differ from the average-rank one
+                        wo = expected([float(v) for v in ordinal2(xs)], [float(v) for v in ordinal2(ys)])
+                        ctl["ordinal-rank"][1] += 1
+                        ctl["ordinal-rank"][0] += 0 if gd.same(wo["r"], w["r"]) else 1
+                    if spear and mode == "pairwise" and w["r"] is not None and w["n"] >= 3 and len(used) < n:
+                        # control: the ranks taken over the whole column BEFORE the rows with a missing partner are dropped
+                        fx_all = [vals[x][i] for i in range(n) if vals[x][i] is not None]
+                        fy_all = [vals[y][i] for i in range(n) if vals[y][i] is not None]
+                        rxa, rya = ranks2(fx_all), ranks2(fy_all)
+                        ix = {i: k for k, i in enumerate([i for i in range(n) if vals[x][i] is not None])}
+                        iy = {i: k for k, i in enumerate([i for i in range(n) if vals[y][i] is not None])}
+                        wd = expected([float(rxa[ix[i]]) for i in used], [float(rya[iy[i]]) for i in used])
+                        ctl["rank-before-deletion"][1] += 1
+                        ctl["rank-before-deletion"][0] += 0 if gd.same(wd["r"], w["r"]) else 1
                     if a.scipy and w["r"] is not None and w["n"] >= 3 and not w["one"] and g.get("p_value") is not None:
                         import scipy.stats as ss
-                        res = ss.pearsonr(xs, ys)
-                        dr = abs(res[0] - g["r"])
+                        res = ss.spearmanr(xs, ys) if spear else ss.pearsonr(xs, ys)
+                        dr = abs(res[0] - g[key])
                         dp = abs(res[1] - g["p_value"]) / max(abs(res[1]), 1e-300)
-                        if shapes[x] in GOOD and shapes[y] in GOOD and abs(g["r"]) <= 0.999:
+                        if shapes[x] in GOOD and shapes[y] in GOOD and abs(g[key]) <= 0.999:
                             sp["n"] += 1
                             sp["r"] = max(sp["r"], dr)
                             sp["p"] = max(sp["p"], dp)
@@ -296,29 +353,31 @@ def main():
                     for i in range(n - 1, 0, -1):
                         k = r.next() % (i + 1)
                         perm[i], perm[k] = perm[k], perm[i]
-                    p2 = run(a.bin, tmp, names, [rows[i] for i in perm], ["--missing", mode])
+                    p2 = run(a.bin, tmp, names, [rows[i] for i in perm], ["--missing", mode, "--method", a.method])
                     if p2.stdout != p.stdout:
                         bad.append((fi, "the rows shuffled give different bytes"))
                     # --cols names columns, the answer keeps the order of the file: the same bytes whatever the order given
                     sel = [names[j] for j in num]
-                    p3 = run(a.bin, tmp, names, rows, ["--missing", mode, "--cols", ",".join(reversed(sel))])
+                    p3 = run(a.bin, tmp, names, rows, ["--missing", mode, "--method", a.method, "--cols", ",".join(reversed(sel))])
                     if p3.stdout != p.stdout:
                         bad.append((fi, "--cols in another order gives different bytes"))
                     # the columns of the file in the opposite order: each pair is the mirrored one with the same values (r(x, y) = r(y, x) byte for byte)
                     names_r = list(reversed(names))
                     rows_r = [list(reversed(rw)) for rw in rows]
-                    p4 = run(a.bin, tmp, names_r, rows_r, ["--missing", mode])
+                    p4 = run(a.bin, tmp, names_r, rows_r, ["--missing", mode, "--method", a.method])
                     if p4.returncode != 0:
                         bad.append((fi, "mirrored file: exit %d" % p4.returncode))
                     else:
                         by_name = {frozenset((g["x"], g["y"])): g for g in got_pairs}
                         for g4 in json.loads(p4.stdout)["data"]["pairs"]:
                             g0 = by_name.get(frozenset((g4["x"], g4["y"])))
-                            for k in ("n", "r", "statistic", "df", "p_value", "reason"):
+                            for k in ("n", key, "statistic", "df", "p_value", "reason"):
                                 if g0 is None or not gd.same(g0.get(k), g4.get(k)):
                                     bad.append((fi, "mirrored file: %s~%s key %s differs" % (g4["x"], g4["y"], k)))
                                     break
     for k, (outside, total) in ctl.items():
+        if k in ("ordinal-rank", "rank-before-deletion") and total < 5:
+            bad.append((-1, "control %s had only %d applicable cases" % (k, total)))
         if total and outside * 10 < total:
             bad.append((-1, "control %s left the bound on only %d of %d cases: the gate cannot tell it from the program" % (k, outside, total)))
     print("gate_corr: %d files, %d pairs compared, %d differ; p-values against mpmath: largest relative error %.3g over %d, at most %.3g of the bound; controls outside the bound: %s%s" % (

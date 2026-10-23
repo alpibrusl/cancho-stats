@@ -48,14 +48,17 @@ def sample(r, n, rho):
     return xs, ys
 
 
+METHOD = "pearson"
+
+
 def corr_p(binary, d, xs, ys):
     f = d / "f.csv"
     f.write_text("x,y\n" + "\n".join("%r,%r" % (a, b) for a, b in zip(xs, ys)) + "\n")
-    p = subprocess.run([binary, "corr", "--root", str(d), "f.csv"], capture_output=True, text=True, timeout=120)
+    p = subprocess.run([binary, "corr", "--root", str(d), "--method", METHOD, "f.csv"], capture_output=True, text=True, timeout=120)
     if p.returncode != 0:
         raise RuntimeError("exit %d: %s" % (p.returncode, p.stdout[:200]))
     pair = json.loads(p.stdout)["data"]["pairs"][0]
-    return pair["r"], pair["p_value"]
+    return pair["rho" if METHOD == "spearman" else "r"], pair["p_value"]
 
 
 def run_many(binary, jobs, workers):
@@ -99,7 +102,10 @@ def main():
     ap.add_argument("--power-replicates", type=int, default=4000)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--method", choices=["pearson", "spearman"], default="pearson")
     a = ap.parse_args()
+    global METHOD
+    METHOD = a.method
     bad = []
     lo, hi = binom_interval(a.replicates)
     refused = {"one-sided": False, "normal": False, "df-n": False}
@@ -113,8 +119,9 @@ def main():
             rej = sum(1 for p in ps if p < 0.05)
             ks = ss.kstest(ps, "uniform").pvalue
             ok = lo <= rej <= hi and ks > ALPHA_TEST
-            lines.append("n=%d: rejected %d of %d (interval %d..%d), KS p %.3f%s" % (n, rej, a.replicates, lo, hi, ks, "" if ok else "  <-- FAILS"))
-            if not ok:
+            gated = a.method == "pearson" or n >= 30
+            lines.append("n=%d: rejected %d of %d (interval %d..%d), KS p %.3f%s" % (n, rej, a.replicates, lo, hi, ks, ("" if gated else "  (printed, not gated: the t approximation of Spearman is rough at small n)") if ok else ("  <-- FAILS" if gated else "  (outside; printed, not gated)")))
+            if not ok and gated:
                 bad.append("n=%d null calibration" % n)
             # controls: the same r, a wrong p
             for name in refused:
@@ -132,12 +139,25 @@ def main():
                         cp.append(2.0 * ss.t.sf(abs(t), n))
                 crej = sum(1 for p in cp if p < 0.05)
                 cks = ss.kstest(cp, "uniform").pvalue
-                if not (lo <= crej <= hi and cks > ALPHA_TEST):
+                if not (lo <= crej <= hi and cks > ALPHA_TEST) and (a.method == "pearson" or n >= 30):
                     refused[name] = True
     except Exception as e:
         print("gate_corr_calibration: harness failure: %s" % e)
         return 2
-    # C-F: power at rho = 0.5, n = 50
+    for name, was in refused.items():
+        required = a.method == "pearson" or name == "one-sided"
+        lines.append("control %s: %s%s" % (name, "refused by the calibration test" if was else "NOT refused", "" if required else " (reported; at the gated sizes of Spearman only the one-sided tail is far enough from Student's t)"))
+        if not was and required:
+            bad.append("control %s was not refused: the gate cannot tell it from the program" % name)
+    # C-F: power at rho = 0.5, n = 50 (Pearson only)
+    if a.method != "pearson":
+        print("gate_corr_calibration (%s, %d null replicates per n, seed %d):" % (a.method, a.replicates, a.seed))
+        for ln in lines:
+            print("  " + ln)
+        print("gate_corr_calibration: %d problems" % len(bad))
+        for b in bad:
+            print("  " + b)
+        return 1 if bad else 0
     n, rho = 50, 0.5
     tc = ss.t.ppf(0.975, n - 2)
     rc = tc / math.sqrt(tc * tc + n - 2)
@@ -160,10 +180,6 @@ def main():
     lines.append("power rho=0.5 n=50: exact %.6f, rejected %d of %d (interval %d..%d)%s" % (float(power), rej, reps, plo, phi, "" if ok else "  <-- FAILS"))
     if not ok:
         bad.append("power")
-    for name, was in refused.items():
-        lines.append("control %s: %s" % (name, "refused by the calibration test" if was else "NOT refused"))
-        if not was:
-            bad.append("control %s was not refused: the gate cannot tell it from the program" % name)
     print("gate_corr_calibration (%d null replicates per n, seed %d):" % (a.replicates, a.seed))
     for ln in lines:
         print("  " + ln)
