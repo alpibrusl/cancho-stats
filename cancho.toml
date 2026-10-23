@@ -224,9 +224,16 @@ out = "build/psum-check"
 # S1: the command line (docs/describe.md). `cancho build --bin stats`.
 [[bin]]
 name = "stats"
-sources = ["lib/acc", "lib/csvx", "tools/stats", "generated/stats"]
+sources = ["lib/acc", "lib/corr", "lib/csvx", "lib/special", "tools/stats", "generated/stats"]
 std = true
 out = "build/stats"
+
+# S2.1: the exact cross sums of acc.xsum on vectors from standard input (scripts/gate_xsum.py).
+[[bin]]
+name = "xsum-check"
+sources = ["lib/acc", "tools/xsum-check"]
+std = true
+out = "build/xsum-check"
 
 # S1: the quantile definitions of acc.quantile on data from standard input (scripts/gate_quantile.py).
 [[bin]]

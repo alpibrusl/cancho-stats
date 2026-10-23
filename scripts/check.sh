@@ -13,14 +13,15 @@ step "pins"; sh scripts/check_pins.sh; $PY scripts/mutants_pins.py | tail -1
 step "workflow"; $PY scripts/check_workflow.py; $PY scripts/check_workflow.py --mutants | tail -1
 step "documents"; sh scripts/check_docs.sh
 step "references"; $PY scripts/special_ref.py --selfcheck
-step "build"; $CANCHO install >/dev/null; $CANCHO build --bin special-check; $CANCHO build --bin acc-check; $CANCHO build --bin bigint-check; $CANCHO build --bin psum-check; $CANCHO build --bin stats; $CANCHO build --bin quantile-check
+step "build"; $CANCHO install >/dev/null; $CANCHO build --bin special-check; $CANCHO build --bin acc-check; $CANCHO build --bin bigint-check; $CANCHO build --bin psum-check; $CANCHO build --bin xsum-check; $CANCHO build --bin stats; $CANCHO build --bin quantile-check
 step "consumption"; $PY scripts/consume.py --mutants | tail -2
 step "domain and fuzz"; $PY scripts/gate_domain.py --fuzz 50000 | grep -v "first case with"
 step "quantile properties"; $PY scripts/gate_qprops.py --n 2000
 step "big integers"; $PY scripts/gate_bigint.py --n 3000
 step "quantiles"; $PY scripts/gate_quantile.py --cases 3000
 step "stats describe"; $PY scripts/gate_describe.py --files 200; $PY scripts/gate_describe_refusals.py --fuzz 1000; $PY scripts/manifest.py --check; $PY scripts/update_replay.py --check
-step "power sums"; $PY scripts/gate_psum.py --vectors 300
+step "power sums"; $PY scripts/gate_psum.py --vectors 300; $PY scripts/gate_xsum.py --vectors 300
+step "stats corr"; $PY scripts/gate_corr.py --files 200 --scipy; $PY scripts/gate_corr_calibration.py
 step "exact accumulation"; $PY scripts/measure_acc.py | tail -3
 step "accuracy sweeps (fast)"; $PY scripts/gate_special.py --fast
 step "independence"; $PY scripts/gate_independence.py --fast
@@ -28,6 +29,6 @@ step "determinism"; $PY scripts/xplat_fp.py; $PY scripts/xplat_fp.py --mutants |
 if [ "$1" = "--full" ]; then
   step "accuracy sweeps (10%)"; $PY scripts/gate_special.py --n-scale 0.1
   step "mutants of the special functions"; $PY scripts/mutants_special.py
-  step "mutants of the big integers, the power sums and stats"; $PY scripts/mutants_bigint.py; $PY scripts/mutants_psum.py; $PY scripts/mutants_stats.py; $PY scripts/mutants_central.py; $PY scripts/mutants_quantile.py; $PY scripts/mutants_histogram.py; $PY scripts/mutants_levels.py; $PY scripts/mutants_by.py; $PY scripts/mutants_cols.py
+  step "mutants of the big integers, the power sums and stats"; $PY scripts/mutants_bigint.py; $PY scripts/mutants_psum.py; $PY scripts/mutants_xsum.py; $PY scripts/mutants_stats.py; $PY scripts/mutants_central.py; $PY scripts/mutants_quantile.py; $PY scripts/mutants_histogram.py; $PY scripts/mutants_levels.py; $PY scripts/mutants_by.py; $PY scripts/mutants_cols.py; $PY scripts/mutants_corr.py
 fi
 echo; echo "check.sh: all gates passed"

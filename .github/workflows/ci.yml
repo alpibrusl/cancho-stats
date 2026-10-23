@@ -165,6 +165,7 @@ jobs:
           cancho build --bin acc-check
           cancho build --bin bigint-check
           cancho build --bin psum-check
+          cancho build --bin xsum-check
           cancho build --bin stats
           cancho build --bin quantile-check
 
@@ -196,13 +197,21 @@ jobs:
           python3 scripts/manifest.py --check
           python3 scripts/update_replay.py --check
 
+      - name: stats corr against Fractions and mpmath, scipy, calibration and power
+        if: steps.stores.outputs.fetchable == 'yes'
+        run: |
+          python3 scripts/gate_corr.py --files 200 --scipy
+          python3 scripts/gate_corr_calibration.py --replicates 2000 --power-replicates 2000
+
       - name: Quantiles (nine definitions) against an independent exact reference
         if: steps.stores.outputs.fetchable == 'yes'
         run: python3 scripts/gate_quantile.py --cases 3000
 
       - name: Exact power sums against Fractions
         if: steps.stores.outputs.fetchable == 'yes'
-        run: python3 scripts/gate_psum.py --vectors 300
+        run: |
+          python3 scripts/gate_psum.py --vectors 300
+          python3 scripts/gate_xsum.py --vectors 300
 
       - name: Accuracy sweeps against the high-precision reference (fast)
         if: steps.stores.outputs.fetchable == 'yes'
@@ -295,6 +304,7 @@ jobs:
           cancho build --bin acc-check
           cancho build --bin bigint-check
           cancho build --bin psum-check
+          cancho build --bin xsum-check
           cancho build --bin quantile-check
           cancho build --bin stats
 
@@ -311,6 +321,7 @@ jobs:
         run: |
           python3 scripts/mutants_bigint.py
           python3 scripts/mutants_psum.py
+          python3 scripts/mutants_xsum.py
           python3 scripts/mutants_stats.py
           python3 scripts/mutants_central.py
           python3 scripts/mutants_quantile.py
@@ -318,3 +329,4 @@ jobs:
           python3 scripts/mutants_levels.py
           python3 scripts/mutants_by.py
           python3 scripts/mutants_cols.py
+          python3 scripts/mutants_corr.py

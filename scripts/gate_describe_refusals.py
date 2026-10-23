@@ -47,6 +47,27 @@ CASES = [
     # --by reads the header in a pass of its own (discover), with its own copy of the column limit
     ("by: columns exactly at the limit", b"a,b\n1,2\n", ["describe", "--by", "a", "--max-cols", "2", "f.csv"], None, 0),
     ("by: too many columns", b"a,b,c\n1,2,3\n", ["describe", "--by", "a", "--max-cols", "2", "f.csv"], "limit.too-many-columns", 8),
+    # corr (docs/corr.md section 4)
+    ("corr: two numeric columns", b"a,b\n1,2\n3,5\n", ["corr", "f.csv"], None, 0),
+    ("corr: one numeric column", b"a,b\n1,x\n2,y\n", ["corr", "f.csv"], "stats.corr-columns", 2),
+    ("corr: cols names one column", b"a,b\n1,2\n3,5\n", ["corr", "--cols", "a", "f.csv"], "stats.corr-columns", 2),
+    ("corr: text column named", b"a,b,c\n1,2,x\n3,5,y\n", ["corr", "--cols", "a,c", "f.csv"], "stats.non-numeric", 2),
+    ("corr: empty column named", b"a,b,c\n1,2,\n3,5,\n", ["corr", "--cols", "a,c", "f.csv"], "stats.non-numeric", 2),
+    ("corr: no such column", b"a,b\n1,2\n3,5\n", ["corr", "--cols", "a,zz", "f.csv"], "stats.no-such-column", 2),
+    ("corr: ambiguous column", b"a,a,b\n1,2,3\n3,5,6\n", ["corr", "--cols", "a,b", "f.csv"], "stats.ambiguous-column", 2),
+    ("corr: empty cols item", b"a,b\n1,2\n3,5\n", ["corr", "--cols", "a,,b", "f.csv"], "args.bad-value", 2),
+    ("corr: pairs exactly at the limit", b"a,b,c\n1,2,3\n3,5,4\n", ["corr", "--max-pairs", "3", "f.csv"], None, 0),
+    ("corr: one pair over the limit", b"a,b,c\n1,2,3\n3,5,4\n", ["corr", "--max-pairs", "2", "f.csv"], "limit.too-many-pairs", 8),
+    ("corr: max-pairs zero", b"a,b\n1,2\n3,5\n", ["corr", "--max-pairs", "0", "f.csv"], "args.bad-value", 2),
+    ("corr: max-pairs at the ceiling", b"a,b\n1,2\n3,5\n", ["corr", "--max-pairs", "32640", "f.csv"], None, 0),
+    ("corr: max-pairs above the ceiling", b"a,b\n1,2\n3,5\n", ["corr", "--max-pairs", "32641", "f.csv"], "args.bad-value", 2),
+    ("corr: method not built", b"a,b\n1,2\n3,5\n", ["corr", "--method", "spearman", "f.csv"], "args.bad-value", 2),
+    ("corr: missing mode unknown", b"a,b\n1,2\n3,5\n", ["corr", "--missing", "mean", "f.csv"], "args.bad-value", 2),
+    ("corr: ragged", b"a,b\n1,2\n3\n", ["corr", "f.csv"], "stats.csv-ragged", 8),
+    ("corr: no header", b"", ["corr", "f.csv"], "stats.no-header", 8),
+    ("corr: rows limit", b"a,b\n1,2\n3,5\n7,8\n", ["corr", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
+    ("corr: no file", b"a,b\n1,2\n", ["corr"], "args.missing-operand", 2),
+    ("corr: not a verb", b"a,b\n1,2\n", ["correlate", "f.csv"], "stats.bad-verb", 2),
     ("line too long", b"a\n" + b"1" * 200 + b"\n", ["describe", "--max-line-bytes", "100", "f.csv"], "limit.line-too-long", 8),
     ("header continues", b'"a\nb",c\n1,2\n', ["describe", "f.csv"], "stats.csv-multiline", 8),
     ("quantile type 0", b"a\n1\n", ["describe", "--quantile-type", "0", "f.csv"], "args.bad-value", 2),
@@ -176,7 +197,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 10)
+            k = int(r.next() % 14)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -193,12 +214,20 @@ def main():
                 argv = ["describe", "--by", "a", "--max-groups", "2", "--max-rows", "3", "f.csv"]
             elif k == 9:
                 argv = ["describe", "--format", "text", "f.csv"]
+            elif k == 10:
+                argv = ["corr", "f.csv"]
+            elif k == 11:
+                argv = ["corr", "--missing", "listwise", "f.csv"]
+            elif k == 12:
+                argv = ["corr", "--max-pairs", "1", "--max-rows", "3", "f.csv"]
+            elif k == 13:
+                argv = ["corr", "--cols", "a,b", "--format", "text", "f.csv"]
             try:
                 p = call(a.bin, tmp, argv)
             except subprocess.TimeoutExpired:
                 bad.append("fuzz %d: hang on %r" % (i, data[:60]))
                 continue
-            if k == 9:
+            if k == 9 or k == 13:
                 # text mode: no signal; an answer is lines `path = value`, a refusal is a sentence on standard error with nothing on standard output
                 if p.returncode < 0:
                     bad.append("fuzz %d: text mode died of signal %d" % (i, -p.returncode))
