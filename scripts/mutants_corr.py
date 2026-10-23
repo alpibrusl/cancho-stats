@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mutants of `stats corr` (docs/corr.md C-I): lib/corr/pearson.cho, the root of lib/acc/central.cho that the statistic needs, and the corr part of tools/stats/main.cho. Each is applied to a copy, the
+"""Mutants of `stats corr` (docs/corr.md C-I): lib/corr/pearson.cho, lib/corr/ranks.cho, the root of lib/acc/central.cho that the statistic needs, and the corr part of tools/stats/main.cho. Each is applied to a copy, the
 driver rebuilt, scripts/gate_corr.py and the refusals gate rerun; killed = a gate fails or the program traps. A mutant that does not compile is INVALID. The gates first run on the UNMUTATED build and
 the script refuses to count kills if they fail. Exit 1 if one survives unexplained or is invalid.   python3 scripts/mutants_corr.py [--check]"""
 import os, pathlib, shutil, subprocess, sys, tempfile
@@ -8,6 +8,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 CANCHO = os.environ.get("CANCHO", str(ROOT.parent / "cancho-compiler-a4572ea" / "target" / "release" / "cancho"))
 P = "lib/corr/pearson.cho"
 C = "lib/acc/central.cho"
+R = "lib/corr/ranks.cho"
 F = "tools/stats/main.cho"
 M = [
     ("mask-ignored", P, "if mask[i] != 0 && ka != rank.min_int()", "if ka != rank.min_int()"),
@@ -53,9 +54,30 @@ M = [
     ("pairs-ceiling", F, "cli.nat(args, parsed, table, \"max-pairs\") > 32640", "cli.nat(args, parsed, table, \"max-pairs\") > 32641"),
     ("pairs-floor", F, "cli.nat(args, parsed, table, \"max-pairs\") < 1 {", "cli.nat(args, parsed, table, \"max-pairs\") < 0 {"),
     ("verb-corr", F, "&& !bytes.equal(cli.operand(args, parsed, 0), \"corr\") {", "&& !bytes.equal(cli.operand(args, parsed, 0), \"corr \") {"),
+    ("rank-plus-one", R, "float_of(lo + hi + 1)", "float_of(lo + hi)"),
+    ("rank-upper-is-lower", R, "let hi = upper(contents(sw), m, key);", "let hi = lower(contents(sw), m, key);"),
+    ("upper-strict", R, "if a[mid] <= key {", "if a[mid] < key {"),
+    ("lower-nonstrict", R, "if a[mid] < key {", "if a[mid] <= key {"),
+    ("used-ignores-mask", R, "if mask[i] != 0 && vec.get(keys, i * ncols + ca) != rank.min_int() && vec.get(keys, i * ncols + cb) != rank.min_int() {\n            used = used + 1;", "if vec.get(keys, i * ncols + ca) != rank.min_int() && vec.get(keys, i * ncols + cb) != rank.min_int() {\n            used = used + 1;"),
+    ("gather-ignores-partner", R, "if mask[i] != 0 && vec.get(keys, i * ncols + ca) != rank.min_int() && vec.get(keys, i * ncols + cb) != rank.min_int() {\n                                contents(gw)[m] =", "if mask[i] != 0 && vec.get(keys, i * ncols + ca) != rank.min_int() {\n                                contents(gw)[m] ="),
+    ("tie-group-size", R, "if end - at > 1 {", "if end - at > 2 {"),
+    ("tie-run-test", R, "contents(sw)[end] == contents(sw)[at]", "contents(sw)[end] != contents(sw)[at]"),
+    ("rank-column-b", R, "col = cb;", "col = ca;"),
+    ("ties-swapped", R, "if side == 0 {\n            ties0 = groups;", "if side == 1 {\n            ties0 = groups;"),
+    ("table-side", R, "vec.set(tbl, 2 * i + side,", "vec.set(tbl, 2 * i,"),
+    ("not-sorted", R, "rank.sort_range(contents(sw), contents(tw), contents(cw), 0, m);", "rank.sort_range(contents(sw), contents(tw), contents(cw), 0, 0);"),
+    ("spearman-flag", F, "\"method\"), \"spearman\") {", "\"method\"), \"spearmen\") {"),
+    ("rho-key", F, "w = json.put_key(heap, w, \"rho\");", "w = json.put_key(heap, w, \"r\");"),
+    ("p-method-spearman", F, "w = json.put_string(heap, w, \"t-approximation\");", "w = json.put_string(heap, w, \"t\");"),
+    ("all-tied-reason", F, "reason = \"all-tied\";", "reason = \"constant-column\";"),
+    ("ties-y", F, "w = json.put_int(heap, w, ties_y);", "w = json.put_int(heap, w, ties_x);"),
+    ("ties-rule", F, "w = json.put_string(heap, w, \"average\");", "w = json.put_string(heap, w, \"ordinal\");"),
+    ("pearson-on-store", F, "pearson.pair(heap, tr, 2, 0, 1, rows, contents(or));", "pearson.pair(heap, store, ncols, ja, jb, rows, mask);"),
 ]
 
 EXPLAINED = {
+    "rank-plus-one": "equivalent: lo + hi + 1 is twice the average rank, and lo + hi is twice the average rank minus one for every row; Pearson's coefficient and its statistic do not change when a constant is added to all the values of a column",
+    "used-ignores-mask": "equivalent: `used` only sizes the three buffers of the column, the gather loop below counts the rows it takes in `m`, so counting the rows the mask excludes allocates more than is used and changes no value",
     "p-clamp": "defensive: 2 * sf exceeds 1 only if the Student t survival function answers more than 1/2 for a positive t, which no gate case reached (the gate checks every p-value is in [0, 1] and has a case with r = 0 and one with r about 1e-17); a p-value above 1 by one rounding would also lie inside the 1e-12 bound of the p-value gate, so the clamp cannot be seen by it",
 }
 
@@ -64,8 +86,9 @@ def control():
     """both gates on the UNMUTATED build must pass, or every kill below would be a gate that cannot run"""
     b = str(ROOT / "build" / "stats")
     g = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_corr.py"), "--bin", b, "--files", "60"], capture_output=True, text=True, timeout=900)
+    g1 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_corr.py"), "--bin", b, "--files", "60", "--method", "spearman"], capture_output=True, text=True, timeout=900)
     g2 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe_refusals.py"), "--bin", b, "--fuzz", "150"], capture_output=True, text=True, timeout=900)
-    return g.returncode == 0 and g2.returncode == 0
+    return g.returncode == 0 and g1.returncode == 0 and g2.returncode == 0
 
 
 def main():
@@ -94,6 +117,9 @@ def main():
             try:
                 g = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_corr.py"), "--bin", str(d / "build" / "stats"), "--files", "60"], capture_output=True, text=True, timeout=300)
                 dead = g.returncode != 0
+                if not dead:
+                    g1 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_corr.py"), "--bin", str(d / "build" / "stats"), "--files", "60", "--method", "spearman"], capture_output=True, text=True, timeout=300)
+                    dead = g1.returncode != 0
                 if not dead:
                     g2 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe_refusals.py"), "--bin", str(d / "build" / "stats"), "--fuzz", "150"], capture_output=True, text=True, timeout=600)
                     dead = g2.returncode != 0

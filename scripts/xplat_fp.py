@@ -7,7 +7,7 @@
     python3 scripts/xplat_fp.py --mutants        # the checks are shown able to fail
 
 The fingerprint is one tab-separated line per sweep: `kind  name  count  sha256`, the hash over the driver's output lines (`id  hex bits of the result  code`) for a fixed list of cases:
-`special` the first N cases of each range of gate_special.py (seed 1), `edge` the edge cases of gate_domain.py for each function, `acc` the vectors of three families of measure_acc.py through acc-check, `describe` the bytes `stats describe` prints for 12 seeded CSV files, `corr` those of `stats corr` for 8.
+`special` the first N cases of each range of gate_special.py (seed 1), `edge` the edge cases of gate_domain.py for each function, `acc` the vectors of three families of measure_acc.py through acc-check, `describe` the bytes `stats describe` prints for 12 seeded CSV files, `corr` and `corr-spearman` those of `stats corr` (Pearson, and --method spearman) for 8 files each.
 Equal to the golden is equal to each other: the golden was written on one machine and every other platform of the workflow must print its bytes.
 Thread check: for every sweep, `special-check FN --threads T` for T in 1, 2, 3, 4, 7, 8, 16 must print the bytes of the sequential run.
 Exit 0: the fingerprint equals the golden and the thread check holds. Exit 1: a difference (printed). Exit 2: the script could not run.
@@ -116,11 +116,12 @@ def describe_by_lines(stats):
     return out
 
 
-def corr_lines(stats):
+def corr_lines(stats, method="pearson", kind="corr"):
     """`stats corr` on 8 seeded CSV files (the numeric shapes of gate_corr.py, correlated pairs, missing cells, huge and tiny values), --missing pairwise and listwise: the hash of the bytes it prints
     (r, the statistic and the p-value of every pair)."""
     r = gate_special.SM64(23)
-    shapes_all = [s for s in gate_corr.SHAPES if s not in ("empty", "text", "mixed")]
+    # the list of the shapes as it was when these lines were written: a shape added to gate_corr.SHAPES later must not move the golden
+    shapes_all = ["uniform", "ints", "lin", "offset", "offset-neg", "wide", "tiny", "huge", "const", "gappy", "lin", "lin", "ints", "uniform"]
     out = []
     with tempfile.TemporaryDirectory() as t:
         tmp = pathlib.Path(t)
@@ -135,12 +136,12 @@ def corr_lines(stats):
             rows = [[cols[j][i] for j in range(ncols)] for i in range(n)]
             h = hashlib.sha256()
             for mode in ("pairwise", "listwise"):
-                p = gate_corr.run(stats, tmp, names, rows, ["--missing", mode])
+                p = gate_corr.run(stats, tmp, names, rows, ["--missing", mode] + ([] if method == "pearson" else ["--method", method]))
                 if p.returncode != 0:
                     h.update(("exit %d %s" % (p.returncode, p.stdout)).encode())
                 else:
                     h.update(p.stdout.encode())
-            out.append("corr\tfile%02d\t%d\t%s" % (k, n, h.hexdigest()))
+            out.append("%s\tfile%02d\t%d\t%s" % (kind, k, n, h.hexdigest()))
     return out
 
 
@@ -166,6 +167,7 @@ def fingerprint(driver, acc, threads_check=True, stats=None):
         lines += describe_lines(stats)
         lines += describe_by_lines(stats)
         lines += corr_lines(stats)
+        lines += corr_lines(stats, "spearman", "corr-spearman")
     return lines, bad
 
 

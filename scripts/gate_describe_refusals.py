@@ -61,7 +61,9 @@ CASES = [
     ("corr: max-pairs zero", b"a,b\n1,2\n3,5\n", ["corr", "--max-pairs", "0", "f.csv"], "args.bad-value", 2),
     ("corr: max-pairs at the ceiling", b"a,b\n1,2\n3,5\n", ["corr", "--max-pairs", "32640", "f.csv"], None, 0),
     ("corr: max-pairs above the ceiling", b"a,b\n1,2\n3,5\n", ["corr", "--max-pairs", "32641", "f.csv"], "args.bad-value", 2),
-    ("corr: method not built", b"a,b\n1,2\n3,5\n", ["corr", "--method", "spearman", "f.csv"], "args.bad-value", 2),
+    ("corr: method not built", b"a,b\n1,2\n3,5\n", ["corr", "--method", "kendall", "f.csv"], "args.bad-value", 2),
+    ("corr: spearman", b"a,b\n1,2\n3,5\n", ["corr", "--method", "spearman", "f.csv"], None, 0),
+    ("corr: spearman with ties and a missing cell", b"a,b\n1,2\n1,\n3,2\n", ["corr", "--method", "spearman", "--missing", "listwise", "f.csv"], None, 0),
     ("corr: missing mode unknown", b"a,b\n1,2\n3,5\n", ["corr", "--missing", "mean", "f.csv"], "args.bad-value", 2),
     ("corr: ragged", b"a,b\n1,2\n3\n", ["corr", "f.csv"], "stats.csv-ragged", 8),
     ("corr: no header", b"", ["corr", "f.csv"], "stats.no-header", 8),
@@ -197,7 +199,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 14)
+            k = int(r.next() % 16)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -222,6 +224,10 @@ def main():
                 argv = ["corr", "--max-pairs", "1", "--max-rows", "3", "f.csv"]
             elif k == 13:
                 argv = ["corr", "--cols", "a,b", "--format", "text", "f.csv"]
+            elif k == 14:
+                argv = ["corr", "--method", "spearman", "f.csv"]
+            elif k == 15:
+                argv = ["corr", "--method", "spearman", "--missing", "listwise", "f.csv"]
             try:
                 p = call(a.bin, tmp, argv)
             except subprocess.TimeoutExpired:

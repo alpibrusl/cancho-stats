@@ -1,0 +1,131 @@
+edition 5;
+
+module corr.ranks;
+
+import std.vec;
+import metrics.rank;
+import flt;
+
+// The average ranks of two columns over the rows used for a pair (docs/corr.md section 2). A row is used when `mask` allows it and both cells are present. The rank of a value is the mean of the
+// positions (1-based) of its group of equal values in the sorted rows; twice that is an integer, lo + hi + 1 for a group at the 0-based positions lo .. hi - 1, so the ranks are returned DOUBLED, as the
+// order-preserving keys of those integers in a table of two columns (rows x 2), rank.min_int() for a row not used. Pearson's coefficient is the same for ranks and for twice the ranks, so
+// corr.pearson.pair on this table gives Spearman's coefficient exactly (the doubled ranks are small integers, exact as doubles, and go through the same exact sums).
+
+// the number of keys below `key` in a[0..n) sorted
+fn lower[&a](a: &a [int], n: int, key: int) -> [] int {
+    var lo = 0;
+    var hi = n;
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        if a[mid] < key {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo;
+}
+
+// the number of keys at most `key` in a[0..n) sorted
+fn upper[&a](a: &a [int], n: int, key: int) -> [] int {
+    var lo = 0;
+    var hi = n;
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        if a[mid] <= key {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo;
+}
+
+// Answers the table of doubled ranks (rows x 2), the number of groups of tied values in the first and in the second column (among the rows used).
+pub fn pair[&h, &k, &m](heap: &!h Heap, keys: &k vec.Vec[int], ncols: int, ca: int, cb: int, rows: int, mask: &m [int]) -> [heap] (vec.Vec[int], int, int) {
+    var table = vec.empty(heap, 2 * rows + 1, 0);
+    var i = 0;
+    while i < 2 * rows {
+        table = vec.push(heap, table, rank.min_int());
+        i = i + 1;
+    }
+    var used = 0;
+    i = 0;
+    while i < rows {
+        if mask[i] != 0 && vec.get(keys, i * ncols + ca) != rank.min_int() && vec.get(keys, i * ncols + cb) != rank.min_int() {
+            used = used + 1;
+        }
+        i = i + 1;
+    }
+    var ties0 = 0;
+    var ties1 = 0;
+    var side = 0;
+    while side < 2 {
+        var col = ca;
+        if side == 1 {
+            col = cb;
+        }
+        let gathered = box_slice(heap, used + 1, 0);
+        let sorted = box_slice(heap, used + 1, 0);
+        let scratch = box_slice(heap, used + 1, 0);
+        let counts = box_slice(heap, 256, 0);
+        var groups = 0;
+        borrow mut gathered as &!gw in {
+            borrow mut sorted as &!sw in {
+                borrow mut scratch as &!tw in {
+                    borrow mut counts as &!cw in {
+                        var m = 0;
+                        i = 0;
+                        while i < rows {
+                            if mask[i] != 0 && vec.get(keys, i * ncols + ca) != rank.min_int() && vec.get(keys, i * ncols + cb) != rank.min_int() {
+                                contents(gw)[m] = vec.get(keys, i * ncols + col);
+                                contents(sw)[m] = contents(gw)[m];
+                                m = m + 1;
+                            }
+                            i = i + 1;
+                        }
+                        rank.sort_range(contents(sw), contents(tw), contents(cw), 0, m);
+                        // the groups of equal values that have more than one member
+                        var at = 0;
+                        while at < m {
+                            var end = at + 1;
+                            while end < m && contents(sw)[end] == contents(sw)[at] {
+                                end = end + 1;
+                            }
+                            if end - at > 1 {
+                                groups = groups + 1;
+                            }
+                            at = end;
+                        }
+                        // each used row: twice its average rank
+                        var u = 0;
+                        i = 0;
+                        borrow mut table as &!tbl in {
+                            while i < rows {
+                                if mask[i] != 0 && vec.get(keys, i * ncols + ca) != rank.min_int() && vec.get(keys, i * ncols + cb) != rank.min_int() {
+                                    let key = contents(gw)[u];
+                                    let lo = lower(contents(sw), m, key);
+                                    let hi = upper(contents(sw), m, key);
+                                    vec.set(tbl, 2 * i + side, rank.key_of(float_of(lo + hi + 1)));
+                                    u = u + 1;
+                                }
+                                i = i + 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        unbox_slice(heap, gathered);
+        unbox_slice(heap, sorted);
+        unbox_slice(heap, scratch);
+        unbox_slice(heap, counts);
+        if side == 0 {
+            ties0 = groups;
+        } else {
+            ties1 = groups;
+        }
+        side = side + 1;
+    }
+    return (table, ties0, ties1);
+}

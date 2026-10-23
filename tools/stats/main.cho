@@ -19,6 +19,7 @@ import acc.psum;
 import acc.histogram;
 import acc.quantile;
 import corr.pearson;
+import corr.ranks;
 import csvx.flat;
 import csvx.pick;
 import metrics.rank;
@@ -36,7 +37,7 @@ import toolbox.place;
 import toolbox.text;
 
 fn flag_table() -> [] &static [byte] {
-    return "root||path|root||resolve FILE relative to this directory and refuse paths outside it;delim|d|text|none|,|the one byte that separates fields (default comma);ddof||nat|none|1|the divisor of the variance is n minus this (1 is the sample variance, 0 the population variance);max-rows||nat|none|1000000|the most data rows read, one more is limit.too-many-rows (ceiling 10000000);max-cols||nat|none|256|the most columns, more is limit.too-many-columns (ceiling 4096);max-line-bytes||nat|none|1048576|the longest line read, a longer one is limit.line-too-long (ceiling 16777216);max-cells||nat|none|20000000|the most cells (rows times columns) held for the quantiles, more is limit.too-many-cells (ceiling 100000000);quantiles||text|none|0,0.25,0.5,0.75,1|the probabilities of the quantiles, comma separated decimals from 0 to 1 with at most 9 decimals (at most 99 of them);quantile-type||nat|none|7|which of the nine Hyndman-Fan definitions, 1 to 9 (7 is the default of R and numpy);bins||nat|none|10|the number of equal-width histogram bins over [min, max], 0 for none (ceiling 1000);levels||nat|none|10|how many of the most frequent levels of a text column to print, 0 for none and no second pass (ceiling 100);max-levels||nat|none|100000|the most distinct (column, level) pairs held for all text columns together, a column that would need one more is levels_capped (ceiling 1000000);by||text|none||the header name of a column: describe each group of rows that have the same value in it, one after the other;max-groups||nat|none|50|the most groups with --by, one more is limit.too-many-groups (ceiling 1000);cols||text|none||describe only these columns: header names separated by commas, printed in the order of the file;format||choice:json/text|none|json|json for a program, text (one line per value, path = value) for a person;method||choice:pearson|none|pearson|corr: the coefficient (pearson so far; spearman and kendall are not built yet);missing||choice:pairwise/listwise|none|pairwise|corr: pairwise uses, for each pair, the rows where both cells are numbers, listwise only the rows where every chosen column has a number;max-pairs||nat|none|1000|corr: the most pairs of columns, more is limit.too-many-pairs (ceiling 32640)";
+    return "root||path|root||resolve FILE relative to this directory and refuse paths outside it;delim|d|text|none|,|the one byte that separates fields (default comma);ddof||nat|none|1|the divisor of the variance is n minus this (1 is the sample variance, 0 the population variance);max-rows||nat|none|1000000|the most data rows read, one more is limit.too-many-rows (ceiling 10000000);max-cols||nat|none|256|the most columns, more is limit.too-many-columns (ceiling 4096);max-line-bytes||nat|none|1048576|the longest line read, a longer one is limit.line-too-long (ceiling 16777216);max-cells||nat|none|20000000|the most cells (rows times columns) held for the quantiles, more is limit.too-many-cells (ceiling 100000000);quantiles||text|none|0,0.25,0.5,0.75,1|the probabilities of the quantiles, comma separated decimals from 0 to 1 with at most 9 decimals (at most 99 of them);quantile-type||nat|none|7|which of the nine Hyndman-Fan definitions, 1 to 9 (7 is the default of R and numpy);bins||nat|none|10|the number of equal-width histogram bins over [min, max], 0 for none (ceiling 1000);levels||nat|none|10|how many of the most frequent levels of a text column to print, 0 for none and no second pass (ceiling 100);max-levels||nat|none|100000|the most distinct (column, level) pairs held for all text columns together, a column that would need one more is levels_capped (ceiling 1000000);by||text|none||the header name of a column: describe each group of rows that have the same value in it, one after the other;max-groups||nat|none|50|the most groups with --by, one more is limit.too-many-groups (ceiling 1000);cols||text|none||describe only these columns: header names separated by commas, printed in the order of the file;format||choice:json/text|none|json|json for a program, text (one line per value, path = value) for a person;method||choice:pearson/spearman|none|pearson|corr: the coefficient: pearson, or spearman (the Pearson coefficient of the average ranks; kendall is not built yet);missing||choice:pairwise/listwise|none|pairwise|corr: pairwise uses, for each pair, the rows where both cells are numbers, listwise only the rows where every chosen column has a number;max-pairs||nat|none|1000|corr: the most pairs of columns, more is limit.too-many-pairs (ceiling 32640)";
 }
 
 fn extra() -> [] &static [byte] {
@@ -1221,9 +1222,47 @@ fn p_two_sided(t: float, df: int) -> [] (float, int) {
 }
 
 // One pair of columns of the answer (docs/corr.md section 4): n, r, statistic (t with the sign of r), df, p_value, p_method, p_exact_zero when |r| = 1, reason when something is null.
-fn put_pair[&h, &n, &en, &k, &m](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], store: &k vec.Vec[int], ncols: int, ja: int, jb: int, rows: int, mask: &m [int]) -> [heap] json.Writer {
+fn put_pair[&h, &n, &en, &k, &m](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], store: &k vec.Vec[int], ncols: int, ja: int, jb: int, rows: int, mask: &m [int], method: int) -> [heap] json.Writer {
     var w = w0;
-    let (n, status, rb, rc, tb, tc, exact) = pearson.pair(heap, store, ncols, ja, jb, rows, mask);
+    var n = 0;
+    var status = 0;
+    var rb = 0;
+    var rc = 0;
+    var tb = 0;
+    var tc = 0;
+    var exact = 0;
+    var ties_x = 0;
+    var ties_y = 0;
+    if method == 1 {
+        // Spearman: Pearson's coefficient of the average ranks of the rows used for this pair (docs/corr.md section 2)
+        let (table, tx, ty) = ranks.pair(heap, store, ncols, ja, jb, rows, mask);
+        ties_x = tx;
+        ties_y = ty;
+        let ones = box_slice(heap, rows + 1, 1);
+        borrow table as &tr in {
+            borrow ones as &or in {
+                let (n1, s1, rb1, rc1, tb1, tc1, e1) = pearson.pair(heap, tr, 2, 0, 1, rows, contents(or));
+                n = n1;
+                status = s1;
+                rb = rb1;
+                rc = rc1;
+                tb = tb1;
+                tc = tc1;
+                exact = e1;
+            }
+        }
+        unbox_slice(heap, ones);
+        vec.drop(heap, table);
+    } else {
+        let (n1, s1, rb1, rc1, tb1, tc1, e1) = pearson.pair(heap, store, ncols, ja, jb, rows, mask);
+        n = n1;
+        status = s1;
+        rb = rb1;
+        rc = rc1;
+        tb = tb1;
+        tc = tc1;
+        exact = e1;
+    }
     w = json.begin_object(heap, w);
     w = json.put_key(heap, w, "x");
     w = put_name(heap, w, names, ends, ja);
@@ -1231,7 +1270,11 @@ fn put_pair[&h, &n, &en, &k, &m](heap: &!h Heap, w0: json.Writer, names: &n [byt
     w = put_name(heap, w, names, ends, jb);
     w = json.put_key(heap, w, "n");
     w = json.put_int(heap, w, n);
-    w = json.put_key(heap, w, "r");
+    if method == 1 {
+        w = json.put_key(heap, w, "rho");
+    } else {
+        w = json.put_key(heap, w, "r");
+    }
     var reason = "";
     var have_t = false;
     var p = 0.0;
@@ -1258,6 +1301,9 @@ fn put_pair[&h, &n, &en, &k, &m](heap: &!h Heap, w0: json.Writer, names: &n [byt
     } else {
         w = json.put_null(heap, w);
         reason = "constant-column";
+        if method == 1 {
+            reason = "all-tied";
+        }
     }
     w = json.put_key(heap, w, "statistic");
     if have_t {
@@ -1284,7 +1330,20 @@ fn put_pair[&h, &n, &en, &k, &m](heap: &!h Heap, w0: json.Writer, names: &n [byt
         w = json.put_null(heap, w);
     }
     w = json.put_key(heap, w, "p_method");
-    w = json.put_string(heap, w, "t");
+    if method == 1 {
+        w = json.put_string(heap, w, "t-approximation");
+        w = json.put_key(heap, w, "ties");
+        w = json.begin_object(heap, w);
+        w = json.put_key(heap, w, "x");
+        w = json.put_int(heap, w, ties_x);
+        w = json.put_key(heap, w, "y");
+        w = json.put_int(heap, w, ties_y);
+        w = json.put_key(heap, w, "rule");
+        w = json.put_string(heap, w, "average");
+        w = json.end_object(heap, w);
+    } else {
+        w = json.put_string(heap, w, "t");
+    }
     if exact == 1 && status == 0 && n >= 3 {
         w = json.put_key(heap, w, "p_exact_zero");
         w = json.put_bool(heap, w, true);
@@ -1429,7 +1488,7 @@ fn corr_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed:
                                             w = json.put_key(heap, w, "rows");
                                             w = json.put_int(heap, w, info.rows);
                                             w = json.put_key(heap, w, "method");
-                                            w = json.put_string(heap, w, "pearson");
+                                            w = json.put_string(heap, w, cli.text(args, parsed, table, "method"));
                                             w = json.put_key(heap, w, "missing");
                                             w = json.put_string(heap, w, cli.text(args, parsed, table, "missing"));
                                             w = json.put_key(heap, w, "adjustment");
@@ -1444,11 +1503,15 @@ fn corr_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed:
                                             w = json.end_array(heap, w);
                                             w = json.put_key(heap, w, "pairs");
                                             w = json.begin_array(heap, w);
+                                            var method = 0;
+                                            if bytes.equal(cli.text(args, parsed, table, "method"), "spearman") {
+                                                method = 1;
+                                            }
                                             var ia = 0;
                                             while ia < m {
                                                 var ib = ia + 1;
                                                 while ib < m {
-                                                    w = put_pair(heap, w, buffer.bytes(nb), eb, sb, nc, contents(ir)[ia], contents(ir)[ib], info.rows, contents(mr));
+                                                    w = put_pair(heap, w, buffer.bytes(nb), eb, sb, nc, contents(ir)[ia], contents(ir)[ib], info.rows, contents(mr), method);
                                                     ib = ib + 1;
                                                 }
                                                 ia = ia + 1;
