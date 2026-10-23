@@ -1,0 +1,84 @@
+# `stats test`: design (milestones S3 and, for the rank and exact tests, S4)
+
+**Status: design only, written 2026-10-23 before any code of S3. Nothing here has been measured for `test`; what it reads from the code of S0 to S2 is marked [read], every bound is a [choice] fixed before the first run and corrected in place, in this document, if a run shows it false.** Tags: **[read]** read from a document or source, **[measured]** printed by a script (none yet), **[choice]** a decision the maintainer can overturn, **[open]** not decided. Issue #4. S3 is the t family, the chi-square test, the test of proportions and the correction for several tests; the rank tests, ANOVA, Kruskal-Wallis, Kolmogorov-Smirnov and Fisher are S4 (issue #5) and are not designed here.
+
+## 1. What it does
+
+`stats test KIND FILE [flags]` reads a CSV with the reader of `describe` and `corr` and prints one JSON document (`stats.v1`) with one entry per test. Every test answers the same fields (`docs/design.md` section 6):
+
+```
+{"test":"t2","column":"temp","statistic":..,"df":..,"p_value":..,"p_method":..,
+ "effect_size":{"name":"cohen_d","value":..},"interval":{"level":0.95,"low":..,"high":..,"of":"difference of means"},
+ "n":{"a":..,"b":..},"method":"welch","assumptions":{..facts..},"reason":..}
+```
+
+`assumptions` holds **facts** (sizes, the ratio of variances, expected counts below 5), never a verdict. `reason` is present when something is `null` (as in `corr`). Numbers are the decimal text of correctly rounded doubles, except where this document says a number is computed in floating point from exact pieces (the interval endpoints, section 3).
+
+## 2. The kinds and what they compute **[choice]**
+
+With `n`, `Sx = sum x`, `Sxx = sum x^2` exact (the accumulators of `describe`, **[read]** `lib/acc/psum.cho`), the mean is `m = Sx / n` and the sum of squares about the mean is `L = n Sxx - Sx^2` (an exact integer, the `L2` of `describe`, **[read]** `lib/acc/central.cho`), so the sample variance is `v = L / (n (n - 1))`.
+
+| kind | question | inputs | statistic | df |
+|---|---|---|---|---|
+| `t1` | is the mean of a column `mu0`? | `--cols A,B,..` `--mu0 0` | `t = (m - mu0) / sqrt(v / n)` | `n - 1` |
+| `t2` | do two groups have the same mean? | `--cols A,B,..` `--group G` (a column with exactly two levels), `--equal-var` for the pooled test | Welch: `t = (m1 - m2) / sqrt(v1/n1 + v2/n2)` | Welch-Satterthwaite `(a + b)^2 / (a^2/(n1 - 1) + b^2/(n2 - 1))`, `a = v1/n1`, `b = v2/n2`; pooled: `n1 + n2 - 2` |
+| `paired` | is the mean of the differences zero? | `--pairs A:B,C:D` | `t1` of `a - b` over the rows where both are present | `n - 1` |
+| `chisq` | are two categorical columns independent? (or does one match given proportions?) | `--cols A --vs G`, or `--cols A --expected p1,p2,..` | `X2 = sum (O - E)^2 / E` | `(r - 1)(c - 1)`, or `k - 1` |
+| `prop` | is a proportion `p0`? do two groups have the same one? | `--cols A --success LEVEL` `--p0 0.5`, with `--group G` for two groups | `z = (x - n p0) / sqrt(n p0 (1 - p0))`, or the pooled two-sample `z` | none (normal) |
+
+* **Welch is the default for `t2`** (the design of `docs/design.md` section 4); `--equal-var` is the explicit pooled test. The answer says which in `method`, and `assumptions` carries `variance_ratio = v1 / v2`.
+* **The statistic is an exact rational, rounded once.** `t^2` is a ratio of exact integers built from the two groups' `n`, `Sx` and `L` (the algebra is written twice, in `lib/test/` and, independently, in the oracle of section 5), `t` is `sign * sqrt(t^2)` through `central.sqrt_ratio_bits`, as the correlation coefficient is. `df` of Welch is an exact rational rounded once to a double (it is a real number; `t_sf` takes a real `nu`). `t^2` and `df` are never formed from rounded means or variances.
+* **Effect size, one per kind, named in the answer:** `t1` and `paired` `cohen_d = (m - mu0) / sd` (`d_z` for `paired`); `t2` `cohen_d = (m1 - m2) / sd_pooled` (pooled with `n1 + n2 - 2`, also under Welch: the effect size is the standardised difference, whichever test); `chisq` Cramer's `V = sqrt(X2 / (N (min(r, c) - 1)))`; `prop` Cohen's `h = 2 asin(sqrt(p1)) - 2 asin(sqrt(p2))` for two groups and the difference `p - p0` for one. The ones that are a square root of an exact rational are rounded once; `h` is computed in doubles from the two exact proportions and is said to be (`rounding` in the answer).
+* **The interval** is the confidence interval for the quantity the test is about: the mean (`t1`), the difference of means (`t2`, `paired`), the proportion or the difference of proportions (Wilson for one group, Newcombe's hybrid-score for two **[open]**), none for `chisq` (its effect size has none in v1). Its endpoints are `estimate -+ q * se` with `se` exact-then-rounded once and `q` the Student `t` quantile (`special.quantile.t_quantile`, **[read]**, S0b) or the normal one: **the endpoints are floating-point arithmetic on two correctly rounded numbers and a quantile that is accurate to about 1e-12, not correctly rounded**, and the answer says so (`rounding: "double"`). The level is `--level 0.95`, strictly between 0 and 1.
+* **p-values.** `t`: two-sided `2 t_sf(|t|, df)`; `chisq`: `chi2_sf(X2, df)`; `prop`: `2 norm_sf(|z|)` (**[read]** `special.dist`). Their accuracy is the distribution function's (relative 1e-12 for Student `t`, 2e-13 for the normal and for chi-square up to 10,000 degrees of freedom, **[read]** `docs/numerics.md` section 3.2) plus the amplification of the rounding of the statistic: the bound of the gates, with a margin over those, is in section 5. **[open]** one-sided tests (`--alternative less|greater`): proposed for after v1, with the same exact statistic and the open-ended interval.
+* **Missing cells** are dropped per column (`t1`, `t2`) and per pair (`paired`); the sizes used are in `n`. A group column cell that is missing drops the row.
+
+## 3. Exactness plan
+
+* `t1`, `t2`, `paired`: per column (and per group), the accumulators `psum` k = 1, 2 over the rows used; `L`, `m` and the cross terms in `acc.bigint` as in `describe` and `corr`. Nothing new in the arithmetic: the one new piece is the extraction from `central.cho` of `L = n S2 - S1^2` as a `pub` function (it is inline in `skew_kurt` now).
+* `chisq`: the cells are counts (integers). `X2 = N (sum n_ij^2 / (r_i c_j) - 1)` is a sum of rationals with different denominators; an exact sum would need the common denominator of up to `r c` products of row and column totals, which is out of reach for large tables. **[choice]** each term `(N n_ij - r_i c_j)^2 / (N r_i c_j)` is formed as an exact rational and rounded to 106 bits (double-double, `special.dd`, **[read]**) and the terms are summed in double-double, the sum rounded to a double: the result is the correctly rounded value unless the exact `X2` is within about 2^-100 (relative) of a tie between two doubles, which the oracle checks bit for bit on generated tables and reports. This is the one place in S3 where "exact, rounded once" is "exact except within 2^-100 of a tie", and the answer says so (`rounding: "double-double"`).
+* A categorical column needs, per row, the index of its level. `describe` counts levels in a second pass over the file (**[read]** `level_pass`), keeping only counts; `chisq` and `prop` need the level of every row, so S3 adds a pass that records, per chosen column, a level index per row (bounded by `--max-levels` and `--max-cells`, refused with the limit tags that exist) and the table of levels in order of first appearance.
+* Determinism: no `conc`, the same bytes at any thread count and row order (the sums are order-free; the levels are numbered by their bytes, not by first appearance, so a shuffle of the rows cannot change the order of the table).
+
+## 4. Several tests: `--correct` **[choice]**
+
+A call that names several columns (`--cols A,B,C`, or `--pairs`) is a **family**: one test per column, all the same kind. `--correct bonferroni|holm|bh` adds `p_adjusted` to each entry and `family: {"size":m,"correction":..}` at the top; without `--correct` the answer has `adjustment: "none"` and the p-values stand alone, as `corr` does. The adjustments are exact rational arithmetic on the unrounded p-values' doubles: Bonferroni `min(1, m p)`, Holm the step-down maxima, Benjamini-Hochberg the step-up minima, each monotone and capped at 1; ties in the p-values are ordered by column order so the answer is deterministic. The correction does not change `p_value`.
+
+## 5. Gates (written before the code, each able to fail)
+
+| id | gate | fails when |
+|---|---|---|
+| T-A | **Exact statistics**: `t`, `df`, the effect size and `n` of `t1`, `t2` (Welch and pooled), `paired`, `chisq` (independence and goodness of fit) and `prop` (one and two groups) against `Fraction` formulas written independently of the program (the oracle works from the data, never from the program's intermediate sums), bytes compared; families of files with offsets, wide exponents, missing cells, constant groups, groups of size 1 and 2, tables with empty cells | one byte differs |
+| T-B | **p-values against `mpmath`** at 60 digits from the exact rational statistic: relative `1e-11 + (df + 1) 2^-53` for `t` (the rounding of `t` amplified by at most `df + 1`), `1e-11 + (X2 + 1) 2^-53` for `chisq` (amplified by the exponent of the tail), `1e-11 + (z^2 + 1) 2^-53` for `prop`, for p-values down to `1e-300` (below that the answer must be under `1e-290`). **Controls** (must fall outside): the pooled test where Welch is meant, `n` for `n - 1` degrees of freedom, one-sided for two-sided, the normal for Student's `t`, Yates's correction where none is meant | outside the bound; a control inside it |
+| T-C | **Intervals**: endpoints against `mpmath` with the bound `1e-12 * max(|estimate|, half-width)` absolute (the endpoints are floating-point arithmetic on exact pieces, section 2) | outside the bound; the controls (the normal quantile for the `t`, `n` for `n - 1`) must fall outside |
+| T-D | **scipy**, reported with the bounds fixed here: `ttest_1samp`, `ttest_ind(equal_var=False)` and `True`, `ttest_rel`, `chi2_contingency(correction=False)` and `chisquare`; the z test of proportions is compared with the formula of the oracle only (statsmodels is not a dependency and scipy has no such function); statistic to `1e-12` relative and p-value to `1e-9` relative on well-conditioned data (not the offset-`1e8` family, where scipy's own float sums lose digits: printed, not gated) | outside the bound on a well-conditioned family |
+| T-E | **Calibration** under a true null, seeded, 4,000 replicates at sizes 5, 10, 30, 100, 1,000: the rate at which `p < 0.05` inside the two-sided 99.9% binomial interval and the p-values uniform (KS, p > 0.001) for `t1`, `paired`, Welch `t2` **with unequal variances and unequal sizes** (Welch must hold where the pooled control must not), and the pooled `t2` under equal variances; `chisq` with all expected counts at least 5 (smaller tables are printed, not gated: the chi-square approximation is the thing known to fail there, and `assumptions` reports the count); `prop` for `n p0` and `n (1 - p0)` both at least 10 (printed otherwise). Whatever size the corr gates found to be a lattice problem is gated by the rate only, as in `docs/corr.md` section 8 | a wrong tail, degrees of freedom or variance: each control must be refused at some size |
+| T-F | **Power and coverage**: a planted difference of known size is rejected at the rate the noncentral `t` gives (`mpmath`, bound by the binomial interval); a 95% interval covers the true mean/difference at 95% (binomial interval), for `t1` and Welch `t2` | outside the interval |
+| T-G | **Correction**: `holm`, `bh`, `bonferroni` against `Fraction` implementations, the monotonicity and the caps (a property test over random p-vectors), and the family-wise error rate of `holm` and the false-discovery rate of `bh` under a seeded null of 20 columns at the nominal level | a violated property; a rate outside its bound |
+| T-H | **Invariance**: 50 row permutations give the same bytes; swapping the order of the two groups negates the statistic and the difference and leaves `p`, `df`, `|d|` and the interval's width; the columns of a family given in another order give the same entries in the order of the file | one byte differs |
+| T-I | **Fuzz**: groups of size 0, 1, 2, constant groups, a group column with 1, 2, 3 levels and a missing level, huge and subnormal values, a table of one cell, an expected count of 0, `--level` at its edges, hostile files and arguments: no trap, no hang, every refusal tagged | a trap or an untagged refusal |
+| T-J | **Mutants** for every kind (killed, or each survivor explained), and **the fingerprint** lines `test-*` in `docs/xplat_fp.txt` equal on the runners of the workflow | an unexplained survivor; a differing line |
+
+## 6. Output, refusals
+
+* Rule tags **[choice]**: a kind that does not exist is `stats.bad-verb`'s sibling `args.bad-value` on the operand, no new tag; `stats.group-levels` (the `--group` column has other than two levels; the detail says how many and the repair names `--cols` and a filter), `stats.non-numeric` (shared with `corr`), `stats.no-such-column`, `stats.ambiguous-column`, `stats.test-columns` (no column named for the kind, or `paired` without pairs), `limit.too-many-tests` (the family is larger than `--max-tests`, default 1,000), `limit.table-too-large` (`chisq` with more than `--max-cells` cells in its table), `args.bad-value` for `--level`, `--mu0`, `--p0` outside their ranges. A statistic that is undefined is `null` with a `reason` (`too-few-rows`: a group below 2 rows; `variance-zero`: both groups constant, or `t1` on a constant column; `empty-expected`: an expected count of 0), never a refusal.
+* The authority of `stats` does not change (no `conc`, no clock, no network).
+
+## 7. Slices (one pull request each)
+
+1. **S3.0** the plumbing: `L` as a `pub` function of `acc.central`; a reader pass that gives the level index of every row of chosen categorical columns; the `test` verb with `--cols`, `--level`, the answer skeleton and the refusals; the oracle module shared by the gates (`scripts/oracle_test.py`).
+2. **S3.1** `t1` with its interval and effect size (T-A to T-D, T-F for `t1`, T-H, T-I).
+3. **S3.2** `t2` (Welch, pooled) and `paired` (the calibration with unequal variances, T-E; coverage).
+4. **S3.3** `chisq` (independence and goodness of fit).
+5. **S3.4** `prop` (one and two groups).
+6. **S3.5** `--correct` (T-G) and the family.
+7. **S3.6** mutants, fingerprint, the page and the skill text; the results of all slices in section 8.
+
+## 8. Open points for the maintainer
+
+1. The input form: columns named by `--cols`, a two-level `--group` for `t2` and `prop`, `--pairs A:B` for `paired`, `--vs` for `chisq`. The alternative is a long format (a value column and a group column) for every kind.
+2. `--alternative less|greater`: proposed after v1.
+3. The two-sample interval for proportions: Newcombe's hybrid score (proposed) or the Wald interval, which is simpler and worse.
+4. `chisq` in double-double (section 3) against refusing tables whose exact sum needs a bigger denominator than a stated size (exact, but only small tables): proposed double-double, said in the answer.
+5. Cohen's `d` or Hedges' `g` as the `t` effect size (proposed: `d`, with the factor of `g` as a separate field later).
+6. Whether `stats test` also runs one test per level of a `--by` column (a family made by grouping), which would make `--correct` useful on one column.
