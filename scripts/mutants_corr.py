@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mutants of `stats corr` (docs/corr.md C-I): lib/corr/pearson.cho, lib/corr/ranks.cho, the root of lib/acc/central.cho that the statistic needs, and the corr part of tools/stats/main.cho. Each is applied to a copy, the
+"""Mutants of `stats corr` (docs/corr.md C-I): lib/corr/pearson.cho, lib/corr/ranks.cho, lib/corr/kendall.cho, the root of lib/acc/central.cho that the statistic needs, and the corr part of tools/stats/main.cho. Each is applied to a copy, the
 driver rebuilt, scripts/gate_corr.py and the refusals gate rerun; killed = a gate fails or the program traps. A mutant that does not compile is INVALID. The gates first run on the UNMUTATED build and
 the script refuses to count kills if they fail. Exit 1 if one survives unexplained or is invalid.   python3 scripts/mutants_corr.py [--check]"""
 import os, pathlib, shutil, subprocess, sys, tempfile
@@ -9,6 +9,7 @@ CANCHO = os.environ.get("CANCHO", str(ROOT.parent / "cancho-compiler-a4572ea" / 
 P = "lib/corr/pearson.cho"
 C = "lib/acc/central.cho"
 R = "lib/corr/ranks.cho"
+K = "lib/corr/kendall.cho"
 F = "tools/stats/main.cho"
 M = [
     ("mask-ignored", P, "if mask[i] != 0 && ka != rank.min_int()", "if ka != rank.min_int()"),
@@ -43,7 +44,7 @@ M = [
     ("p-clamp", F, "if p > 1.0 {\n        p = 1.0;", "if p > 2.0 {\n        p = 1.0;"),
     ("two-rows-p", F, "if n < 3 {\n            reason = \"too-few-rows\";", "if n < 2 {\n            reason = \"too-few-rows\";"),
     ("exact-p-value", F, "w = json.put_float(heap, w, 0.0);", "w = json.put_float(heap, w, 1.0);"),
-    ("beyond-double-p", F, "reason = \"statistic-beyond-double\";\n        } else {", "reason = \"statistic-beyond-double\";\n            have_p = true;\n        } else {"),
+    ("beyond-double-p", F, "reason = \"statistic-beyond-double\";\n        } else {\n            have_t = true;", "reason = \"statistic-beyond-double\";\n            have_p = true;\n        } else {\n            have_t = true;"),
     ("listwise-flag", F, "let listwise = bytes.equal(cli.text(args, parsed, table, \"missing\"), \"listwise\");", "let listwise = false;"),
     ("listwise-mask", F, "contents(mw)[i] = 0;", "contents(mw)[i] = 1;"),
     ("pair-with-itself", F, "var ib = ia + 1;", "var ib = ia;"),
@@ -69,13 +70,58 @@ M = [
     ("spearman-flag", F, "\"method\"), \"spearman\") {", "\"method\"), \"spearmen\") {"),
     ("rho-key", F, "w = json.put_key(heap, w, \"rho\");", "w = json.put_key(heap, w, \"r\");"),
     ("p-method-spearman", F, "w = json.put_string(heap, w, \"t-approximation\");", "w = json.put_string(heap, w, \"t\");"),
-    ("all-tied-reason", F, "reason = \"all-tied\";", "reason = \"constant-column\";"),
+    ("all-tied-reason", F, "if method == 1 {\n            reason = \"all-tied\";", "if method == 1 {\n            reason = \"constant-column\";"),
+    ("kendall-all-tied-reason", F, "w = json.put_null(heap, w);\n        reason = \"all-tied\";\n    } else {", "w = json.put_null(heap, w);\n        reason = \"constant-column\";\n    } else {"),
     ("ties-y", F, "w = json.put_int(heap, w, ties_y);", "w = json.put_int(heap, w, ties_x);"),
     ("ties-rule", F, "w = json.put_string(heap, w, \"average\");", "w = json.put_string(heap, w, \"ordinal\");"),
     ("pearson-on-store", F, "pearson.pair(heap, tr, 2, 0, 1, rows, contents(or));", "pearson.pair(heap, store, ncols, ja, jb, rows, mask);"),
+    ("kendall-sort-y-order", K, "ax[i] < ax[j] || (ax[i] == ax[j] && ay[i] <= ay[j])", "ax[i] < ax[j] || (ax[i] == ax[j] && ay[i] >= ay[j])"),
+    ("kendall-sort-x-order", K, "ax[i] < ax[j] || (ax[i] == ax[j] && ay[i] <= ay[j])", "ax[i] > ax[j] || (ax[i] == ax[j] && ay[i] <= ay[j])"),
+    ("kendall-inversions-strict", K, "if a[i] <= a[j] {", "if a[i] < a[j] {"),
+    ("kendall-inversions-count", K, "swaps = swaps + (mid - i);", "swaps = swaps + 1;"),
+    ("kendall-s-joint-ties", K, "s = n0 - n1 - n2 + n3 - 2 * swaps;", "s = n0 - n1 - n2 - n3 - 2 * swaps;"),
+    ("kendall-s-swaps", K, "s = n0 - n1 - n2 + n3 - 2 * swaps;", "s = n0 - n1 - n2 + n3 - swaps;"),
+    ("kendall-s-n2", K, "s = n0 - n1 - n2 + n3 - 2 * swaps;", "s = n0 - n1 + n3 - 2 * swaps;"),
+    ("kendall-n1", K, "n1 = n1 + tt * (tt - 1) / 2;", "n1 = n1 + tt * tt / 2;"),
+    ("kendall-a1x", K, "a1x = a1x + tt * (tt - 1);", "a1x = a1x + tt;"),
+    ("kendall-a2x", K, "add_prod(t[r_a2x..r_a2x + c], wk, tt * (tt - 1), tt - 2);", "add_prod(t[r_a2x..r_a2x + c], wk, tt * (tt - 1), tt - 1);"),
+    ("kendall-a3x", K, "add_prod(t[r_a3x..r_a3x + c], wk, tt * (tt - 1), 2 * tt + 5);", "add_prod(t[r_a3x..r_a3x + c], wk, tt * (tt - 1), 2 * tt + 4);"),
+    ("kendall-n2", K, "n2 = n2 + uu * (uu - 1) / 2;", "n2 = n2 + uu * uu / 2;"),
+    ("kendall-a1y", K, "a1y = a1y + uu * (uu - 1);", "a1y = a1y + uu;"),
+    ("kendall-a2y", K, "add_prod(t[r_a2y..r_a2y + c], wk, uu * (uu - 1), uu - 2);", "add_prod(t[r_a2y..r_a2y + c], wk, uu * (uu - 1), uu - 1);"),
+    ("kendall-a3y", K, "add_prod(t[r_a3y..r_a3y + c], wk, uu * (uu - 1), 2 * uu + 5);", "add_prod(t[r_a3y..r_a3y + c], wk, uu * (uu - 1), 2 * uu + 4);"),
+    ("kendall-n3", K, "n3 = n3 + ww2 * (ww2 - 1) / 2;", "n3 = n3 + ww2 / 2;"),
+    ("kendall-dx", K, "let dx = n0 - n1;", "let dx = n0;"),
+    ("kendall-dy", K, "let dy = n0 - n2;", "let dy = n0;"),
+    ("kendall-tau-sign", K, "if s < 0 && c1 == 0 {", "if s > 0 && c1 == 0 {"),
+    ("kendall-three-rows", K, "if n < 3 {\n                                            status = 2;", "if n < 2 {\n                                            status = 2;"),
+    ("kendall-v0", K, "add_prod(t[r_v0..r_v0 + c], wk, n * (n - 1), 2 * n + 5);", "add_prod(t[r_v0..r_v0 + c], wk, n * (n - 1), 2 * n + 4);"),
+    ("kendall-k", K, "add_prod(t[r_k..r_k + c], wk, n * (n - 1), n - 2);", "add_prod(t[r_k..r_k + c], wk, n * (n - 1), n - 1);"),
+    ("kendall-v0-sign", K, "central.put(p, q, t[r_v0..r_v0 + c], 6, false);", "central.put(p, q, t[r_v0..r_v0 + c], 6, true);"),
+    ("kendall-vt-sign", K, "central.put(p, q, t[r_a3x..r_a3x + c], 6, true);", "central.put(p, q, t[r_a3x..r_a3x + c], 6, false);"),
+    ("kendall-vu-sign", K, "central.put(p, q, t[r_a3y..r_a3y + c], 6, true);", "central.put(p, q, t[r_a3y..r_a3y + c], 6, false);"),
+    ("kendall-num-tk-sign", K, "central.put(p, q, t[r_tk..r_tk + c], lt + lk, st < 0);", "central.put(p, q, t[r_tk..r_tk + c], lt + lk, st > 0);"),
+    ("kendall-nine", K, "central.limbs_of(9 * (n - 2), t[r_f..r_f + 8]);", "central.limbs_of(8 * (n - 2), t[r_f..r_f + 8]);"),
+    ("kendall-two-v2", K, "central.limbs_of(2, t[r_f..r_f + 8]);", "central.limbs_of(3, t[r_f..r_f + 8]);"),
+    ("kendall-eighteen", K, "central.limbs_of(18, t[r_f..r_f + 8]);", "central.limbs_of(17, t[r_f..r_f + 8]);"),
+    ("kendall-z-sign", K, "if s < 0 && c2 == 0 {", "if s > 0 && c2 == 0 {"),
+    ("kendall-variance-edge", K, "if sn <= 0 {", "if sn < 0 {"),
+    ("kendall-used-mask", K, "if mask[i] != 0 && vec.get(keys, i * ncols + ca) != rank.min_int() && vec.get(keys, i * ncols + cb) != rank.min_int() {\n            used = used + 1;", "if vec.get(keys, i * ncols + ca) != rank.min_int() && vec.get(keys, i * ncols + cb) != rank.min_int() {\n            used = used + 1;"),
+    ("kendall-gather-partner", K, "if mask[i] != 0 && vec.get(keys, i * ncols + ca) != rank.min_int() && vec.get(keys, i * ncols + cb) != rank.min_int() {\n                                            xs[u]", "if mask[i] != 0 && vec.get(keys, i * ncols + ca) != rank.min_int() {\n                                            xs[u]"),
+    ("kendall-flag", F, "\"method\"), \"kendall\") {", "\"method\"), \"kendal\") {"),
+    ("kendall-key", F, "w = json.put_key(heap, w, \"tau\");", "w = json.put_key(heap, w, \"r\");"),
+    ("kendall-p-method", F, "w = json.put_string(heap, w, \"normal-approximation\");", "w = json.put_string(heap, w, \"t\");"),
+    ("kendall-rule", F, "w = json.put_string(heap, w, \"tau-b\");", "w = json.put_string(heap, w, \"average\");"),
+    ("kendall-abs-z", F, "dist.norm_sf(float_of_bits(zb & 9223372036854775807))", "dist.norm_sf(float_of_bits(zb))"),
+    ("kendall-one-sided", F, "                p = 2.0 * sf;\n                if p > 1.0 {", "                p = sf;\n                if p > 1.0 {"),
+    ("kendall-variance-reason", F, "reason = \"variance-zero\";", "reason = \"all-tied\";"),
+    ("kendall-ties-swapped", F, "w = json.put_key(heap, w, \"x\");\n    w = json.put_int(heap, w, gx);", "w = json.put_key(heap, w, \"x\");\n    w = json.put_int(heap, w, gy);"),
+    ("kendall-s-key-value", F, "w = json.put_int(heap, w, sv);", "w = json.put_int(heap, w, 0 - sv);"),
 ]
 
 EXPLAINED = {
+    "kendall-variance-edge": "the branch `Num <= 0` (status 3, reason `variance-zero`) is not reached: the exhaustive check of gate_corr.py --method kendall finds the variance of S positive for every pair of columns of 3 to 5 rows over three values whenever tau-b is defined, so `<=` and `<` give the same answers on every input the gates reach; the branch stays so that no input reaches a division by zero",
+    "kendall-variance-reason": "same branch as kendall-variance-edge, not reached",
     "rank-plus-one": "equivalent: lo + hi + 1 is twice the average rank, and lo + hi is twice the average rank minus one for every row; Pearson's coefficient and its statistic do not change when a constant is added to all the values of a column",
     "used-ignores-mask": "equivalent: `used` only sizes the three buffers of the column, the gather loop below counts the rows it takes in `m`, so counting the rows the mask excludes allocates more than is used and changes no value",
     "p-clamp": "defensive: 2 * sf exceeds 1 only if the Student t survival function answers more than 1/2 for a positive t, which no gate case reached (the gate checks every p-value is in [0, 1] and has a case with r = 0 and one with r about 1e-17); a p-value above 1 by one rounding would also lie inside the 1e-12 bound of the p-value gate, so the clamp cannot be seen by it",
@@ -87,8 +133,9 @@ def control():
     b = str(ROOT / "build" / "stats")
     g = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_corr.py"), "--bin", b, "--files", "60"], capture_output=True, text=True, timeout=900)
     g1 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_corr.py"), "--bin", b, "--files", "60", "--method", "spearman"], capture_output=True, text=True, timeout=900)
+    g3 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_corr.py"), "--bin", b, "--files", "60", "--method", "kendall"], capture_output=True, text=True, timeout=900)
     g2 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe_refusals.py"), "--bin", b, "--fuzz", "150"], capture_output=True, text=True, timeout=900)
-    return g.returncode == 0 and g1.returncode == 0 and g2.returncode == 0
+    return g.returncode == 0 and g1.returncode == 0 and g3.returncode == 0 and g2.returncode == 0
 
 
 def main():
@@ -97,6 +144,9 @@ def main():
         if t.count(o) != 1 or o == w:
             print("mutant %s: pattern occurs %d times" % (n, t.count(o)))
             return 1
+    only = None
+    if "--only" in sys.argv:
+        only = set(sys.argv[sys.argv.index("--only") + 1].split(","))
     if "--check" in sys.argv:
         print("mutants_corr: %d mutants, every pattern applies once" % len(M)); return 0
     if not control():
@@ -105,6 +155,8 @@ def main():
     print("control (unmutated) passes both gates")
     bad, killed = [], 0
     for n, f, o, w in M:
+        if only is not None and n not in only:
+            continue
         with tempfile.TemporaryDirectory() as d:
             d = pathlib.Path(d)
             for x in ("lib", "tools", "generated"): shutil.copytree(ROOT / x, d / x)
@@ -121,6 +173,9 @@ def main():
                     g1 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_corr.py"), "--bin", str(d / "build" / "stats"), "--files", "60", "--method", "spearman"], capture_output=True, text=True, timeout=300)
                     dead = g1.returncode != 0
                 if not dead:
+                    g3 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_corr.py"), "--bin", str(d / "build" / "stats"), "--files", "60", "--method", "kendall"], capture_output=True, text=True, timeout=300)
+                    dead = g3.returncode != 0
+                if not dead:
                     g2 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_describe_refusals.py"), "--bin", str(d / "build" / "stats"), "--fuzz", "150"], capture_output=True, text=True, timeout=600)
                     dead = g2.returncode != 0
             except subprocess.TimeoutExpired:
@@ -128,7 +183,8 @@ def main():
         if dead: killed += 1; print("%-28s killed" % n)
         elif n in EXPLAINED: print("%-28s SURVIVED (explained: %s)" % (n, EXPLAINED[n]))
         else: bad.append(n); print("%-28s SURVIVED" % n)
-    print("mutants_corr: %d killed of %d, %d survived and explained, %d unexplained" % (killed, len(M), len(M) - killed - len(bad), len(bad)))
+    total = len(M) if only is None else len([1 for n, f, o, w in M if n in only])
+    print("mutants_corr: %d killed of %d, %d survived and explained, %d unexplained" % (killed, total, total - killed - len(bad), len(bad)))
     if bad: print("SURVIVORS: " + ", ".join(bad))
     return 1 if bad else 0
 

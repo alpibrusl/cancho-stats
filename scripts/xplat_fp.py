@@ -7,7 +7,7 @@
     python3 scripts/xplat_fp.py --mutants        # the checks are shown able to fail
 
 The fingerprint is one tab-separated line per sweep: `kind  name  count  sha256`, the hash over the driver's output lines (`id  hex bits of the result  code`) for a fixed list of cases:
-`special` the first N cases of each range of gate_special.py (seed 1), `edge` the edge cases of gate_domain.py for each function, `acc` the vectors of three families of measure_acc.py through acc-check, `describe` the bytes `stats describe` prints for 12 seeded CSV files, `corr` and `corr-spearman` those of `stats corr` (Pearson, and --method spearman) for 8 files each.
+`special` the first N cases of each range of gate_special.py (seed 1), `edge` the edge cases of gate_domain.py for each function, `acc` the vectors of three families of measure_acc.py through acc-check, `describe` the bytes `stats describe` prints for 12 seeded CSV files, `corr`, `corr-spearman` and `corr-kendall` those of `stats corr` (Pearson, --method spearman, --method kendall) for 8 files each.
 Equal to the golden is equal to each other: the golden was written on one machine and every other platform of the workflow must print its bytes.
 Thread check: for every sweep, `special-check FN --threads T` for T in 1, 2, 3, 4, 7, 8, 16 must print the bytes of the sequential run.
 Exit 0: the fingerprint equals the golden and the thread check holds. Exit 1: a difference (printed). Exit 2: the script could not run.
@@ -168,6 +168,7 @@ def fingerprint(driver, acc, threads_check=True, stats=None):
         lines += describe_by_lines(stats)
         lines += corr_lines(stats)
         lines += corr_lines(stats, "spearman", "corr-spearman")
+        lines += corr_lines(stats, "kendall", "corr-kendall")
     return lines, bad
 
 
