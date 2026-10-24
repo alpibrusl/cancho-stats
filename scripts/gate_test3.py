@@ -218,14 +218,20 @@ def main():
             if fi % 50 == 49:
                 n = 120000   # N times a count above 2^31: the integers of the double-double terms are large
             pairs = sample(r, la, lb, wt, n)
+            if fi < 2:
+                # hand cases: every expected count is exactly 5 (the edge of the count below 5), for independence (20 rows, margins 10 and 10) and for a fit (10 rows, proportions 1/2)
+                pairs = [("x", "u")] * 5 + [("x", "v")] * 5 + [("y", "u")] * 5 + [("y", "v")] * 5 if fi == 0 else [("x", "u")] * 3 + [("y", "v")] * 2 + [("x", "v")] * 2 + [("y", "u")] * 3
+                n = len(pairs)
             # a second and a third categorical column, drawn independently of the first
             lc = POOLS[int(r.next() % len(POOLS))][:1 + int(r.next() % 5)]
             third = [lc[int(r.next() % len(lc))] for _ in range(n)]
+            if fi < 2:
+                third = [x for x, _ in pairs]
             cols = {"A": [p[0] for p in pairs], "G": [p[1] for p in pairs], "C": third}
             # empty cells
             for name in cols:
                 for i in range(n):
-                    if r.next() % 20 == 0:
+                    if fi >= 2 and r.next() % 20 == 0:
                         cols[name][i] = None
             names = ["A", "G", "C"]
             rows = [[cols[nm][i] for nm in names] for i in range(n)]
@@ -283,6 +289,8 @@ def main():
             if len(set(len(used_levels[nm]) for nm in used_levels)) == 1 and used_levels["A"]:
                 k = len(used_levels["A"])
                 props, texts = draw_props(r, k)
+                if fi < 2:
+                    props, texts = [Fraction(1, 2), Fraction(1, 2)], ["0.5", "0.5"]
                 extra = ["--cols", "A,C", "--expected", ",".join(texts)]
                 p = run(a.bin, tmp, names, rows, extra)
                 if p.returncode != 0:
