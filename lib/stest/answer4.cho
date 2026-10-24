@@ -1,0 +1,282 @@
+edition 5;
+
+module stest.answer4;
+
+import std.json;
+import std.math;
+import flt;
+import special.dist;
+import stest.prop;
+
+// The entries of the answer for the kind prop (docs/test.md sections 1 and 11): one column's proportion against p0, or the proportions of its two groups against each other.
+
+fn float_of_bits(bits: int) -> [] float {
+    var key = bits;
+    if bits < 0 {
+        key = bits ^ 0x7fffffffffffffff;
+    }
+    return flt.float_of_key(key);
+}
+
+// the normal quantile q > 0 with P(Z > q) = (10^k - num) / (2 10^k) for the level num / 10^k: (q, code)
+fn critical(num: int, k: int) -> [] (float, int) {
+    var scale = 1;
+    var i = 0;
+    while i < k {
+        scale = scale * 10;
+        i = i + 1;
+    }
+    let (z, code) = dist.qnorm(float_of(scale - num) / float_of(2 * scale));
+    return (0.0 - z, code);
+}
+
+// Wilson's score interval of x successes in n trials: centre (x + q^2/2) / (n + q^2), half-width q sqrt(x (n - x) / n + q^2/4) / (n + q^2), clamped to [0, 1]
+fn wilson(x: float, n: float, q: float) -> [] (float, float) {
+    let q2 = q * q;
+    let c = (x + q2 / 2.0) / (n + q2);
+    let h = q * sqrt(x * (n - x) / n + q2 / 4.0) / (n + q2);
+    var lo = c - h;
+    var hi = c + h;
+    if lo < 0.0 {
+        lo = 0.0;
+    }
+    if hi > 1.0 {
+        hi = 1.0;
+    }
+    return (lo, hi);
+}
+
+// the two-sided p-value of z: 2 norm_sf(|z|), at most 1, and the code
+fn p_normal(z: float) -> [] (float, int) {
+    var a = z;
+    if a < 0.0 {
+        a = 0.0 - a;
+    }
+    let (sf, code) = dist.norm_sf(a);
+    if code != 0 {
+        return (0.0, code);
+    }
+    var p = 2.0 * sf;
+    if p > 1.0 {
+        p = 1.0;
+    }
+    return (p, 0);
+}
+
+fn put_interval[&h](heap: &!h Heap, w0: json.Writer, of: &static [byte], method: &static [byte], level: float, est: float, lo: float, hi: float) -> [heap] json.Writer {
+    var w = w0;
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "of");
+    w = json.put_string(heap, w, of);
+    w = json.put_key(heap, w, "method");
+    w = json.put_string(heap, w, method);
+    w = json.put_key(heap, w, "level");
+    w = json.put_float(heap, w, level);
+    w = json.put_key(heap, w, "estimate");
+    w = json.put_float(heap, w, est);
+    w = json.put_key(heap, w, "low");
+    w = json.put_float(heap, w, lo);
+    w = json.put_key(heap, w, "high");
+    w = json.put_float(heap, w, hi);
+    w = json.put_key(heap, w, "rounding");
+    w = json.put_string(heap, w, "double");
+    w = json.end_object(heap, w);
+    return w;
+}
+
+// statistic, df and p-value of an entry; the reason is "variance-zero"-style text chosen by the caller
+fn put_stat[&h](heap: &!h Heap, w0: json.Writer, r: prop.Prop) -> [heap] json.Writer {
+    var w = w0;
+    let have_z = r.status == 0 && r.zc == 0;
+    var p = 0.0;
+    var have_p = false;
+    if have_z {
+        let (pv, code) = p_normal(float_of_bits(r.zb));
+        if code == 0 {
+            have_p = true;
+            p = pv;
+        }
+    }
+    w = json.put_key(heap, w, "statistic");
+    if have_z {
+        w = json.put_float(heap, w, float_of_bits(r.zb));
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "df");
+    w = json.put_null(heap, w);
+    w = json.put_key(heap, w, "p_value");
+    if have_p {
+        w = json.put_float(heap, w, p);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_method");
+    w = json.put_string(heap, w, "normal");
+    return w;
+}
+
+fn put_effect[&h](heap: &!h Heap, w0: json.Writer, name: &static [byte], value: float, rounding: &static [byte]) -> [heap] json.Writer {
+    var w = w0;
+    w = json.put_key(heap, w, "effect_size");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "name");
+    w = json.put_string(heap, w, name);
+    w = json.put_key(heap, w, "value");
+    w = json.put_float(heap, w, value);
+    w = json.put_key(heap, w, "rounding");
+    w = json.put_string(heap, w, rounding);
+    w = json.end_object(heap, w);
+    return w;
+}
+
+// One column against p0 = P / D: x successes of n trials, `rows` the data rows of the file
+pub fn put_one[&h, &c](heap: &!h Heap, w0: json.Writer, name: &c [byte], x: int, n: int, rows: int, r: prop.Prop, p: int, d: int, lnum: int, lk: int, level: float) -> [heap] json.Writer {
+    var w = w0;
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "column");
+    w = json.put_string(heap, w, name);
+    w = put_stat(heap, w, r);
+    var reason = "";
+    if r.status == 1 {
+        reason = "too-few-rows";
+    } else if r.zc != 0 {
+        reason = "statistic-beyond-double";
+    }
+    w = json.put_key(heap, w, "effect_size");
+    if r.status == 0 && r.dc == 0 {
+        w = json.begin_object(heap, w);
+        w = json.put_key(heap, w, "name");
+        w = json.put_string(heap, w, "difference");
+        w = json.put_key(heap, w, "value");
+        w = json.put_float(heap, w, float_of_bits(r.db));
+        w = json.put_key(heap, w, "rounding");
+        w = json.put_string(heap, w, "single");
+        w = json.end_object(heap, w);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "interval");
+    let (q, qcode) = critical(lnum, lk);
+    if r.status == 0 && qcode == 0 {
+        let (lo, hi) = wilson(float_of(x), float_of(n), q);
+        w = put_interval(heap, w, "proportion", "wilson", level, float_of_bits(r.p1b), lo, hi);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "n");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "n");
+    w = json.put_int(heap, w, n);
+    w = json.put_key(heap, w, "successes");
+    w = json.put_int(heap, w, x);
+    w = json.put_key(heap, w, "missing");
+    w = json.put_int(heap, w, rows - n);
+    w = json.end_object(heap, w);
+    w = json.put_key(heap, w, "method");
+    w = json.put_string(heap, w, "one-sample z");
+    w = json.put_key(heap, w, "assumptions");
+    w = json.begin_object(heap, w);
+    if r.status == 0 {
+        w = json.put_key(heap, w, "n_p0");
+        w = json.put_float(heap, w, float_of(n) * float_of(p) / float_of(d));
+        w = json.put_key(heap, w, "n_1_minus_p0");
+        w = json.put_float(heap, w, float_of(n) * float_of(d - p) / float_of(d));
+    }
+    w = json.end_object(heap, w);
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}
+
+// The two groups of one column: x1 of n1 and x2 of n2, `rows` the data rows of the file
+pub fn put_two[&h, &c, &la, &lb](heap: &!h Heap, w0: json.Writer, name: &c [byte], level_a: &la [byte], level_b: &lb [byte], x1: int, n1: int, x2: int, n2: int, rows: int, r: prop.Prop, lnum: int, lk: int, level: float) -> [heap] json.Writer {
+    var w = w0;
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "column");
+    w = json.put_string(heap, w, name);
+    w = put_stat(heap, w, r);
+    var reason = "";
+    if r.status == 1 {
+        reason = "too-few-rows";
+    } else if r.status == 2 {
+        reason = "variance-zero";
+    } else if r.zc != 0 {
+        reason = "statistic-beyond-double";
+    }
+    // Cohen's h = 2 asin(sqrt(p1)) - 2 asin(sqrt(p2)), asin(s) = atan2(s, sqrt(1 - s^2)), from the proportions as doubles
+    w = json.put_key(heap, w, "effect_size");
+    if r.status != 1 {
+        let p1 = float_of_bits(r.p1b);
+        let p2 = float_of_bits(r.p2b);
+        let h = 2.0 * math.atan2(sqrt(p1), sqrt(1.0 - p1)) - 2.0 * math.atan2(sqrt(p2), sqrt(1.0 - p2));
+        w = json.begin_object(heap, w);
+        w = json.put_key(heap, w, "name");
+        w = json.put_string(heap, w, "cohen_h");
+        w = json.put_key(heap, w, "value");
+        w = json.put_float(heap, w, h);
+        w = json.put_key(heap, w, "rounding");
+        w = json.put_string(heap, w, "double");
+        w = json.end_object(heap, w);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "interval");
+    let (q, qcode) = critical(lnum, lk);
+    if r.status != 1 && r.dc == 0 && qcode == 0 {
+        let (l1, u1) = wilson(float_of(x1), float_of(n1), q);
+        let (l2, u2) = wilson(float_of(x2), float_of(n2), q);
+        let p1 = float_of_bits(r.p1b);
+        let p2 = float_of_bits(r.p2b);
+        let dd = float_of_bits(r.db);
+        let lo = dd - sqrt((p1 - l1) * (p1 - l1) + (u2 - p2) * (u2 - p2));
+        let hi = dd + sqrt((u1 - p1) * (u1 - p1) + (p2 - l2) * (p2 - l2));
+        w = put_interval(heap, w, "difference of proportions", "newcombe", level, dd, lo, hi);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "levels");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "a");
+    w = json.put_string(heap, w, level_a);
+    w = json.put_key(heap, w, "b");
+    w = json.put_string(heap, w, level_b);
+    w = json.end_object(heap, w);
+    w = json.put_key(heap, w, "n");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "a");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "n");
+    w = json.put_int(heap, w, n1);
+    w = json.put_key(heap, w, "successes");
+    w = json.put_int(heap, w, x1);
+    w = json.end_object(heap, w);
+    w = json.put_key(heap, w, "b");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "n");
+    w = json.put_int(heap, w, n2);
+    w = json.put_key(heap, w, "successes");
+    w = json.put_int(heap, w, x2);
+    w = json.end_object(heap, w);
+    w = json.put_key(heap, w, "missing");
+    w = json.put_int(heap, w, rows - n1 - n2);
+    w = json.end_object(heap, w);
+    w = json.put_key(heap, w, "method");
+    w = json.put_string(heap, w, "two-sample z (pooled)");
+    w = json.put_key(heap, w, "assumptions");
+    w = json.begin_object(heap, w);
+    if r.status != 1 {
+        w = json.put_key(heap, w, "pooled");
+        w = json.put_float(heap, w, float_of(x1 + x2) / float_of(n1 + n2));
+    }
+    w = json.end_object(heap, w);
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}

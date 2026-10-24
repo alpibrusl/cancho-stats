@@ -66,7 +66,7 @@ fn put_key[&h, &a, &b](heap: &!h Heap, kb: buffer.Buffer, a: &a [byte], b: &b [b
     return k;
 }
 
-pub fn cross[&h, &f, &s, &a, &b](heap: &!h Heap, file: &!f File, shown: &s [byte], name_a: &a [byte], name_b: &b [byte], two: bool, delim: int, cap: int, max_rows: int, max_cols: int, max_groups: int, errs: fail.Errors) -> [heap, file_read] (Cross, fail.Errors) {
+pub fn cross[&h, &f, &s, &a, &b](heap: &!h Heap, file: &!f File, shown: &s [byte], name_a: &a [byte], name_b: &b [byte], two: bool, levels_any: bool, delim: int, cap: int, max_rows: int, max_cols: int, max_groups: int, errs: fail.Errors) -> [heap, file_read] (Cross, fail.Errors) {
     var m = map.empty(heap, 64, 0, 11);
     var la = map.empty(heap, 64, 0, 13);
     var lb = map.empty(heap, 64, 0, 17);
@@ -174,6 +174,21 @@ pub fn cross[&h, &f, &s, &a, &b](heap: &!h Heap, file: &!f File, shown: &s [byte
                                     tb = cs[3 * ib + 1];
                                     if tb == fb && cs[3 * ib + 2] == 0 {
                                         present = false;
+                                    }
+                                }
+                                if !present && two && levels_any && !(tb == fb && cs[3 * ib + 2] == 0) {
+                                    // the second cell is there but the first is not: for a test of groups the level exists (it has no trial in this column)
+                                    var known = false;
+                                    var room = false;
+                                    borrow lb as &lbr in {
+                                        known = map.has(lbr, line[fb..tb]);
+                                        room = map.size(lbr) < max_groups;
+                                    }
+                                    if !known && room {
+                                        lb = map.put(heap, lb, line[fb..tb], 0);
+                                    } else if !known {
+                                        e = rule.refuse_int(heap, e, "limit.too-many-groups", "more levels in a column than --max-groups", "raise --max-groups or test a column with fewer values", "limit", max_groups, "line", number);
+                                        stop = true;
                                     }
                                 }
                                 if present {
