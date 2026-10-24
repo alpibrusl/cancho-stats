@@ -67,6 +67,11 @@ pub fn ratio_bits[&h, &n, &d](heap: &!h Heap, num: &n [int], nn: int, den: &d [i
 
 // sqrt(num / den) as the BITS of the nearest double, one rounding: the integer part s of sqrt(num * 4^k / den) with k chosen for 66 or more bits, found bit by bit, and a sticky bit when s^2 den differs from num 4^k
 pub fn sqrt_ratio_bits[&h, &n, &d](heap: &!h Heap, num: &n [int], nn: int, den: &d [int], nd: int) -> [heap] (int, int) {
+    return sqrt_ratio_bits_exp(heap, num, nn, den, nd, 0);
+}
+
+// sqrt(num / den) * 2^e as the BITS of the nearest double, one rounding (e is a whole number of binary places: the unit of a root of quantities counted in units of 2^(2 e))
+pub fn sqrt_ratio_bits_exp[&h, &n, &d](heap: &!h Heap, num: &n [int], nn: int, den: &d [int], nd: int, e: int) -> [heap] (int, int) {
     let bn = bigint.bit_length(num, nn);
     if bn == 0 {
         return (0, 0);
@@ -122,7 +127,7 @@ pub fn sqrt_ratio_bits[&h, &n, &d](heap: &!h Heap, num: &n [int], nn: int, den: 
                         }
                     }
                     unbox_slice(heap, sq2);
-                    let (b, c) = bigint.round_bits(contents(sw), sl, 0 - k, sticky);
+                    let (b, c) = bigint.round_bits(contents(sw), sl, e - k, sticky);
                     bits = b;
                     code = c;
                 }

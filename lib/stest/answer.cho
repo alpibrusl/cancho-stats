@@ -1,0 +1,368 @@
+edition 5;
+
+module stest.answer;
+
+import std.json;
+import std.vec;
+import corr.kendall;
+import corr.pearson;
+import corr.ranks;
+import flt;
+import special.dist;
+import stest.ttest;
+
+// The pieces of the answers of `stats corr` and `stats test` that write one pair or one test (docs/corr.md section 4, docs/test.md section 1), moved out of tools/stats/main.cho (2,000 lines is the limit).
+
+fn float_of_bits(bits: int) -> [] float {
+    var key = bits;
+    if bits < 0 {
+        key = bits ^ 0x7fffffffffffffff;
+    }
+    return flt.float_of_key(key);
+}
+
+// the header name of column j as a JSON string
+pub fn put_name[&h, &n, &en](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], j: int) -> [heap] json.Writer {
+    var from = 0;
+    if j > 0 {
+        from = vec.get(ends, j - 1);
+    }
+    return json.put_string(heap, w0, names[from..vec.get(ends, j)]);
+}
+
+// the two-sided p-value of a statistic |t| on df degrees of freedom, and the code of the special function (0 is an answer)
+pub fn p_two_sided(t: float, df: int) -> [] (float, int) {
+    let (sf, code) = dist.t_sf(t, float_of(df));
+    if code != 0 {
+        return (0.0, code);
+    }
+    var p = 2.0 * sf;
+    if p > 1.0 {
+        p = 1.0;
+    }
+    return (p, 0);
+}
+
+// One pair of columns of the answer (docs/corr.md section 4): n, r, statistic (t with the sign of r), df, p_value, p_method, p_exact_zero when |r| = 1, reason when something is null.
+// One pair of the answer for Kendall's tau-b (docs/corr.md section 4): n, tau, statistic (z, with the sign of tau), df (null), p_value, p_method, s (concordant minus discordant), ties, reason.
+pub fn put_pair_kendall[&h, &n, &en, &k, &m](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], store: &k vec.Vec[int], ncols: int, ja: int, jb: int, rows: int, mask: &m [int]) -> [heap] json.Writer {
+    var w = w0;
+    let (n, status, tb, tc, zb, zc, sv, gx, gy) = kendall.pair(heap, store, ncols, ja, jb, rows, mask);
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "x");
+    w = put_name(heap, w, names, ends, ja);
+    w = json.put_key(heap, w, "y");
+    w = put_name(heap, w, names, ends, jb);
+    w = json.put_key(heap, w, "n");
+    w = json.put_int(heap, w, n);
+    w = json.put_key(heap, w, "tau");
+    var reason = "";
+    var have_z = false;
+    var p = 0.0;
+    var have_p = false;
+    if status == 1 {
+        w = json.put_null(heap, w);
+        reason = "all-tied";
+    } else {
+        w = json.put_float(heap, w, float_of_bits(tb));
+        if status == 2 {
+            reason = "too-few-rows";
+        } else if status == 3 {
+            reason = "variance-zero";
+        } else if zc != 0 {
+            reason = "statistic-beyond-double";
+        } else {
+            have_z = true;
+            let (sf, code) = dist.norm_sf(float_of_bits(zb & 9223372036854775807));
+            if code == 0 {
+                have_p = true;
+                p = 2.0 * sf;
+                if p > 1.0 {
+                    p = 1.0;
+                }
+            } else {
+                reason = "p-not-computed";
+            }
+        }
+    }
+    w = json.put_key(heap, w, "statistic");
+    if have_z {
+        w = json.put_float(heap, w, float_of_bits(zb));
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "df");
+    w = json.put_null(heap, w);
+    w = json.put_key(heap, w, "p_value");
+    if have_p {
+        w = json.put_float(heap, w, p);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_method");
+    w = json.put_string(heap, w, "normal-approximation");
+    w = json.put_key(heap, w, "s");
+    w = json.put_int(heap, w, sv);
+    w = json.put_key(heap, w, "ties");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "x");
+    w = json.put_int(heap, w, gx);
+    w = json.put_key(heap, w, "y");
+    w = json.put_int(heap, w, gy);
+    w = json.put_key(heap, w, "rule");
+    w = json.put_string(heap, w, "tau-b");
+    w = json.end_object(heap, w);
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}
+
+pub fn put_pair[&h, &n, &en, &k, &m](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], store: &k vec.Vec[int], ncols: int, ja: int, jb: int, rows: int, mask: &m [int], method: int) -> [heap] json.Writer {
+    var w = w0;
+    var n = 0;
+    var status = 0;
+    var rb = 0;
+    var rc = 0;
+    var tb = 0;
+    var tc = 0;
+    var exact = 0;
+    var ties_x = 0;
+    var ties_y = 0;
+    if method == 1 {
+        // Spearman: Pearson's coefficient of the average ranks of the rows used for this pair (docs/corr.md section 2)
+        let (table, tx, ty) = ranks.pair(heap, store, ncols, ja, jb, rows, mask);
+        ties_x = tx;
+        ties_y = ty;
+        let ones = box_slice(heap, rows + 1, 1);
+        borrow table as &tr in {
+            borrow ones as &or in {
+                let (n1, s1, rb1, rc1, tb1, tc1, e1) = pearson.pair(heap, tr, 2, 0, 1, rows, contents(or));
+                n = n1;
+                status = s1;
+                rb = rb1;
+                rc = rc1;
+                tb = tb1;
+                tc = tc1;
+                exact = e1;
+            }
+        }
+        unbox_slice(heap, ones);
+        vec.drop(heap, table);
+    } else {
+        let (n1, s1, rb1, rc1, tb1, tc1, e1) = pearson.pair(heap, store, ncols, ja, jb, rows, mask);
+        n = n1;
+        status = s1;
+        rb = rb1;
+        rc = rc1;
+        tb = tb1;
+        tc = tc1;
+        exact = e1;
+    }
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "x");
+    w = put_name(heap, w, names, ends, ja);
+    w = json.put_key(heap, w, "y");
+    w = put_name(heap, w, names, ends, jb);
+    w = json.put_key(heap, w, "n");
+    w = json.put_int(heap, w, n);
+    if method == 1 {
+        w = json.put_key(heap, w, "rho");
+    } else {
+        w = json.put_key(heap, w, "r");
+    }
+    var reason = "";
+    var have_t = false;
+    var p = 0.0;
+    var have_p = false;
+    if status == 0 {
+        w = json.put_float(heap, w, float_of_bits(rb));
+        if n < 3 {
+            reason = "too-few-rows";
+        } else if exact == 1 {
+            have_p = true;
+        } else if tc != 0 {
+            // |t| is beyond the largest double: no statistic, and no p-value (it is below 3.6e-309 for every df, and for df = 1 it is not zero as a double)
+            reason = "statistic-beyond-double";
+        } else {
+            have_t = true;
+            let (pv, code) = p_two_sided(float_of_bits(tb), n - 2);
+            if code == 0 {
+                have_p = true;
+                p = pv;
+            } else {
+                reason = "p-not-computed";
+            }
+        }
+    } else {
+        w = json.put_null(heap, w);
+        reason = "constant-column";
+        if method == 1 {
+            reason = "all-tied";
+        }
+    }
+    w = json.put_key(heap, w, "statistic");
+    if have_t {
+        var tbits = tb;
+        if rb < 0 {
+            tbits = tb | 0 - 9223372036854775807 - 1;
+        }
+        w = json.put_float(heap, w, float_of_bits(tbits));
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "df");
+    if status == 0 && n >= 3 {
+        w = json.put_int(heap, w, n - 2);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_value");
+    if exact == 1 && status == 0 && n >= 3 {
+        w = json.put_float(heap, w, 0.0);
+    } else if have_p {
+        w = json.put_float(heap, w, p);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_method");
+    if method == 1 {
+        w = json.put_string(heap, w, "t-approximation");
+        w = json.put_key(heap, w, "ties");
+        w = json.begin_object(heap, w);
+        w = json.put_key(heap, w, "x");
+        w = json.put_int(heap, w, ties_x);
+        w = json.put_key(heap, w, "y");
+        w = json.put_int(heap, w, ties_y);
+        w = json.put_key(heap, w, "rule");
+        w = json.put_string(heap, w, "average");
+        w = json.end_object(heap, w);
+    } else {
+        w = json.put_string(heap, w, "t");
+    }
+    if exact == 1 && status == 0 && n >= 3 {
+        w = json.put_key(heap, w, "p_exact_zero");
+        w = json.put_bool(heap, w, true);
+    }
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}
+
+// the two-sided p-value of |t| on df degrees of freedom is p_two_sided of the corr part above; one test of the answer for the kind t1
+pub fn put_t1[&h, &n, &en, &k](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], store: &k vec.Vec[int], ncols: int, col: int, rows: int, mu0_bits: int, lnum: int, lk: int, level: float) -> [heap] json.Writer {
+    var w = w0;
+    let (n, status, tb, tc, db, dc, mb, mc, sb, sc) = ttest.one_sample(heap, store, ncols, col, rows, mu0_bits);
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "column");
+    w = put_name(heap, w, names, ends, col);
+    var reason = "";
+    var have_t = false;
+    var p = 0.0;
+    var have_p = false;
+    if n < 2 {
+        reason = "too-few-rows";
+    } else if status == 2 {
+        reason = "variance-zero";
+    } else if tc == 0 {
+        have_t = true;
+        let (pv, code) = p_two_sided(float_of_bits(tb & 9223372036854775807), n - 1);
+        if code == 0 {
+            have_p = true;
+            p = pv;
+        } else {
+            reason = "p-not-computed";
+        }
+    } else {
+        reason = "statistic-beyond-double";
+    }
+    w = json.put_key(heap, w, "statistic");
+    if have_t {
+        w = json.put_float(heap, w, float_of_bits(tb));
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "df");
+    if n >= 2 {
+        w = json.put_int(heap, w, n - 1);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_value");
+    if have_p {
+        w = json.put_float(heap, w, p);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_method");
+    w = json.put_string(heap, w, "t");
+    w = json.put_key(heap, w, "effect_size");
+    if have_t && dc == 0 {
+        w = json.begin_object(heap, w);
+        w = json.put_key(heap, w, "name");
+        w = json.put_string(heap, w, "cohen_d");
+        w = json.put_key(heap, w, "value");
+        w = json.put_float(heap, w, float_of_bits(db));
+        w = json.end_object(heap, w);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "interval");
+    var interval_ok = false;
+    var half = 0.0;
+    if n >= 2 && mc == 0 && sc == 0 {
+        if status == 2 {
+            interval_ok = true;
+        } else {
+            let (q, qcode) = ttest.t_critical(lnum, lk, n - 1);
+            if qcode == 0 {
+                interval_ok = true;
+                half = q * float_of_bits(sb);
+            } else if len(reason) == 0 {
+                reason = "interval-not-computed";
+            }
+        }
+    }
+    if interval_ok {
+        let mean = float_of_bits(mb);
+        w = json.begin_object(heap, w);
+        w = json.put_key(heap, w, "of");
+        w = json.put_string(heap, w, "mean");
+        w = json.put_key(heap, w, "level");
+        w = json.put_float(heap, w, level);
+        w = json.put_key(heap, w, "estimate");
+        w = json.put_float(heap, w, mean);
+        w = json.put_key(heap, w, "low");
+        w = json.put_float(heap, w, mean - half);
+        w = json.put_key(heap, w, "high");
+        w = json.put_float(heap, w, mean + half);
+        w = json.put_key(heap, w, "rounding");
+        w = json.put_string(heap, w, "double");
+        w = json.end_object(heap, w);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "n");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "n");
+    w = json.put_int(heap, w, n);
+    w = json.put_key(heap, w, "missing");
+    w = json.put_int(heap, w, rows - n);
+    w = json.end_object(heap, w);
+    w = json.put_key(heap, w, "method");
+    w = json.put_string(heap, w, "one-sample t");
+    w = json.put_key(heap, w, "assumptions");
+    w = json.begin_object(heap, w);
+    w = json.end_object(heap, w);
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}

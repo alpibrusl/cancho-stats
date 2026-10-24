@@ -1,0 +1,158 @@
+edition 5;
+
+module stest.ttest;
+
+import std.vec;
+import acc.bigint;
+import acc.central;
+import acc.psum;
+import flt;
+import metrics.rank;
+import special.quantile;
+
+// The one-sample t of a column (docs/test.md sections 2 and 3). `keys` is the row-major table of order-preserving keys of the cells (rank.min_int() for a missing cell). With n the present values,
+// S1 = sum x (units 2^-1074) and S2 = sum x^2 (units 2^-2148) from acc.psum, mu0 a double taken exactly (units 2^-1074), the integers
+//     L = n S2 - S1^2            D = S1 - n mu0
+// give  t = sign(D) sqrt((n - 1) D^2 / L),  d = sign(D) sqrt((n - 1) D^2 / (n L)),  the mean S1 / n and the standard error of the mean  sqrt(L / (n^2 (n - 1)))  each ONE rounding of an exact rational
+// (central.sqrt_ratio_bits_exp for the roots, the unit 2^-1074 of the standard error passed as the exponent).
+
+// Answers (n, status, t bits, t code, d bits, d code, mean bits, mean code, se bits, se code). status 0: everything answered; 1: n < 2 (only the mean); 2: L = 0, a constant column (the mean, and se = 0).
+pub fn one_sample[&h, &k](heap: &!h Heap, keys: &k vec.Vec[int], ncols: int, col: int, rows: int, mu0_bits: int) -> [heap] (int, int, int, int, int, int, int, int, int, int) {
+    let s1 = psum.size(1);
+    let s2 = psum.size(2);
+    let l1 = psum.limbs(1);
+    let l2 = psum.limbs(2);
+    let acc = box_slice(heap, s1 + s2 + s1 + 1, 0);
+    let work = box_slice(heap, psum.scratch() + 1, 0);
+    var n = 0;
+    var status = 0;
+    var tb = 0;
+    var tc = 0;
+    var db = 0;
+    var dc = 0;
+    var mb = 0;
+    var mc = 0;
+    var sb = 0;
+    var sc = 0;
+    borrow mut acc as &!aw in {
+        borrow mut work as &!ww in {
+            let a = contents(aw);
+            let wk = contents(ww);
+            var i = 0;
+            while i < rows {
+                let key = vec.get(keys, i * ncols + col);
+                if key != rank.min_int() {
+                    let xb = bits_of(flt.float_of_key(key));
+                    psum.add(a[0..s1], 1, xb, wk);
+                    psum.add(a[s1..s1 + s2], 2, xb, wk);
+                    n = n + 1;
+                }
+                i = i + 1;
+            }
+            // mu0 as a one-term accumulator, to get its magnitude and sign in units of 2^-1074
+            psum.add(a[s1 + s2..s1 + s2 + s1], 1, mu0_bits, wk);
+            let c = central.cap();
+            let tmp = box_slice(heap, 14 * c + 1, 0);
+            let pos = box_slice(heap, c, 0);
+            let neg = box_slice(heap, c, 0);
+            borrow mut tmp as &!tw in {
+                borrow mut pos as &!pw in {
+                    borrow mut neg as &!nw in {
+                        let t = contents(tw);
+                        let p = contents(pw);
+                        let q = contents(nw);
+                        // regions of t, each `c` limbs: 0 S1, 1 S2, 2 mu0, 3 L, 4 D, 5 D^2 (times n - 1), 6 L (n) or n L, 7 scratch, 8 small factors, 9 n^2 (n - 1)
+                        let r_s1 = 0;
+                        let r_s2 = c;
+                        let r_mu = 2 * c;
+                        let r_l = 3 * c;
+                        let r_d = 4 * c;
+                        let r_nu = 5 * c;
+                        let r_de = 6 * c;
+                        let r_t = 7 * c;
+                        let r_f = 8 * c;
+                        let r_v = 9 * c;
+                        let sg1 = psum.magnitude(a[0..s1], 1, t[r_s1..r_s1 + c]);
+                        psum.magnitude(a[s1..s1 + s2], 2, t[r_s2..r_s2 + c]);
+                        let smu = psum.magnitude(a[s1 + s2..s1 + s2 + s1], 1, t[r_mu..r_mu + c]);
+                        central.limbs_of(n, t[r_f..r_f + 8]);
+                        // the mean S1 / n, one rounding, units 2^-1074
+                        let (m1, m2) = central.ratio_bits(heap, t[r_s1..r_s1 + c], l1, t[r_f..r_f + 3], 3, 0 - 1074, sg1 < 0);
+                        mb = m1;
+                        mc = m2;
+                        if n < 2 {
+                            status = 1;
+                        } else {
+                            // L = n S2 - S1^2
+                            bigint.clear(p, c);
+                            bigint.clear(q, c);
+                            bigint.mul(t[r_t..r_t + c], t[r_s2..r_s2 + c], l2, t[r_f..r_f + 8], 3);
+                            central.put(p, q, t[r_t..r_t + c], l2 + 3, false);
+                            bigint.mul(t[r_t..r_t + c], t[r_s1..r_s1 + c], l1, t[r_s1..r_s1 + c], l1);
+                            central.put(p, q, t[r_t..r_t + c], 2 * l1, true);
+                            central.settle(p, q, t[r_l..r_l + c]);
+                            let ll = central.mag_len(t[r_l..r_l + c], c);
+                            // the standard error of the mean, sqrt(L / (n^2 (n - 1))) * 2^-1074
+                            central.limbs_of(n * n, t[r_f + 8..r_f + 16]);
+                            central.limbs_of(n - 1, t[r_f + 16..r_f + 24]);
+                            bigint.mul(t[r_v..r_v + c], t[r_f + 8..r_f + 11], 3, t[r_f + 16..r_f + 19], 3);
+                            if bigint.is_zero(t[r_l..r_l + c], c) {
+                                status = 2;
+                            } else {
+                                let (s3, s4) = central.sqrt_ratio_bits_exp(heap, t[r_l..r_l + c], ll, t[r_v..r_v + c], 6, 0 - 1074);
+                                sb = s3;
+                                sc = s4;
+                                // D = S1 - n mu0
+                                bigint.clear(p, c);
+                                bigint.clear(q, c);
+                                central.put(p, q, t[r_s1..r_s1 + c], l1, sg1 < 0);
+                                bigint.mul(t[r_t..r_t + c], t[r_mu..r_mu + c], l1, t[r_f..r_f + 3], 3);
+                                central.put(p, q, t[r_t..r_t + c], l1 + 3, smu >= 0);
+                                let sd = central.settle(p, q, t[r_d..r_d + c]);
+                                let ld = central.mag_len(t[r_d..r_d + c], c);
+                                // t^2 = (n - 1) D^2 / L
+                                bigint.mul(t[r_t..r_t + c], t[r_d..r_d + c], ld, t[r_d..r_d + c], ld);
+                                bigint.mul(t[r_nu..r_nu + c], t[r_t..r_t + c], 2 * ld, t[r_f + 16..r_f + 19], 3);
+                                let (b1, c1) = central.sqrt_ratio_bits(heap, t[r_nu..r_nu + c], 2 * ld + 3, t[r_l..r_l + c], ll);
+                                tb = b1;
+                                tc = c1;
+                                // d^2 = (n - 1) D^2 / (n L)
+                                bigint.mul(t[r_de..r_de + c], t[r_l..r_l + c], ll, t[r_f..r_f + 3], 3);
+                                let (b2, c2) = central.sqrt_ratio_bits(heap, t[r_nu..r_nu + c], 2 * ld + 3, t[r_de..r_de + c], ll + 3);
+                                db = b2;
+                                dc = c2;
+                                if sd < 0 {
+                                    if c1 == 0 {
+                                        tb = tb | 0 - 9223372036854775807 - 1;
+                                    }
+                                    if c2 == 0 {
+                                        db = db | 0 - 9223372036854775807 - 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            unbox_slice(heap, tmp);
+            unbox_slice(heap, pos);
+            unbox_slice(heap, neg);
+        }
+    }
+    unbox_slice(heap, acc);
+    unbox_slice(heap, work);
+    return (n, status, tb, tc, db, dc, mb, mc, sb, sc);
+}
+
+// The critical value q of Student's t on df degrees of freedom with the upper tail alpha_half = (10^k - num) / (2 10^k) for the level num / 10^k: (q, code), code 0 an answer. The quotient of two integers
+// below 2^53 is correctly rounded by one division.
+pub fn t_critical(num: int, k: int, df: int) -> [] (float, int) {
+    var scale = 1;
+    var i = 0;
+    while i < k {
+        scale = scale * 10;
+        i = i + 1;
+    }
+    let ah = float_of(scale - num) / float_of(2 * scale);
+    return quantile.t_quantile_upper(ah, float_of(df));
+}

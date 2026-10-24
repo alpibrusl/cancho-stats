@@ -72,6 +72,31 @@ CASES = [
     ("corr: rows limit", b"a,b\n1,2\n3,5\n7,8\n", ["corr", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
     ("corr: no file", b"a,b\n1,2\n", ["corr"], "args.missing-operand", 2),
     ("corr: not a verb", b"a,b\n1,2\n", ["correlate", "f.csv"], "stats.bad-verb", 2),
+    # test t1 (docs/test.md)
+    ("test: t1", b"a\n1\n2\n4\n", ["test", "t1", "--cols", "a", "f.csv"], None, 0),
+    ("test: t1 two columns, level and mu0", b"a,b\n1,2\n2,5\n4,1\n", ["test", "t1", "--cols", "a,b", "--mu0", "-1.5", "--level", "0.999999999", "f.csv"], None, 0),
+    ("test: t1 with one value, a constant column", b"a,b\n1,3\n,3\n", ["test", "t1", "--cols", "a,b", "f.csv"], None, 0),
+    ("test: no kind", b"a\n1\n", ["test"], "args.missing-operand", 2),
+    ("test: unknown kind", b"a\n1\n", ["test", "t9", "--cols", "a", "f.csv"], "args.bad-value", 2),
+    ("test: no file", b"a\n1\n", ["test", "t1", "--cols", "a"], "args.missing-operand", 2),
+    ("test: two files", b"a\n1\n", ["test", "t1", "--cols", "a", "f.csv", "f.csv"], "args.too-many-operands", 2),
+    ("test: no columns", b"a\n1\n2\n", ["test", "t1", "f.csv"], "stats.test-columns", 2),
+    ("test: text column", b"a,b\n1,x\n2,y\n", ["test", "t1", "--cols", "b", "f.csv"], "stats.non-numeric", 2),
+    ("test: empty column", b"a,b\n1,\n2,\n", ["test", "t1", "--cols", "a,b", "f.csv"], "stats.non-numeric", 2),
+    ("test: no such column", b"a\n1\n", ["test", "t1", "--cols", "z", "f.csv"], "stats.no-such-column", 2),
+    ("test: ambiguous column", b"a,a\n1,2\n", ["test", "t1", "--cols", "a", "f.csv"], "stats.ambiguous-column", 2),
+    ("test: empty cols item", b"a\n1\n", ["test", "t1", "--cols", "a,", "f.csv"], "args.bad-value", 2),
+    ("test: mu0 not a number", b"a\n1\n", ["test", "t1", "--cols", "a", "--mu0", "abc", "f.csv"], "args.bad-value", 2),
+    ("test: mu0 nan", b"a\n1\n", ["test", "t1", "--cols", "a", "--mu0", "nan", "f.csv"], "args.bad-value", 2),
+    ("test: mu0 out of range", b"a\n1\n", ["test", "t1", "--cols", "a", "--mu0", "1e999", "f.csv"], "args.bad-value", 2),
+    ("test: level zero", b"a\n1\n", ["test", "t1", "--cols", "a", "--level", "0", "f.csv"], "args.bad-value", 2),
+    ("test: level one", b"a\n1\n", ["test", "t1", "--cols", "a", "--level", "1", "f.csv"], "args.bad-value", 2),
+    ("test: level above one", b"a\n1\n", ["test", "t1", "--cols", "a", "--level", "1.5", "f.csv"], "args.bad-value", 2),
+    ("test: level ten decimals", b"a\n1\n", ["test", "t1", "--cols", "a", "--level", "0.1234567891", "f.csv"], "args.bad-value", 2),
+    ("test: level text", b"a\n1\n", ["test", "t1", "--cols", "a", "--level", "high", "f.csv"], "args.bad-value", 2),
+    ("test: ragged", b"a,b\n1,2\n3\n", ["test", "t1", "--cols", "a", "f.csv"], "stats.csv-ragged", 8),
+    ("test: no header", b"", ["test", "t1", "--cols", "a", "f.csv"], "stats.no-header", 8),
+    ("test: rows limit", b"a\n1\n2\n3\n", ["test", "t1", "--cols", "a", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
     ("line too long", b"a\n" + b"1" * 200 + b"\n", ["describe", "--max-line-bytes", "100", "f.csv"], "limit.line-too-long", 8),
     ("header continues", b'"a\nb",c\n1,2\n', ["describe", "f.csv"], "stats.csv-multiline", 8),
     ("quantile type 0", b"a\n1\n", ["describe", "--quantile-type", "0", "f.csv"], "args.bad-value", 2),
@@ -201,7 +226,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 18)
+            k = int(r.next() % 20)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -234,6 +259,10 @@ def main():
                 argv = ["corr", "--method", "kendall", "f.csv"]
             elif k == 17:
                 argv = ["corr", "--method", "kendall", "--missing", "listwise", "--max-pairs", "1", "f.csv"]
+            elif k == 18:
+                argv = ["test", "t1", "--cols", "a", "f.csv"]
+            elif k == 19:
+                argv = ["test", "t1", "--cols", "a,b", "--mu0", "1", "--level", "0.9", "f.csv"]
             try:
                 p = call(a.bin, tmp, argv)
             except subprocess.TimeoutExpired:
