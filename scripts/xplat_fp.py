@@ -7,7 +7,7 @@
     python3 scripts/xplat_fp.py --mutants        # the checks are shown able to fail
 
 The fingerprint is one tab-separated line per sweep: `kind  name  count  sha256`, the hash over the driver's output lines (`id  hex bits of the result  code`) for a fixed list of cases:
-`special` the first N cases of each range of gate_special.py (seed 1), `edge` the edge cases of gate_domain.py for each function, `acc` the vectors of three families of measure_acc.py through acc-check, `describe` the bytes `stats describe` prints for 12 seeded CSV files, `corr`, `corr-spearman` and `corr-kendall` those of `stats corr` (Pearson, --method spearman, --method kendall) for 8 files each, `test-t1`, `test-t2`, `test-paired` and `test-chisq` and `test-prop` those of `stats test t1`, `t2` (Welch and pooled drawn), `paired`, `chisq` (independence and fit) and `prop` (one and two samples) for 8 files each.
+`special` the first N cases of each range of gate_special.py (seed 1), `edge` the edge cases of gate_domain.py for each function, `acc` the vectors of three families of measure_acc.py through acc-check, `describe` the bytes `stats describe` prints for 12 seeded CSV files, `corr`, `corr-spearman` and `corr-kendall` those of `stats corr` (Pearson, --method spearman, --method kendall) for 8 files each, `test-t1`, `test-t2`, `test-paired` and `test-chisq`, `test-prop` and `test-correct` those of `stats test t1`, `t2` (Welch and pooled drawn), `paired`, `chisq` (independence and fit) and `prop` (one and two samples) for 8 files each, the last with `--correct holm`, `bh` and `bonferroni` over a family of columns.
 Equal to the golden is equal to each other: the golden was written on one machine and every other platform of the workflow must print its bytes.
 Thread check: for every sweep, `special-check FN --threads T` for T in 1, 2, 3, 4, 7, 8, 16 must print the bytes of the sequential run.
 Exit 0: the fingerprint equals the golden and the thread check holds. Exit 1: a difference (printed). Exit 2: the script could not run.
@@ -29,6 +29,7 @@ import gate_corr  # noqa: E402
 import gate_test  # noqa: E402
 import gate_test2  # noqa: E402
 import gate_test3  # noqa: E402
+import gate_test5  # noqa: E402
 import tempfile  # noqa: E402
 
 GOLDEN = ROOT / "docs" / "xplat_fp.txt"
@@ -255,6 +256,26 @@ def test4_lines(stats):
     return out
 
 
+def test5_lines(stats):
+    """`stats test t1 --correct` on 8 seeded CSV files of 2 to 30 numeric columns (constants and equal columns among them: null p-values and ties): the hash of the bytes of the three corrections."""
+    out = []
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        r = gate_special.SM64(59)
+        for k in range(8):
+            ncols = [2, 3, 5, 10, 20, 30][int(r.next() % 6)]
+            n = [3, 5, 12][int(r.next() % 3)]
+            names, cols = gate_test5.gen_t1(r, ncols, n)
+            text = ",".join(names) + "\n" + "\n".join(",".join(c[i] for c in cols) for i in range(n)) + "\n"
+            (tmp / "f.csv").write_text(text)
+            h = hashlib.sha256()
+            for m in ("holm", "bh", "bonferroni"):
+                p = subprocess.run([stats, "test", "t1", "--cols", ",".join(names), "--mu0", "3", "--correct", m, "--root", str(tmp), "f.csv"], capture_output=True, text=True, timeout=300)
+                h.update(("exit %d %s" % (p.returncode, p.stdout)).encode())
+            out.append("test-correct\tfile%02d\t%d\t%s" % (k, ncols, h.hexdigest()))
+    return out
+
+
 def fingerprint(driver, acc, threads_check=True, stats=None):
     lines = []
     bad = []
@@ -283,6 +304,7 @@ def fingerprint(driver, acc, threads_check=True, stats=None):
         lines += test2_lines(stats)
         lines += test3_lines(stats)
         lines += test4_lines(stats)
+        lines += test5_lines(stats)
     return lines, bad
 
 

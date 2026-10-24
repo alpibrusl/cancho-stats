@@ -194,6 +194,27 @@ CASES = [
     ("test: prop levels limit", b"o\ny\nn\n", ["test", "prop", "--cols", "o", "--success", "y", "--max-groups", "1", "f.csv"], "limit.too-many-groups", 8),
     ("test: prop rows limit", b"o\ny\nn\ny\n", ["test", "prop", "--cols", "o", "--success", "y", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
     ("test: prop ragged", b"o,g\ny,a\nn\n", ["test", "prop", "--cols", "o", "--success", "y", "--group", "g", "f.csv"], "stats.csv-ragged", 8),
+    # --correct and --max-tests (docs/test.md section 12)
+    ("test: t1 holm", b"a,b,c\n1,5,3\n2,5,3\n4,1,3\n", ["test", "t1", "--cols", "a,b,c", "--correct", "holm", "f.csv"], None, 0),
+    ("test: t1 bh with a constant column", b"a,b\n1,3\n2,3\n4,3\n", ["test", "t1", "--cols", "a,b", "--correct", "bh", "f.csv"], None, 0),
+    ("test: t1 bonferroni, one column", b"a\n1\n2\n4\n", ["test", "t1", "--cols", "a", "--correct", "bonferroni", "f.csv"], None, 0),
+    ("test: t1 correct none", b"a\n1\n2\n4\n", ["test", "t1", "--cols", "a", "--correct", "none", "f.csv"], None, 0),
+    ("test: paired holm", b"a,b,c\n1,5,3\n2,5,4\n4,1,9\n", ["test", "paired", "--pairs", "a:b,b:c", "--correct", "holm", "f.csv"], None, 0),
+    ("test: t2 bh", b"v,w,g\n1,5,a\n2,3,a\n4,3,b\n7,1,b\n8,2,b\n", ["test", "t2", "--cols", "v,w", "--group", "g", "--correct", "bh", "f.csv"], None, 0),
+    ("test: chisq holm", b"a,b,g\nx,y,u\nx,z,v\ny,y,u\ny,z,v\n", ["test", "chisq", "--cols", "a,b", "--vs", "g", "--correct", "holm", "f.csv"], None, 0),
+    ("test: prop bonferroni", b"a,b\ny,n\nn,n\ny,y\n", ["test", "prop", "--cols", "a,b", "--success", "y", "--correct", "bonferroni", "f.csv"], None, 0),
+    ("test: correct unknown", b"a\n1\n2\n", ["test", "t1", "--cols", "a", "--correct", "sidak", "f.csv"], "args.bad-value", 2),
+    ("test: correct with describe", b"a\n1\n2\n", ["describe", "--correct", "holm", "f.csv"], "args.bad-value", 2),
+    ("test: correct with corr", b"a,b\n1,2\n2,3\n", ["corr", "--correct", "holm", "f.csv"], "args.bad-value", 2),
+    ("test: max-tests zero", b"a\n1\n2\n", ["test", "t1", "--cols", "a", "--max-tests", "0", "f.csv"], "args.bad-value", 2),
+    ("test: max-tests above the ceiling", b"a\n1\n2\n", ["test", "t1", "--cols", "a", "--max-tests", "32641", "f.csv"], "args.bad-value", 2),
+    ("test: too many tests for a family", b"a,b,c\n1,5,3\n2,5,3\n", ["test", "t1", "--cols", "a,b,c", "--correct", "holm", "--max-tests", "2", "f.csv"], "limit.too-many-tests", 8),
+    ("test: family exactly at max-tests", b"a,b\n1,5\n2,6\n4,1\n", ["test", "t1", "--cols", "a,b", "--correct", "holm", "--max-tests", "2", "f.csv"], None, 0),
+    ("test: too many pairs for a family", b"a,b,c\n1,5,3\n2,5,3\n", ["test", "paired", "--pairs", "a:b,b:c,a:c", "--correct", "bh", "--max-tests", "2", "f.csv"], "limit.too-many-tests", 8),
+    ("test: correct with a ragged file", b"a,b\n1,5\n2\n", ["test", "t1", "--cols", "a,b", "--correct", "holm", "f.csv"], "stats.csv-ragged", 8),
+    ("test: correct with a refusal after the header", b"a,g\nx,u\ny,v\n", ["test", "chisq", "--cols", "a,a", "--vs", "zz", "--correct", "bh", "f.csv"], "stats.no-such-column", 2),
+    ("test: correct with a group of three levels", b"o,g\ny,a\nn,b\ny,c\n", ["test", "prop", "--cols", "o", "--success", "y", "--group", "g", "--correct", "bonferroni", "f.csv"], "stats.group-levels", 2),
+    ("test: more tests than max-tests without a correction", b"a,b,c\n1,5,3\n2,5,3\n4,1,2\n", ["test", "t1", "--cols", "a,b,c", "--max-tests", "1", "f.csv"], None, 0),
     ("test: paired text column", b"a,b\n1,x\n2,y\n", ["test", "paired", "--pairs", "a:b", "f.csv"], "stats.non-numeric", 2),
     ("test: paired pairs limit", b"a,b,c\n1,2,3\n", ["test", "paired", "--pairs", "a:b,b:c", "--max-pairs", "1", "f.csv"], "limit.too-many-pairs", 8),
     ("test: paired rows limit", b"a,b\n1,2\n2,3\n3,4\n", ["test", "paired", "--pairs", "a:b", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
@@ -327,7 +348,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 30)
+            k = int(r.next() % 33)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -370,6 +391,12 @@ def main():
                 argv = ["test", "t2", "--cols", "a,b", "--group", "a", "--variance", "pooled", "--max-groups", "3", "f.csv"]
             elif k == 22:
                 argv = ["test", "paired", "--pairs", "a:b", "f.csv"]
+            elif k == 30:
+                argv = ["test", "t1", "--cols", "a,b", "--correct", "holm", "--mu0", "1", "f.csv"]
+            elif k == 31:
+                argv = ["test", "chisq", "--cols", "a,b", "--vs", "a", "--correct", "bh", "--max-tests", "1", "f.csv"]
+            elif k == 32:
+                argv = ["test", "prop", "--cols", "b,a", "--success", "1", "--correct", "bonferroni", "f.csv"]
             elif k == 27:
                 argv = ["test", "prop", "--cols", "a", "--success", "1", "f.csv"]
             elif k == 28:

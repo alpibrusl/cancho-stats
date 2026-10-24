@@ -340,3 +340,28 @@ def prop_two(x1, n1, x2, n2, level):
     out["z2"] = z2
     out["p"] = p_normal_two_sided(z2)
     return out
+
+
+def adjust(ps, method):
+    """the adjusted p-values of the entries `ps` (floats, None for a test without one) by bonferroni, holm or bh, from the definitions on Fractions of the printed doubles, each rounded once; ties in the order of the entries.
+    The sort is Python's (stable) on (p, position); the running maximum and minimum are taken over the exact Fractions (not over rounded values), which is what the definition says."""
+    idx = [i for i, p in enumerate(ps) if p is not None]
+    m = len(idx)
+    exact = {i: Fraction(ps[i]) for i in idx}
+    order = sorted(idx, key=lambda i: (exact[i], i))
+    out = [None] * len(ps)
+    if method == "bonferroni":
+        for i in idx:
+            out[i] = rounded(min(Fraction(1), m * exact[i]))
+    elif method == "holm":
+        run = Fraction(0)
+        for r, i in enumerate(order, start=1):
+            run = max(run, min(Fraction(1), (m - r + 1) * exact[i]))
+            out[i] = rounded(run)
+    elif method == "bh":
+        run = Fraction(1)
+        for r in range(m, 0, -1):
+            i = order[r - 1]
+            run = min(run, min(Fraction(1), m * exact[i] / r))
+            out[i] = rounded(run)
+    return out
