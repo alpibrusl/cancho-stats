@@ -41,7 +41,9 @@ M = [
     ("correct-none-allowed", F, "if is_test && !bytes.equal(cli.text(args, parsed, table, \"correct\"), \"none\") {\n        var named", "if is_test && bytes.equal(cli.text(args, parsed, table, \"correct\"), \"none\") {\n        var named"),
 ]
 
-EXPLAINED = {}
+EXPLAINED = {
+    "sort-ties": "equivalent: the order of equal p-values cannot change an adjusted value (the running maximum of Holm and the running minimum of BH make tied entries equal), as docs/test.md section 12 says",
+}
 
 
 def gates(binary, files):
