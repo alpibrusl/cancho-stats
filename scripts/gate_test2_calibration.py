@@ -29,7 +29,7 @@ from gate_special import SM64  # noqa: E402
 from gate_test_calibration import ALPHA_TEST, interval, normal  # noqa: E402
 
 # (n1, n2, sd1, sd2): Welch is judged on every one, the pooled test where the sds are equal; unequal sizes with the larger variance in the smaller group, in the larger group, and in both
-CONFIGS = [(3, 3, 1.0, 1.0), (5, 15, 1.0, 1.0), (30, 30, 1.0, 1.0), (10, 40, 4.0, 1.0), (40, 10, 4.0, 1.0), (20, 20, 1.0, 3.0), (100, 300, 2.0, 1.0)]
+CONFIGS = [(2, 2, 1.0, 1.0), (3, 3, 1.0, 1.0), (5, 15, 1.0, 1.0), (30, 30, 1.0, 1.0), (10, 40, 4.0, 1.0), (40, 10, 4.0, 1.0), (20, 20, 1.0, 3.0), (100, 300, 2.0, 1.0)]
 NS = (3, 5, 10, 30, 100, 1000)
 
 
@@ -111,6 +111,10 @@ def calibrate_t2(a, lines, bad, refused):
             okp, rejp, ksp = judge(pp, lo, hi)
             covp = sum(1 for x in res if x[2]["interval"]["low"] <= 0.0 <= x[2]["interval"]["high"])
             okp = okp and clo <= covp <= chi
+            # the control of the degrees of freedom is judged where the p-value is an exact Student t: the pooled test, whose smallest case (3,3) has 4 (Welch's own p-value is only approximately t)
+            okc, _, _ = judge([2.0 * ss.t.sf(abs(x[2]["statistic"]), x[2]["df"] + 1.0) for x in res], lo, hi)
+            if not okc:
+                refused["df-plus-one"] = True
             lines.append("pooled n=(%d,%d) sd=(%g,%g): rejected %d of %d, KS p %.3f; the 95%% interval covered %d%s" % (n1, n2, s1, s2, rejp, reps, ksp, covp, "" if okp else "  <-- FAILS"))
             if not okp:
                 bad.append("pooled n=(%d,%d) null calibration or coverage" % (n1, n2))
