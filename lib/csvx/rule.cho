@@ -1,0 +1,55 @@
+edition 5;
+
+module csvx.rule;
+
+import std.json;
+import toolbox.fail;
+
+// The rule tags of this tool's own, and the two ways to refuse with one of them (moved out of tools/stats/main.cho, which is limited to 2,000 lines).
+
+pub fn extra() -> [] &static [byte] {
+    return "stats.csv-ragged|8|never|a record with a different number of fields than the header;stats.csv-multiline|8|never|a record that continues on the next line, which this version does not read;stats.csv-bad-quote|8|never|a quote that opens or closes where it may not;stats.no-header|8|never|a file with no header line;stats.bad-verb|2|never|the first operand is not a verb this tool has;limit.too-many-rows|8|never|more data rows than --max-rows;limit.too-many-columns|8|never|more columns than --max-cols;limit.too-many-cells|8|never|more cells than --max-cells;stats.file-changed|8|never|the file is not the same on the second pass that counts the levels of a text column;stats.no-such-column|2|never|--by names no column of the header;stats.ambiguous-column|2|never|--by names a header that two or more columns have;limit.too-many-groups|8|never|more groups than --max-groups;stats.corr-columns|2|never|fewer than two numeric columns to correlate;stats.non-numeric|2|never|--cols names a column that has no numbers or has a cell that is not a number;limit.too-many-pairs|8|never|more pairs of columns than --max-pairs;stats.test-columns|2|never|test without --cols (or --pairs, or --group for t2);stats.group-levels|2|never|--group names a column that does not have exactly two levels";
+}
+
+// an error of this tool's own (or a standard one) with one string detail
+pub fn refuse[&h, &m, &n, &k, &v](heap: &!h Heap, e: fail.Errors, rule: &static [byte], message: &m [byte], hint: &n [byte], key: &k [byte], value: &v [byte]) -> [heap] fail.Errors {
+    var w = fail.open_in(heap, extra(), rule, message, hint);
+    w = fail.no_repair(heap, w);
+    w = fail.detail_open(heap, w);
+    if len(key) > 0 {
+        w = json.put_key(heap, w, key);
+        w = json.put_string(heap, w, value);
+    }
+    return fail.add(heap, e, w);
+}
+
+pub fn refuse_int[&h, &m, &n, &k](heap: &!h Heap, e: fail.Errors, rule: &static [byte], message: &m [byte], hint: &n [byte], key: &k [byte], value: int, key2: &k [byte], value2: int) -> [heap] fail.Errors {
+    var w = fail.open_in(heap, extra(), rule, message, hint);
+    w = fail.no_repair(heap, w);
+    w = fail.detail_open(heap, w);
+    w = json.put_key(heap, w, key);
+    w = json.put_int(heap, w, value);
+    w = json.put_key(heap, w, key2);
+    w = json.put_int(heap, w, value2);
+    return fail.add(heap, e, w);
+}
+
+// The refusal for a name of --cols (or of --pairs) that picks no column (st 1), more than one (2) or is malformed (3); `item` is the text of the item
+pub fn refuse_pick[&h, &i](heap: &!h Heap, e: fail.Errors, st: int, item: &i [byte], paired: bool) -> [heap] fail.Errors {
+    if st == 1 {
+        if paired {
+            return refuse(heap, e, "stats.no-such-column", "--pairs names a column the header does not have", "the header names are the first line of the file; the match is exact", "pair", item);
+        }
+        return refuse(heap, e, "stats.no-such-column", "--cols names a column the header does not have", "the header names are the first line of the file; the match is exact", "column", item);
+    }
+    if st == 2 {
+        if paired {
+            return refuse(heap, e, "stats.ambiguous-column", "two or more columns have a name given to --pairs", "rename the columns so that the name is unique", "pair", item);
+        }
+        return refuse(heap, e, "stats.ambiguous-column", "two or more columns have a name given to --cols", "rename the columns so that the name is unique", "column", item);
+    }
+    if paired {
+        return refuse(heap, e, "args.bad-value", "--pairs has an item that is not two names around a colon", "--pairs A:B,C:D: no empty name, no empty item; a name with a colon in it cannot be named", "flag", "--pairs");
+    }
+    return refuse(heap, e, "args.bad-value", "--cols has an empty item", "--cols name1,name2: no empty item, no leading or trailing comma", "flag", "--cols");
+}

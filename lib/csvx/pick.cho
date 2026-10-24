@@ -19,20 +19,7 @@ pub fn select[&n, &en, &t, &o](names: &n [byte], ends: &en vec.Vec[int], ncols: 
         if len(tok) == 0 {
             return (3, i);
         }
-        var matches = 0;
-        var at = 0;
-        j = 0;
-        while j < ncols {
-            var from = 0;
-            if j > 0 {
-                from = vec.get(ends, j - 1);
-            }
-            if bytes.equal(names[from..vec.get(ends, j)], tok) {
-                matches = matches + 1;
-                at = j;
-            }
-            j = j + 1;
-        }
+        let (matches, at) = find(names, ends, ncols, tok);
         if matches == 0 {
             return (1, i);
         }
@@ -40,6 +27,58 @@ pub fn select[&n, &en, &t, &o](names: &n [byte], ends: &en vec.Vec[int], ncols: 
             return (2, i);
         }
         sel[at] = 1;
+        i = i + 1;
+    }
+    return (0, 0);
+}
+
+// The column of the header that has exactly the name `tok`: (the number of columns that have it, the index of the last one)
+fn find[&n, &en, &t](names: &n [byte], ends: &en vec.Vec[int], ncols: int, tok: &t [byte]) -> [] (int, int) {
+    var matches = 0;
+    var at = 0;
+    var j = 0;
+    while j < ncols {
+        var from = 0;
+        if j > 0 {
+            from = vec.get(ends, j - 1);
+        }
+        if bytes.equal(names[from..vec.get(ends, j)], tok) {
+            matches = matches + 1;
+            at = j;
+        }
+        j = j + 1;
+    }
+    return (matches, at);
+}
+
+// The pairs named by --pairs A:B,C:D: item i is the columns pa[i] and pb[i]. Answers (0, _) when all is well, else (1, i) item i names a column that no column of the header has, (2, i) one that two or more have,
+// (3, i) item i is not two names around the first colon (a name with a colon in it cannot be named in a pair).
+pub fn pairs[&n, &en, &t, &a, &b](names: &n [byte], ends: &en vec.Vec[int], ncols: int, list: &t [byte], pa: &!a [int], pb: &!b [int]) -> [] (int, int) {
+    let count = bytes.count_byte(list, ',') + 1;
+    var i = 0;
+    while i < count {
+        let tok = bytes.field(list, ',', i + 1);
+        var colon = 0 - 1;
+        var k = 0;
+        while k < len(tok) && colon < 0 {
+            if int_of(tok[k]) == 58 {
+                colon = k;
+            }
+            k = k + 1;
+        }
+        if colon < 1 || colon + 1 >= len(tok) {
+            return (3, i);
+        }
+        let (ma, ia) = find(names, ends, ncols, tok[0..colon]);
+        let (mb, ib) = find(names, ends, ncols, tok[colon + 1..len(tok)]);
+        if ma == 0 || mb == 0 {
+            return (1, i);
+        }
+        if ma > 1 || mb > 1 {
+            return (2, i);
+        }
+        pa[i] = ia;
+        pb[i] = ib;
         i = i + 1;
     }
     return (0, 0);

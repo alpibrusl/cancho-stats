@@ -23,6 +23,8 @@ step "stats describe"; $PY scripts/gate_describe.py --files 200; $PY scripts/gat
 step "power sums"; $PY scripts/gate_psum.py --vectors 300; $PY scripts/gate_xsum.py --vectors 300
 step "stats corr"; $PY scripts/gate_corr.py --files 200 --scipy; $PY scripts/gate_corr.py --files 200 --scipy --method spearman; $PY scripts/gate_corr.py --files 200 --scipy --method kendall; $PY scripts/gate_corr_calibration.py; $PY scripts/gate_corr_calibration.py --method spearman; $PY scripts/gate_corr_calibration.py --method kendall
 step "stats test"; $PY scripts/gate_test.py --files 200 --scipy; $PY scripts/gate_test_calibration.py
+step "stats test t2 and paired"; $PY scripts/gate_test2.py --kind t2 --files 200 --scipy; $PY scripts/gate_test2.py --kind paired --files 200 --scipy; $PY scripts/gate_test2_calibration.py --kind t2; $PY scripts/gate_test2_calibration.py --kind paired
+step "mutant patterns"; for m in bigint psum xsum stats central quantile histogram levels by cols corr test test2 special; do $PY scripts/mutants_$m.py --check; done
 step "exact accumulation"; $PY scripts/measure_acc.py | tail -3
 step "accuracy sweeps (fast)"; $PY scripts/gate_special.py --fast
 step "independence"; $PY scripts/gate_independence.py --fast
@@ -30,6 +32,6 @@ step "determinism"; $PY scripts/xplat_fp.py; $PY scripts/xplat_fp.py --mutants |
 if [ "$1" = "--full" ]; then
   step "accuracy sweeps (10%)"; $PY scripts/gate_special.py --n-scale 0.1
   step "mutants of the special functions"; $PY scripts/mutants_special.py
-  step "mutants of the big integers, the power sums and stats"; $PY scripts/mutants_bigint.py; $PY scripts/mutants_psum.py; $PY scripts/mutants_xsum.py; $PY scripts/mutants_stats.py; $PY scripts/mutants_central.py; $PY scripts/mutants_quantile.py; $PY scripts/mutants_histogram.py; $PY scripts/mutants_levels.py; $PY scripts/mutants_by.py; $PY scripts/mutants_cols.py; $PY scripts/mutants_corr.py; $PY scripts/mutants_test.py
+  step "mutants of the big integers, the power sums and stats"; $PY scripts/mutants_bigint.py; $PY scripts/mutants_psum.py; $PY scripts/mutants_xsum.py; $PY scripts/mutants_stats.py; $PY scripts/mutants_central.py; $PY scripts/mutants_quantile.py; $PY scripts/mutants_histogram.py; $PY scripts/mutants_levels.py; $PY scripts/mutants_by.py; $PY scripts/mutants_cols.py; $PY scripts/mutants_corr.py; $PY scripts/mutants_test.py; $PY scripts/mutants_test2.py
 fi
 echo; echo "check.sh: all gates passed"

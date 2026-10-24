@@ -40,7 +40,7 @@ def t_quantile_upper(alpha_half, df):
     def f(q):
         return mpmath.betainc(d / 2, mpmath.mpf(1) / 2, 0, d / (d + q * q), regularized=True) - target
 
-    return mpmath.findroot(f, float(ss.t.isf(float(alpha_half), df)))
+    return mpmath.findroot(f, float(ss.t.isf(float(alpha_half), float(df))))
 
 
 def level_parts(text):
@@ -112,10 +112,92 @@ def p_ok(got, want, df):
     return abs(mpmath.mpf(got) - want) <= (mpmath.mpf("1e-11") + (df + 1) * EPS) * want
 
 
-def endpoint_ok(got, want, estimate, half):
-    """the interval bound of T-C: absolute 1e-12 * max(|estimate|, half-width), and never below two units of 2^-1074"""
+def endpoint_ok(got, want, estimate, half, q=0):
+    """the interval bound of T-C: absolute 1e-12 * max(|estimate|, half-width), and never below 2 + q units of 2^-1074 (q the quantile of the answer; 2 for t1, which has always been judged by two units): the standard error is a
+    double, so in the subnormal range it is off by half a unit, which q multiplies (t2 and paired, whose first run had a case at 2.4 units with q = 5.8)"""
     if got is None:
         return False
     scale = max(abs(mpmath.mpf(estimate)), abs(half))
-    floor = 2 * mpmath.mpf(2) ** -1074   # an endpoint in the subnormal range cannot be closer to the exact value than its spacing
+    floor = (2 + mpmath.mpf(q)) * mpmath.mpf(2) ** -1074   # an endpoint in the subnormal range cannot be closer to the exact value than its spacing
     return abs(mpmath.mpf(got) - want) <= max(mpmath.mpf("1e-12") * scale, floor)
+
+
+def frac_mpf(fr):
+    return mpmath.mpf(fr.numerator) / fr.denominator
+
+
+def sums(vals):
+    f = [Fraction(v) for v in vals]
+    return len(f), sum(f, Fraction(0)), sum((v * v for v in f), Fraction(0))
+
+
+def t2(a_vals, b_vals, pooled, level):
+    """two-sample t (Welch, or pooled with `pooled`) of the present values of the groups a and b (docs/test.md section 2), written from the textbook formulas on Fractions, not from the program's grouping of terms:
+    m = S1 / n, v = (S2 - S1^2 / n) / (n - 1), t = (m1 - m2) / sqrt(v1/n1 + v2/n2) (Welch) or / sqrt(vp (1/n1 + 1/n2)) (pooled), the Welch-Satterthwaite or n1 + n2 - 2 degrees of freedom, Cohen's d on the pooled sd.
+    A dict like t1: n1, n2, statistic, df (Fraction), p (mpf), d, estimate, se, low/high/half (mpf), reason, variance_ratio (a double or None)."""
+    n1, s1a, s2a = sums(a_vals)
+    n2, s1b, s2b = sums(b_vals)
+    out = {"n1": n1, "n2": n2, "statistic": None, "df": None, "p": None, "d": None, "estimate": None, "low": None, "high": None, "half": None, "reason": None, "variance_ratio": None, "se": None, "t2": None}
+    if n1 < 2 or n2 < 2:
+        out["reason"] = "too-few-rows"
+        return out
+    m1, m2 = s1a / n1, s1b / n2
+    v1 = (s2a - s1a * s1a / n1) / (n1 - 1)
+    v2 = (s2b - s1b * s1b / n2) / (n2 - 1)
+    delta = m1 - m2
+    out["estimate"] = rounded(delta)
+    if v2 != 0:
+        out["variance_ratio"] = rounded(v1 / v2)
+    nu = n1 + n2 - 2
+    if pooled:
+        vp = ((n1 - 1) * v1 + (n2 - 1) * v2) / nu
+        se_sq = vp * (Fraction(1, n1) + Fraction(1, n2))
+        df = Fraction(nu)
+    else:
+        a, b = v1 / n1, v2 / n2
+        se_sq = a + b
+        df = (a + b) ** 2 / (a * a / (n1 - 1) + b * b / (n2 - 1)) if se_sq != 0 else None
+    out["se"] = sqrt_round(se_sq)
+    out["df"] = df
+    if df is None:
+        df_iv = Fraction(1)
+    else:
+        df_iv = df
+    ah = alpha_half(level)
+    q = t_quantile_upper(ah, frac_mpf(df_iv))
+    se = mpmath.sqrt(frac_mpf(se_sq))
+    mean = frac_mpf(delta)
+    out["q"] = q
+    out["half"] = q * se
+    out["low"] = mean - q * se
+    out["high"] = mean + q * se
+    if se_sq == 0:
+        out["reason"] = "variance-zero"
+        return out
+    tsq = delta * delta / se_sq
+    try:
+        t = sqrt_round(tsq)
+    except OverflowError:
+        out["reason"] = "statistic-beyond-double"
+        return out
+    out["statistic"] = -t if delta < 0 else t
+    vp = ((n1 - 1) * v1 + (n2 - 1) * v2) / nu
+    d = sqrt_round(delta * delta / vp)
+    out["d"] = -d if delta < 0 else d
+    out["x"] = df / (df + tsq)
+    out["p"] = p_two_sided_t(frac_mpf(df), out["x"])
+    out["t2"] = tsq
+    return out
+
+
+def p_two_sided_t(df, x):  # noqa: F811  (a real df: an mpf or an int; x an exact Fraction in [0, 1])
+    """the two-sided p-value of Student's t on df degrees of freedom from x = df / (df + t^2): I_x(df / 2, 1 / 2)"""
+    if x == 0:
+        return mpmath.mpf(0)
+    return mpmath.betainc(mpmath.mpf(df) / 2, mpmath.mpf(1) / 2, 0, mpmath.mpf(x.numerator) / x.denominator, regularized=True)
+
+
+def paired(pairs, level):
+    """the paired t: t1 of the exact differences a - b over the pairs where both are present (mu0 = 0)"""
+    diffs = [Fraction(a) - Fraction(b) for a, b in pairs]
+    return t1(diffs, 0.0, level)

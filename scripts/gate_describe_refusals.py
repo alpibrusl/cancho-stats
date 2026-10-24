@@ -97,6 +97,49 @@ CASES = [
     ("test: ragged", b"a,b\n1,2\n3\n", ["test", "t1", "--cols", "a", "f.csv"], "stats.csv-ragged", 8),
     ("test: no header", b"", ["test", "t1", "--cols", "a", "f.csv"], "stats.no-header", 8),
     ("test: rows limit", b"a\n1\n2\n3\n", ["test", "t1", "--cols", "a", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
+    # test t2 and paired (docs/test.md)
+    ("test: t2", b"v,g\n1,a\n2,a\n4,b\n7,b\n", ["test", "t2", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: t2 pooled, level, two columns", b"v,w,g\n1,5,a\n2,3,a\n4,3,b\n7,1,b\n8,2,b\n", ["test", "t2", "--cols", "v,w", "--group", "g", "--variance", "pooled", "--level", "0.9", "f.csv"], None, 0),
+    ("test: t2 groups of one row each", b"v,g\n1,a\n2,b\n", ["test", "t2", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: t2 constant groups", b"v,g\n3,a\n3,a\n3,b\n3,b\n3,b\n", ["test", "t2", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: t2 constant groups pooled", b"v,g\n3,a\n3,a\n5,b\n5,b\n", ["test", "t2", "--cols", "v", "--group", "g", "--variance", "pooled", "f.csv"], None, 0),
+    ("test: t2 missing group cells and values", b"v,g\n1,a\n,a\n2,\n4,b\n7,b\n9,a\n", ["test", "t2", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: t2 a group with no value", b"v,g\n1,a\n2,a\n,b\n,b\n", ["test", "t2", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: t2 no group flag", b"v,g\n1,a\n2,b\n", ["test", "t2", "--cols", "v", "f.csv"], "stats.test-columns", 2),
+    ("test: t2 no columns", b"v,g\n1,a\n2,b\n", ["test", "t2", "--group", "g", "f.csv"], "stats.test-columns", 2),
+    ("test: t2 one level", b"v,g\n1,a\n2,a\n", ["test", "t2", "--cols", "v", "--group", "g", "f.csv"], "stats.group-levels", 2),
+    ("test: t2 three levels", b"v,g\n1,a\n2,b\n3,c\n", ["test", "t2", "--cols", "v", "--group", "g", "f.csv"], "stats.group-levels", 2),
+    ("test: t2 group column empty", b"v,g\n1,\n2,\n", ["test", "t2", "--cols", "v", "--group", "g", "f.csv"], "stats.group-levels", 2),
+    ("test: t2 no such group column", b"v,g\n1,a\n2,b\n", ["test", "t2", "--cols", "v", "--group", "z", "f.csv"], "stats.no-such-column", 2),
+    ("test: t2 ambiguous group column", b"v,g,g\n1,a,a\n2,b,b\n", ["test", "t2", "--cols", "v", "--group", "g", "f.csv"], "stats.ambiguous-column", 2),
+    ("test: t2 no such column", b"v,g\n1,a\n2,b\n", ["test", "t2", "--cols", "z", "--group", "g", "f.csv"], "stats.no-such-column", 2),
+    ("test: t2 text column", b"v,w,g\n1,x,a\n2,y,b\n", ["test", "t2", "--cols", "w", "--group", "g", "f.csv"], "stats.non-numeric", 2),
+    ("test: t2 text in one group", b"v,g\n1,a\n2,a\nx,b\n3,b\n", ["test", "t2", "--cols", "v", "--group", "g", "f.csv"], "stats.non-numeric", 2),
+    ("test: t2 variance unknown", b"v,g\n1,a\n2,b\n", ["test", "t2", "--cols", "v", "--group", "g", "--variance", "equal", "f.csv"], "args.bad-value", 2),
+    ("test: t2 groups limit", b"v,g\n1,a\n2,b\n", ["test", "t2", "--cols", "v", "--group", "g", "--max-groups", "1", "f.csv"], "limit.too-many-groups", 8),
+    ("test: t2 rows limit", b"v,g\n1,a\n2,b\n3,b\n", ["test", "t2", "--cols", "v", "--group", "g", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
+    ("test: t2 ragged", b"v,g\n1,a\n2\n", ["test", "t2", "--cols", "v", "--group", "g", "f.csv"], "stats.csv-ragged", 8),
+    ("test: t2 level out of range", b"v,g\n1,a\n2,b\n", ["test", "t2", "--cols", "v", "--group", "g", "--level", "1", "f.csv"], "args.bad-value", 2),
+    ("test: paired", b"a,b\n1,2\n2,5\n4,1\n", ["test", "paired", "--pairs", "a:b", "f.csv"], None, 0),
+    ("test: paired two pairs, one reversed, level", b"a,b,c\n1,2,7\n2,5,3\n4,1,2\n", ["test", "paired", "--pairs", "a:b,c:a,b:c", "--level", "0.99", "f.csv"], None, 0),
+    ("test: paired with missing cells", b"a,b\n1,\n,2\n3,4\n4,7\n5,5.5\n", ["test", "paired", "--pairs", "a:b", "f.csv"], None, 0),
+    ("test: paired a column with itself", b"a,b\n1,2\n2,5\n4,1\n", ["test", "paired", "--pairs", "a:a", "f.csv"], None, 0),
+    ("test: paired one pair of rows", b"a,b\n1,2\n", ["test", "paired", "--pairs", "a:b", "f.csv"], None, 0),
+    ("test: paired no pairs", b"a,b\n1,2\n", ["test", "paired", "f.csv"], "stats.test-columns", 2),
+    ("test: paired --cols is not enough", b"a,b\n1,2\n", ["test", "paired", "--cols", "a,b", "f.csv"], "stats.test-columns", 2),
+    ("test: paired item without colon", b"a,b\n1,2\n", ["test", "paired", "--pairs", "a", "f.csv"], "args.bad-value", 2),
+    ("test: paired empty name", b"a,b\n1,2\n", ["test", "paired", "--pairs", "a:", "f.csv"], "args.bad-value", 2),
+    ("test: paired empty first name", b"a,b\n1,2\n", ["test", "paired", "--pairs", ":b", "f.csv"], "args.bad-value", 2),
+    ("test: paired empty item", b"a,b\n1,2\n", ["test", "paired", "--pairs", "a:b,", "f.csv"], "args.bad-value", 2),
+    ("test: paired no such column", b"a,b\n1,2\n", ["test", "paired", "--pairs", "a:z", "f.csv"], "stats.no-such-column", 2),
+    ("test: paired ambiguous column", b"a,a\n1,2\n", ["test", "paired", "--pairs", "a:a", "f.csv"], "stats.ambiguous-column", 2),
+    ("test: paired second name ambiguous", b"a,b,b\n1,2,3\n", ["test", "paired", "--pairs", "a:b", "f.csv"], "stats.ambiguous-column", 2),
+    ("test: paired second name missing", b"a,b\n1,2\n", ["test", "paired", "--pairs", "b:z", "f.csv"], "stats.no-such-column", 2),
+    ("test: paired pairs at the limit", b"a,b,c\n1,2,3\n2,5,1\n", ["test", "paired", "--pairs", "a:b", "--max-pairs", "1", "f.csv"], None, 0),
+    ("test: paired text column", b"a,b\n1,x\n2,y\n", ["test", "paired", "--pairs", "a:b", "f.csv"], "stats.non-numeric", 2),
+    ("test: paired pairs limit", b"a,b,c\n1,2,3\n", ["test", "paired", "--pairs", "a:b,b:c", "--max-pairs", "1", "f.csv"], "limit.too-many-pairs", 8),
+    ("test: paired rows limit", b"a,b\n1,2\n2,3\n3,4\n", ["test", "paired", "--pairs", "a:b", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
+    ("test: paired ragged", b"a,b\n1,2\n3\n", ["test", "paired", "--pairs", "a:b", "f.csv"], "stats.csv-ragged", 8),
     ("line too long", b"a\n" + b"1" * 200 + b"\n", ["describe", "--max-line-bytes", "100", "f.csv"], "limit.line-too-long", 8),
     ("header continues", b'"a\nb",c\n1,2\n', ["describe", "f.csv"], "stats.csv-multiline", 8),
     ("quantile type 0", b"a\n1\n", ["describe", "--quantile-type", "0", "f.csv"], "args.bad-value", 2),
@@ -226,7 +269,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 20)
+            k = int(r.next() % 24)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -263,6 +306,14 @@ def main():
                 argv = ["test", "t1", "--cols", "a", "f.csv"]
             elif k == 19:
                 argv = ["test", "t1", "--cols", "a,b", "--mu0", "1", "--level", "0.9", "f.csv"]
+            elif k == 20:
+                argv = ["test", "t2", "--cols", "a", "--group", "b", "f.csv"]
+            elif k == 21:
+                argv = ["test", "t2", "--cols", "a,b", "--group", "a", "--variance", "pooled", "--max-groups", "3", "f.csv"]
+            elif k == 22:
+                argv = ["test", "paired", "--pairs", "a:b", "f.csv"]
+            elif k == 23:
+                argv = ["test", "paired", "--pairs", "b:a,a:a", "--level", "0.9", "--max-rows", "6", "f.csv"]
             try:
                 p = call(a.bin, tmp, argv)
             except subprocess.TimeoutExpired:

@@ -1,0 +1,297 @@
+edition 5;
+
+module stest.welch;
+
+import std.vec;
+import acc.bigint;
+import acc.central;
+import acc.psum;
+import flt;
+import metrics.rank;
+
+// The two-sample t of one column (docs/test.md sections 2 and 3). The groups a and b have n1 and n2 present values, S1 = sum x (units 2^-1074) and S2 = sum x^2 (units 2^-2148) from acc.psum, and the exact integers
+//     A = n1 S2a - S1a^2        B = n2 S2b - S1b^2          P = n2 S1a - n1 S1b          (the difference of the means is  P / (n1 n2))
+// give, for the Welch test (n1 and n2 being at least 2)
+//     se^2 = Q / R           Q = A n2^2 (n2 - 1) + B n1^2 (n1 - 1)       R = n1^2 n2^2 (n1 - 1) (n2 - 1)
+//     t^2  = P^2 (n1 - 1) (n2 - 1) / Q
+//     df   = Q^2 (n1 - 1) (n2 - 1) / (A^2 n2^4 (n2 - 1)^3 + B^2 n1^4 (n1 - 1)^3)          (Satterthwaite)
+// and for the pooled test, with W = A n2 + B n1 and nu = n1 + n2 - 2,
+//     se^2 = W (n1 + n2) / (n1^2 n2^2 nu)           t^2 = P^2 nu / (W (n1 + n2))           df = nu.
+// Cohen's d, under either test, is the difference over the pooled standard deviation:  d^2 = P^2 nu / (n1 n2 W).  The ratio of the sample variances is  A n2 (n2 - 1) / (B n1 (n1 - 1)).
+// Each of t, d, the difference, se, df and the ratio is ONE rounding of an exact rational (the roots through central.sqrt_ratio_bits_exp), none is formed from rounded means or variances.
+
+pub struct TwoSample {
+    n1: int,
+    n2: int,
+    status: int,
+    tb: int,
+    tc: int,
+    db: int,
+    dc: int,
+    fb: int,
+    fc: int,
+    eb: int,
+    ec: int,
+    sb: int,
+    sc: int,
+    vb: int,
+    vstate: int,
+}
+
+fn slot() -> [] int {
+    return 24;
+}
+
+// the present values of column `col` of the group's keys into the accumulators acc = [S1 | S2]; answers how many
+fn fill[&k, &a, &w](keys: &k vec.Vec[int], ncols: int, col: int, rows: int, acc: &!a [int], wk: &!w [int]) -> [] int {
+    let s1 = psum.size(1);
+    let s2 = psum.size(2);
+    var n = 0;
+    var i = 0;
+    while i < rows {
+        let key = vec.get(keys, i * ncols + col);
+        if key != rank.min_int() {
+            let xb = bits_of(flt.float_of_key(key));
+            psum.add(acc[0..s1], 1, xb, wk);
+            psum.add(acc[s1..s1 + s2], 2, xb, wk);
+            n = n + 1;
+        }
+        i = i + 1;
+    }
+    return n;
+}
+
+// t[ro] = t[ra] (la limbs) times the lf limbs of slot fo of f
+fn mulf[&t, &f](t: &!t [int], ro: int, ra: int, la: int, f: &f [int], fo: int, lf: int) -> [] int {
+    let c = central.cap();
+    bigint.clear(t[ro * c..ro * c + c], c);
+    bigint.mul(t[ro * c..ro * c + c], t[ra * c..ra * c + la], la, f[fo * slot()..fo * slot() + lf], lf);
+    return 0;
+}
+
+// t[ro] = t[ra] (la limbs) times t[rb] (lb limbs)
+fn mulr[&t](t: &!t [int], ro: int, ra: int, la: int, rb: int, lb: int) -> [] int {
+    let c = central.cap();
+    bigint.clear(t[ro * c..ro * c + c], c);
+    bigint.mul(t[ro * c..ro * c + c], t[ra * c..ra * c + la], la, t[rb * c..rb * c + lb], lb);
+    return 0;
+}
+
+// t[ro] = t[ra] + t[rb]
+fn sumr[&t](t: &!t [int], ro: int, ra: int, rb: int) -> [] int {
+    let c = central.cap();
+    bigint.clear(t[ro * c..ro * c + c], c);
+    bigint.copy(t[ro * c..ro * c + c], t[ra * c..ra * c + c], c);
+    bigint.add_in(t[ro * c..ro * c + c], c, t[rb * c..rb * c + c], c);
+    return 0;
+}
+
+fn len_of[&t](t: &t [int], r: int) -> [] int {
+    let c = central.cap();
+    return central.mag_len(t[r * c..r * c + c], c);
+}
+
+// small[ro] = small[ra] (la limbs) times small[rb] (lb limbs), the slots of f
+fn smul[&f](f: &!f [int], ro: int, ra: int, la: int, rb: int, lb: int) -> [] int {
+    bigint.clear(f[ro * slot()..ro * slot() + slot()], slot());
+    bigint.mul(f[ro * slot()..ro * slot() + slot()], f[ra * slot()..ra * slot() + la], la, f[rb * slot()..rb * slot() + lb], lb);
+    return 0;
+}
+
+// t[ro] = n S2 - S1^2 for the magnitudes in t[rs1] and t[rs2]; n is slot fn of f; the scratch is t[rt]; pos and neg are c limbs each
+fn lval[&t, &f, &p, &q](t: &!t [int], f: &f [int], p: &!p [int], q: &!q [int], rs1: int, rs2: int, ro: int, rt: int, fo: int) -> [] int {
+    let c = central.cap();
+    let l1 = psum.limbs(1);
+    let l2 = psum.limbs(2);
+    bigint.clear(p, c);
+    bigint.clear(q, c);
+    mulf(t, rt, rs2, l2, f, fo, 3);
+    central.put(p, q, t[rt * c..rt * c + c], l2 + 3, false);
+    mulr(t, rt, rs1, l1, rs1, l1);
+    central.put(p, q, t[rt * c..rt * c + c], 2 * l1, true);
+    central.settle(p, q, t[ro * c..ro * c + c]);
+    return 0;
+}
+
+pub fn two_sample[&h, &ka, &kb](heap: &!h Heap, keys_a: &ka vec.Vec[int], rows_a: int, keys_b: &kb vec.Vec[int], rows_b: int, ncols: int, col: int, pooled: bool) -> [heap] TwoSample {
+    let c = central.cap();
+    let s1 = psum.size(1);
+    let s2 = psum.size(2);
+    let l1 = psum.limbs(1);
+    let g = s1 + s2;
+    let acc = box_slice(heap, 2 * g + 1, 0);
+    let work = box_slice(heap, psum.scratch() + 1, 0);
+    var n1 = 0;
+    var n2 = 0;
+    borrow mut acc as &!aw in {
+        borrow mut work as &!ww in {
+            let a = contents(aw);
+            let wk = contents(ww);
+            n1 = fill(keys_a, ncols, col, rows_a, a[0..g], wk);
+            n2 = fill(keys_b, ncols, col, rows_b, a[g..2 * g], wk);
+        }
+    }
+    var status = 0;
+    var tb = 0;
+    var tc = 0;
+    var db = 0;
+    var dc = 0;
+    var fb = 0;
+    var fc = 0;
+    var eb = 0;
+    var ec = 0;
+    var sb = 0;
+    var sc = 0;
+    var vb = 0;
+    var vstate = 2;
+    if n1 < 2 || n2 < 2 {
+        unbox_slice(heap, acc);
+        unbox_slice(heap, work);
+        return TwoSample { n1: n1, n2: n2, status: 1, tb: 0, tc: 0, db: 0, dc: 0, fb: 0, fc: 0, eb: 0, ec: 0, sb: 0, sc: 0, vb: 0, vstate: 2 };
+    }
+    // the regions of t, each c limbs: 0 S1a, 1 S1b, 2 S2a, 3 S2b, 4 A, 5 B, 6 P, 7 Q, 8 to 11 scratch, 12 W, 13 scratch
+    let tmp = box_slice(heap, 14 * c + 1, 0);
+    let pos = box_slice(heap, c, 0);
+    let neg = box_slice(heap, c, 0);
+    let fs = box_slice(heap, 20 * slot() + 8, 0);
+    borrow acc as &ar in {
+        borrow mut tmp as &!tw in {
+            borrow mut pos as &!pw in {
+                borrow mut neg as &!nw in {
+                    borrow mut fs as &!fw in {
+                        let av = contents(ar);
+                        let t = contents(tw);
+                        let p = contents(pw);
+                        let q = contents(nw);
+                        let f = contents(fw);
+                        let sga = psum.magnitude(av[0..s1], 1, t[0..c]);
+                        psum.magnitude(av[s1..g], 2, t[2 * c..3 * c]);
+                        let sgb = psum.magnitude(av[g..g + s1], 1, t[c..2 * c]);
+                        psum.magnitude(av[g + s1..2 * g], 2, t[3 * c..4 * c]);
+                        // the small factors, slots of 24 limbs: 0 n1, 1 n2, 2 n1 - 1, 3 n2 - 1, 4 n1^2, 5 n2^2, 6 alpha = n1^2 (n1 - 1), 7 beta = n2^2 (n2 - 1), 8 n1 n2, 9 (n1 - 1) (n2 - 1),
+                        // 10 n1 + n2, 11 nu, 12 alpha beta, 13 beta^2 (n2 - 1), 14 alpha^2 (n1 - 1), 15 scratch, 16 n1^2 n2^2, 17 n1^2 n2^2 nu, 18 n2 (n2 - 1), 19 n1 (n1 - 1)
+                        central.limbs_of(n1, f[0..3]);
+                        central.limbs_of(n2, f[slot()..slot() + 3]);
+                        central.limbs_of(n1 - 1, f[2 * slot()..2 * slot() + 3]);
+                        central.limbs_of(n2 - 1, f[3 * slot()..3 * slot() + 3]);
+                        central.limbs_of(n1 + n2, f[10 * slot()..10 * slot() + 3]);
+                        central.limbs_of(n1 + n2 - 2, f[11 * slot()..11 * slot() + 3]);
+                        smul(f, 4, 0, 3, 0, 3);
+                        smul(f, 5, 1, 3, 1, 3);
+                        smul(f, 6, 4, 6, 2, 3);
+                        smul(f, 7, 5, 6, 3, 3);
+                        smul(f, 8, 0, 3, 1, 3);
+                        smul(f, 9, 2, 3, 3, 3);
+                        smul(f, 12, 6, 9, 7, 9);
+                        smul(f, 15, 7, 9, 7, 9);
+                        smul(f, 13, 15, 18, 3, 3);
+                        smul(f, 15, 6, 9, 6, 9);
+                        smul(f, 14, 15, 18, 2, 3);
+                        smul(f, 16, 4, 6, 5, 6);
+                        smul(f, 17, 16, 12, 11, 3);
+                        smul(f, 18, 1, 3, 3, 3);
+                        smul(f, 19, 0, 3, 2, 3);
+                        lval(t, f, p, q, 0, 2, 4, 8, 0);
+                        lval(t, f, p, q, 1, 3, 5, 8, 1);
+                        // P = n2 S1a - n1 S1b
+                        bigint.clear(p, c);
+                        bigint.clear(q, c);
+                        mulf(t, 8, 0, l1, f, 1, 3);
+                        central.put(p, q, t[8 * c..9 * c], l1 + 3, sga < 0);
+                        mulf(t, 8, 1, l1, f, 0, 3);
+                        central.put(p, q, t[8 * c..9 * c], l1 + 3, sgb >= 0);
+                        let sp = central.settle(p, q, t[6 * c..7 * c]);
+                        let lp = len_of(t, 6);
+                        let (e1, e2) = central.ratio_bits(heap, t[6 * c..7 * c], lp, f[8 * slot()..8 * slot() + 6], 6, 0 - 1074, sp < 0);
+                        eb = e1;
+                        ec = e2;
+                        // Q = A beta + B alpha
+                        let la = len_of(t, 4);
+                        let lb = len_of(t, 5);
+                        mulf(t, 8, 4, la, f, 7, 9);
+                        mulf(t, 9, 5, lb, f, 6, 9);
+                        sumr(t, 7, 8, 9);
+                        if bigint.is_zero(t[7 * c..8 * c], c) {
+                            status = 2;
+                        }
+                        // the ratio of the variances A n2 (n2 - 1) / (B n1 (n1 - 1))
+                        if !bigint.is_zero(t[5 * c..6 * c], c) {
+                            mulf(t, 8, 4, la, f, 18, 6);
+                            mulf(t, 9, 5, lb, f, 19, 6);
+                            let (v1, v2) = central.ratio_bits(heap, t[8 * c..9 * c], len_of(t, 8), t[9 * c..10 * c], len_of(t, 9), 0, false);
+                            if v2 == 0 {
+                                vb = v1;
+                                vstate = 0;
+                            }
+                        } else {
+                            vstate = 1;
+                        }
+                        if status == 0 {
+                            // W = A n2 + B n1
+                            mulf(t, 8, 4, la, f, 1, 3);
+                            mulf(t, 9, 5, lb, f, 0, 3);
+                            sumr(t, 12, 8, 9);
+                            let lw = len_of(t, 12);
+                            let lq = len_of(t, 7);
+                            // P^2 in region 10
+                            mulr(t, 10, 6, lp, 6, lp);
+                            let lp2 = 2 * lp;
+                            // d^2 = P^2 nu / (n1 n2 W)
+                            mulf(t, 11, 10, lp2, f, 11, 3);
+                            mulf(t, 13, 12, lw, f, 8, 6);
+                            let (d1, d2) = central.sqrt_ratio_bits(heap, t[11 * c..12 * c], lp2 + 3, t[13 * c..14 * c], len_of(t, 13));
+                            db = d1;
+                            dc = d2;
+                            if pooled {
+                                // se^2 = W (n1 + n2) / (n1^2 n2^2 nu),  t^2 = P^2 nu / (W (n1 + n2))
+                                mulf(t, 8, 12, lw, f, 10, 3);
+                                let lden = len_of(t, 8);
+                                let (s3, s4) = central.sqrt_ratio_bits_exp(heap, t[8 * c..9 * c], lden, f[17 * slot()..17 * slot() + 15], 15, 0 - 1074);
+                                sb = s3;
+                                sc = s4;
+                                let (t3, t4) = central.sqrt_ratio_bits(heap, t[11 * c..12 * c], lp2 + 3, t[8 * c..9 * c], lden);
+                                tb = t3;
+                                tc = t4;
+                            } else {
+                                // se^2 = Q / R,  t^2 = P^2 (n1 - 1) (n2 - 1) / Q
+                                let (s3, s4) = central.sqrt_ratio_bits_exp(heap, t[7 * c..8 * c], lq, f[12 * slot()..12 * slot() + 18], 18, 0 - 1074);
+                                sb = s3;
+                                sc = s4;
+                                mulf(t, 11, 10, lp2, f, 9, 6);
+                                let (t3, t4) = central.sqrt_ratio_bits(heap, t[11 * c..12 * c], lp2 + 6, t[7 * c..8 * c], lq);
+                                tb = t3;
+                                tc = t4;
+                                // df = Q^2 (n1 - 1) (n2 - 1) / (A^2 beta^2 (n2 - 1) + B^2 alpha^2 (n1 - 1))
+                                mulr(t, 8, 4, la, 4, la);
+                                mulf(t, 9, 8, 2 * la, f, 13, 21);
+                                mulr(t, 8, 5, lb, 5, lb);
+                                mulf(t, 10, 8, 2 * lb, f, 14, 21);
+                                sumr(t, 11, 9, 10);
+                                mulr(t, 8, 7, lq, 7, lq);
+                                mulf(t, 9, 8, 2 * lq, f, 9, 6);
+                                let (f3, f4) = central.ratio_bits(heap, t[9 * c..10 * c], len_of(t, 9), t[11 * c..12 * c], len_of(t, 11), 0, false);
+                                fb = f3;
+                                fc = f4;
+                            }
+                            if sp < 0 {
+                                if tc == 0 {
+                                    tb = tb | 0 - 9223372036854775807 - 1;
+                                }
+                                if dc == 0 {
+                                    db = db | 0 - 9223372036854775807 - 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    unbox_slice(heap, acc);
+    unbox_slice(heap, work);
+    unbox_slice(heap, tmp);
+    unbox_slice(heap, pos);
+    unbox_slice(heap, neg);
+    unbox_slice(heap, fs);
+    return TwoSample { n1: n1, n2: n2, status: status, tb: tb, tc: tc, db: db, dc: dc, fb: fb, fc: fc, eb: eb, ec: ec, sb: sb, sc: sc, vb: vb, vstate: vstate };
+}

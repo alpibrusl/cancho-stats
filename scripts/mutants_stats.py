@@ -28,7 +28,7 @@ M = [
     ("column-limit-edge-pass2", "} else if seps + 1 > max_cols {", "} else if seps + 1 >= max_cols {"),
     ("empty-kind", "            if nonmiss == 0 {\n                w = json.put_string(heap, w, \"empty\");", "            if nonmiss == 1 {\n                w = json.put_string(heap, w, \"empty\");"),
     ("verb-name", "!bytes.equal(cli.operand(args, parsed, 0), \"describe\")", "!bytes.equal(cli.operand(args, parsed, 0), \"describe \")"),
-    ("delimiter-fixed", "let delim = int_of(cli.text(args, parsed, table, \"delim\")[0]);\n    let max_rows", "let delim = 44;\n    let max_rows"),
+    ("delimiter-fixed", "int_of(cli.text(args, parsed, table, \"delim\")[0]), cli.nat(args, parsed, table, \"max-rows\"), cli.nat(args, parsed, table, \"max-cols\"), cli.nat(args, parsed, table, \"max-cells\"), handle, rel, by, key, by_null, e);", "44, cli.nat(args, parsed, table, \"max-rows\"), cli.nat(args, parsed, table, \"max-cols\"), cli.nat(args, parsed, table, \"max-cells\"), handle, rel, by, key, by_null, e);"),
     ("ddof-ceiling", "if cli.nat(args, parsed, table, \"ddof\") > 1 {", "if cli.nat(args, parsed, table, \"ddof\") > 2 {"),
     ("float-key-of-negative", "        key = bits ^ 0x7fffffffffffffff;", "        key = bits;"),
     ("multiline-record-taken", "    if inside {\n        return 2;\n    }", ""),
@@ -36,6 +36,9 @@ M = [
 ]
 
 EXPLAINED = {}
+sys.path.insert(0, str(ROOT / "scripts"))
+import mutsrc  # noqa: E402
+M = [(n, mutsrc.where(ROOT, o), o, w) for n, o, w in M]
 # the header scanner is written twice (the first pass and the second pass that counts the levels): a mutant of it is applied to the first copy only, and the pattern is said to occur twice and the second mutant takes the second copy
 OCCURS = {"column-limit-edge": 2, "column-limit-edge-pass2": 2}
 
@@ -57,10 +60,10 @@ def control():
 
 
 def main():
-    t = (ROOT / F).read_text()
-    for n, o, w in M:
+    for n, fl, o, w in M:
+        t = (ROOT / fl).read_text()
         if t.count(o) != OCCURS.get(n, 1) or o == w:
-            print("mutant %s: pattern occurs %d times" % (n, t.count(o)))
+            print("mutant %s: pattern occurs %d times in %s" % (n, t.count(o), fl))
             return 1
     if "--check" in sys.argv:
         print("mutants_stats: %d mutants, every pattern applies once" % len(M)); return 0
@@ -69,13 +72,13 @@ def main():
         return 1
     print("control (unmutated) passes both gates")
     bad, killed = [], 0
-    for n, o, w in M:
+    for n, fl, o, w in M:
         with tempfile.TemporaryDirectory() as d:
             d = pathlib.Path(d)
             for x in ("lib", "tools", "generated"): shutil.copytree(ROOT / x, d / x)
             shutil.copy(ROOT / "cancho.toml", d / "cancho.toml")
             (d / "build").mkdir(); shutil.copytree(ROOT / "build" / "deps", d / "build" / "deps")
-            f = d / F; f.write_text(apply(f.read_text(), n, o, w))
+            f = d / fl; f.write_text(apply(f.read_text(), n, o, w))
             r = subprocess.run([CANCHO, "build", "--bin", "stats"], cwd=d, capture_output=True, text=True)
             if r.returncode != 0:
                 bad.append(n); print("%-28s INVALID: %s" % (n, r.stderr[-120:].replace("\n", " "))); continue
