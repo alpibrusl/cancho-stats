@@ -152,6 +152,7 @@ CASES = [
     ("test: chisq no such column", b"a,g\nx,u\n", ["test", "chisq", "--cols", "z", "--vs", "g", "f.csv"], "stats.no-such-column", 2),
     ("test: chisq no such vs column", b"a,g\nx,u\n", ["test", "chisq", "--cols", "a", "--vs", "z", "f.csv"], "stats.no-such-column", 2),
     ("test: chisq ambiguous column", b"a,a,g\nx,x,u\n", ["test", "chisq", "--cols", "a", "--vs", "g", "f.csv"], "stats.ambiguous-column", 2),
+    ("test: chisq ambiguous vs column", b"a,g,g\nx,u,u\n", ["test", "chisq", "--cols", "a", "--vs", "g", "f.csv"], "stats.ambiguous-column", 2),
     ("test: chisq expected not decimals", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "a,b", "f.csv"], "stats.expected-proportions", 2),
     ("test: chisq expected empty item", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "0.5,0.5,", "f.csv"], "stats.expected-proportions", 2),
     ("test: chisq expected sum", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "0.5,0.6", "f.csv"], "stats.expected-proportions", 2),
