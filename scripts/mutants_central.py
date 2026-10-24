@@ -33,8 +33,8 @@ M = [
     ("ratio-too-few-bits", "lib/acc/central.cho", "    var k = 66 + bd - bn;", "    var k = 40 + bd - bn;"),
     ("limbs-of-shift", "lib/acc/central.cho", "    out[1] = v >> 26 & 67108863;", "    out[1] = v >> 25 & 67108863;"),
     ("shl-limb-index", "lib/acc/bigint.cho", "        out[q + i] = v & mask();\n        carry = v >> 26;", "        out[q + i] = v & mask();\n        carry = v >> 25;"),
-    ("third-power-accumulator", "tools/stats/main.cho", ", 3, bits_of(x), work);", ", 2, bits_of(x), work);"),
-    ("fourth-power-accumulator", "tools/stats/main.cho", ", 4, bits_of(x), work);", ", 3, bits_of(x), work);"),
+    ("third-power-accumulator", "lib/csvx/scan.cho", ", 3, bits_of(x), work);", ", 2, bits_of(x), work);"),
+    ("fourth-power-accumulator", "lib/csvx/scan.cho", ", 4, bits_of(x), work);", ", 3, bits_of(x), work);"),
     ("moments-status-ignored", "tools/stats/main.cho", "if st == 0 && sc == 0 && kc == 0 {", "if sc == 0 && kc == 0 {"),
 ]
 

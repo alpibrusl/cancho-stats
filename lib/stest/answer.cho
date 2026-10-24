@@ -32,7 +32,12 @@ pub fn put_name[&h, &n, &en](heap: &!h Heap, w0: json.Writer, names: &n [byte], 
 
 // the two-sided p-value of a statistic |t| on df degrees of freedom, and the code of the special function (0 is an answer)
 pub fn p_two_sided(t: float, df: int) -> [] (float, int) {
-    let (sf, code) = dist.t_sf(t, float_of(df));
+    return p_two_sided_real(t, float_of(df));
+}
+
+// the same on a real number of degrees of freedom (Welch-Satterthwaite)
+pub fn p_two_sided_real(t: float, df: float) -> [] (float, int) {
+    let (sf, code) = dist.t_sf(t, df);
     if code != 0 {
         return (0.0, code);
     }
@@ -254,13 +259,21 @@ pub fn put_pair[&h, &n, &en, &k, &m](heap: &!h Heap, w0: json.Writer, names: &n 
     return w;
 }
 
-// the two-sided p-value of |t| on df degrees of freedom is p_two_sided of the corr part above; one test of the answer for the kind t1
-pub fn put_t1[&h, &n, &en, &k](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], store: &k vec.Vec[int], ncols: int, col: int, rows: int, mu0_bits: int, lnum: int, lk: int, level: float) -> [heap] json.Writer {
+// the two-sided p-value of |t| on df degrees of freedom is p_two_sided of the corr part above; one test of the answer for the kind t1 (col2 < 0) or paired (the differences of col and col2)
+pub fn put_t1[&h, &n, &en, &k](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], store: &k vec.Vec[int], ncols: int, col: int, col2: int, rows: int, mu0_bits: int, lnum: int, lk: int, level: float) -> [heap] json.Writer {
     var w = w0;
-    let (n, status, tb, tc, db, dc, mb, mc, sb, sc) = ttest.one_sample(heap, store, ncols, col, rows, mu0_bits);
+    let (n, status, tb, tc, db, dc, mb, mc, sb, sc) = ttest.one_sample(heap, store, ncols, col, col2, rows, mu0_bits);
     w = json.begin_object(heap, w);
-    w = json.put_key(heap, w, "column");
-    w = put_name(heap, w, names, ends, col);
+    if col2 < 0 {
+        w = json.put_key(heap, w, "column");
+        w = put_name(heap, w, names, ends, col);
+    } else {
+        w = json.put_key(heap, w, "pair");
+        w = json.begin_array(heap, w);
+        w = put_name(heap, w, names, ends, col);
+        w = put_name(heap, w, names, ends, col2);
+        w = json.end_array(heap, w);
+    }
     var reason = "";
     var have_t = false;
     var p = 0.0;
@@ -332,7 +345,11 @@ pub fn put_t1[&h, &n, &en, &k](heap: &!h Heap, w0: json.Writer, names: &n [byte]
         let mean = float_of_bits(mb);
         w = json.begin_object(heap, w);
         w = json.put_key(heap, w, "of");
-        w = json.put_string(heap, w, "mean");
+        if col2 < 0 {
+            w = json.put_string(heap, w, "mean");
+        } else {
+            w = json.put_string(heap, w, "difference of means");
+        }
         w = json.put_key(heap, w, "level");
         w = json.put_float(heap, w, level);
         w = json.put_key(heap, w, "estimate");
@@ -355,7 +372,11 @@ pub fn put_t1[&h, &n, &en, &k](heap: &!h Heap, w0: json.Writer, names: &n [byte]
     w = json.put_int(heap, w, rows - n);
     w = json.end_object(heap, w);
     w = json.put_key(heap, w, "method");
-    w = json.put_string(heap, w, "one-sample t");
+    if col2 < 0 {
+        w = json.put_string(heap, w, "one-sample t");
+    } else {
+        w = json.put_string(heap, w, "paired t");
+    }
     w = json.put_key(heap, w, "assumptions");
     w = json.begin_object(heap, w);
     w = json.end_object(heap, w);

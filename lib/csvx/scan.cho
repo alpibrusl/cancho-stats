@@ -1,0 +1,441 @@
+edition 5;
+
+module csvx.scan;
+
+import std.buffer;
+import std.bytes;
+import std.map;
+import std.vec;
+import acc.psum;
+import csvx.rule;
+import flt;
+import metrics.rank;
+import reader;
+import toolbox.fail;
+import toolbox.lines;
+
+// The reader that `describe`, `corr` and `test` share (docs/describe.md section 3): the columns' exact accumulators, the table of order-preserving keys, the groups of a `by` column and the refusals of a bad
+// file, moved out of tools/stats/main.cho. The limits are parameters (cap = the longest line, delim, the most rows, columns and cells).
+
+pub res struct Cols {
+    nonmiss: Box[[int]],
+    numeric: Box[[int]],
+    bad: Box[[int]],
+    mn: Box[[float]],
+    mx: Box[[float]],
+    accs: Box[[int]],
+    work: Box[[int]],
+    cells: Box[[int]],
+    rowkeys: Box[[int]],
+}
+
+pub fn acc_stride() -> [] int {
+    return psum.size(1) + psum.size(2) + psum.size(3) + psum.size(4);
+}
+
+pub fn make_cols[&h](heap: &!h Heap, n: int) -> [heap] Cols {
+    return Cols { nonmiss: box_slice(heap, n + 1, 0), numeric: box_slice(heap, n + 1, 0), bad: box_slice(heap, n + 1, 0), mn: box_slice(heap, n + 1, 0.0), mx: box_slice(heap, n + 1, 0.0), accs: box_slice(heap, n * acc_stride() + 1, 0), work: box_slice(heap, psum.scratch() + 1, 0), cells: box_slice(heap, 3 * n + 4, 0), rowkeys: box_slice(heap, n + 1, 0) };
+}
+
+pub fn drop_cols[&h](heap: &!h Heap, c: Cols) -> [heap] int {
+    let Cols { nonmiss, numeric, bad, mn, mx, accs, work, cells, rowkeys } = c;
+    unbox_slice(heap, nonmiss);
+    unbox_slice(heap, numeric);
+    unbox_slice(heap, bad);
+    unbox_slice(heap, mn);
+    unbox_slice(heap, mx);
+    unbox_slice(heap, accs);
+    unbox_slice(heap, work);
+    unbox_slice(heap, cells);
+    unbox_slice(heap, rowkeys);
+    return 0;
+}
+
+// Whether the record whose cells are in `cs` belongs to the group: its cell `by` is missing (the group `null`) or has the bytes of `key`.
+pub fn in_group[&c, &l, &k](cs: &c [int], line: &l [byte], by: int, key: &k [byte], by_null: bool) -> [] bool {
+    let from = cs[3 * by];
+    let to = cs[3 * by + 1];
+    let missing = to == from && cs[3 * by + 2] == 0;
+    if by_null {
+        return missing;
+    }
+    if missing {
+        return false;
+    }
+    return bytes.equal(line[from..to], key);
+}
+
+// One data record. 0 when it was taken, 1 ragged, 2 continues on the next line, 3 a bad quote, 4 not in the group (`by` < 0 means no group), 5 or 6 in the group but `room` says the rows (1) or the cells (2) are full.
+pub fn take_row[&c, &l, &k](c: &!c Cols, line: &l [byte], delim: int, ncols: int, by: int, key: &k [byte], by_null: bool, room: int) -> [] int {
+    let cells = contents(c.cells);
+    let (n, inside, badq) = reader.fields(line, delim, cells, ncols);
+    if inside {
+        return 2;
+    }
+    if badq {
+        return 3;
+    }
+    if n != ncols {
+        return 1;
+    }
+    if by >= 0 && !in_group(cells, line, by, key, by_null) {
+        return 4;
+    }
+    if room != 0 {
+        return 4 + room;
+    }
+    let nonmiss = contents(c.nonmiss);
+    let numeric = contents(c.numeric);
+    let bad = contents(c.bad);
+    let mn = contents(c.mn);
+    let mx = contents(c.mx);
+    let accs = contents(c.accs);
+    let work = contents(c.work);
+    let rowkeys = contents(c.rowkeys);
+    var j = 0;
+    while j < ncols {
+        rowkeys[j] = rank.min_int();
+        j = j + 1;
+    }
+    j = 0;
+    while j < ncols {
+        let s = cells[3 * j];
+        let e = cells[3 * j + 1];
+        let quoted = cells[3 * j + 2];
+        if e == s && quoted == 0 {
+            // an empty cell is a missing value: counted by the difference of rows and nonmiss
+            j = j + 1;
+        } else {
+            nonmiss[j] = nonmiss[j] + 1;
+            if quoted == 1 {
+                bad[j] = 1;
+            } else if bad[j] == 0 {
+                let (key, status) = flt.parse_float(line[s..e]);
+                if status != 0 {
+                    bad[j] = 1;
+                } else {
+                    let x = flt.float_of_key(key);
+                    if numeric[j] == 0 || x < mn[j] {
+                        mn[j] = x;
+                    }
+                    if numeric[j] == 0 || x > mx[j] {
+                        mx[j] = x;
+                    }
+                    numeric[j] = numeric[j] + 1;
+                    rowkeys[j] = rank.key_of(x);
+                    let base = j * acc_stride();
+                    psum.add(accs[base..base + psum.size(1)], 1, bits_of(x), work);
+                    psum.add(accs[base + psum.size(1)..base + psum.size(1) + psum.size(2)], 2, bits_of(x), work);
+                    psum.add(accs[base + psum.size(1) + psum.size(2)..base + psum.size(1) + psum.size(2) + psum.size(3)], 3, bits_of(x), work);
+                    psum.add(accs[base + psum.size(1) + psum.size(2) + psum.size(3)..base + acc_stride()], 4, bits_of(x), work);
+                }
+            }
+            j = j + 1;
+        }
+    }
+    return 0;
+}
+
+// The distinct values of the `by` column, as a map (key the bytes of the cell), `order` the entries by their bytes ascending, `nulls` how many records have the cell missing.
+pub res struct Groups {
+    m: map.Map[int],
+    order: Box[[int]],
+    nulls: int,
+}
+
+pub fn drop_groups[&h](heap: &!h Heap, g: Groups) -> [heap] int {
+    let Groups { m, order, nulls } = g;
+    map.drop(heap, m);
+    unbox_slice(heap, order);
+    return nulls;
+}
+
+// Pass 0 of --by: the header names the column (exactly one match), then every record is read and its value noted. The answer is the groups, the index of the column (-1 when refused) and the errors.
+pub fn discover[&h, &f, &s, &n](heap: &!h Heap, file: &!f File, shown: &s [byte], byname: &n [byte], delim: int, cap: int, max_rows: int, max_cols: int, max_groups: int, errs: fail.Errors) -> [heap, file_read] (Groups, int, fail.Errors) {
+    var m = map.empty(heap, 64, 0, 11);
+    var e = errs;
+    var by = 0 - 1;
+    var ncols = 0;
+    var nulls = 0;
+    var cells = box_slice(heap, 4, 0);
+    var r = lines.start(heap, cap);
+    var going = true;
+    var have_header = false;
+    var number = 0;
+    var rows = 0;
+    while going {
+        let (stepped, status) = lines.next(heap, r);
+        r = stepped;
+        if status == lines.need() {
+            r = lines.fill_file(r, file);
+        } else if status == lines.done() {
+            going = false;
+        } else if status == lines.long() {
+            e = rule.refuse(heap, e, "limit.line-too-long", "a line is longer than --max-line-bytes", "raise --max-line-bytes", "file", shown);
+            going = false;
+        } else {
+            number = number + 1;
+            var stop = false;
+            borrow r as &rr in {
+                let line = lines.text(rr);
+                if !have_header {
+                    let (open, seps, badq) = reader.scan(line, delim, false, 0);
+                    if open {
+                        e = rule.refuse(heap, e, "stats.csv-multiline", "the header continues on the next line", "put the header on one line", "file", shown);
+                        stop = true;
+                    } else if badq {
+                        e = rule.refuse(heap, e, "stats.csv-bad-quote", "a quote in the header opens or closes where it may not", "write the header as RFC 4180", "file", shown);
+                        stop = true;
+                    } else if seps + 1 > max_cols {
+                        e = rule.refuse_int(heap, e, "limit.too-many-columns", "more columns than --max-cols", "raise --max-cols", "limit", max_cols, "columns", seps + 1);
+                        stop = true;
+                    } else {
+                        let (nb, ne) = reader.split_header(heap, line, delim);
+                        var matches = 0;
+                        borrow nb as &nbr in {
+                            borrow ne as &ner in {
+                                var j = 0;
+                                while j < seps + 1 {
+                                    var from = 0;
+                                    if j > 0 {
+                                        from = vec.get(ner, j - 1);
+                                    }
+                                    if bytes.equal(buffer.bytes(nbr)[from..vec.get(ner, j)], byname) {
+                                        if matches == 0 {
+                                            by = j;
+                                        }
+                                        matches = matches + 1;
+                                    }
+                                    j = j + 1;
+                                }
+                            }
+                        }
+                        buffer.drop(heap, nb);
+                        vec.drop(heap, ne);
+                        if matches == 0 {
+                            e = rule.refuse(heap, e, "stats.no-such-column", "--by names no column of the header", "the header names are the first line of the file; the match is exact", "by", byname);
+                            by = 0 - 1;
+                            stop = true;
+                        } else if matches > 1 {
+                            e = rule.refuse(heap, e, "stats.ambiguous-column", "two or more columns have the name given to --by", "rename the columns so that the name is unique", "by", byname);
+                            by = 0 - 1;
+                            stop = true;
+                        } else {
+                            ncols = seps + 1;
+                            unbox_slice(heap, cells);
+                            cells = box_slice(heap, 3 * ncols + 4, 0);
+                            have_header = true;
+                        }
+                    }
+                } else if len(line) > 0 || ncols == 1 {
+                    if rows >= max_rows {
+                        e = rule.refuse_int(heap, e, "limit.too-many-rows", "more data rows than --max-rows", "raise --max-rows", "limit", max_rows, "line", number);
+                        stop = true;
+                    } else {
+                        rows = rows + 1;
+                        borrow mut cells as &!cw in {
+                            let cs = contents(cw);
+                            let (n, inside, badq) = reader.fields(line, delim, cs, ncols);
+                            if inside {
+                                e = record_refusal(heap, e, 2, number, ncols, max_rows, 0);
+                                stop = true;
+                            } else if badq {
+                                e = record_refusal(heap, e, 3, number, ncols, max_rows, 0);
+                                stop = true;
+                            } else if n != ncols {
+                                e = record_refusal(heap, e, 1, number, ncols, max_rows, 0);
+                                stop = true;
+                            } else {
+                                let from = cs[3 * by];
+                                let to = cs[3 * by + 1];
+                                if to == from && cs[3 * by + 2] == 0 {
+                                    nulls = nulls + 1;
+                                } else {
+                                    var known = false;
+                                    var room = false;
+                                    borrow m as &mr in {
+                                        known = map.has(mr, line[from..to]);
+                                        room = map.size(mr) < max_groups;
+                                    }
+                                    if known {
+                                    } else if room {
+                                        m = map.put(heap, m, line[from..to], 1);
+                                    } else {
+                                        e = rule.refuse_int(heap, e, "limit.too-many-groups", "more groups than --max-groups", "raise --max-groups or group by a column with fewer values", "limit", max_groups, "line", number);
+                                        stop = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if stop {
+                going = false;
+            }
+        }
+    }
+    var errno = 0;
+    borrow r as &rr in {
+        errno = lines.failed(rr);
+    }
+    lines.drop(heap, r);
+    unbox_slice(heap, cells);
+    if errno != 0 {
+        e = fail.io_error(heap, e, errno, false, shown);
+    }
+    if !have_header {
+        by = 0 - 1;
+        var refused = false;
+        borrow e as &er in {
+            refused = fail.count(er) > 0;
+        }
+        if !refused {
+            e = rule.refuse(heap, e, "stats.no-header", "the file has no header line", "give a CSV file whose first line names the columns", "file", shown);
+        }
+    }
+    // the groups in the order of their bytes: an insertion sort of the entry numbers (at most --max-groups of them)
+    var ng = 0;
+    borrow m as &mr0 in {
+        ng = map.size(mr0);
+    }
+    let order = box_slice(heap, ng + 1, 0);
+    borrow m as &mr1 in {
+        borrow mut order as &!ow in {
+            let o = contents(ow);
+            var k = 0;
+            var en = 0;
+            while en < map.entries(mr1) {
+                if map.is_live(mr1, en) {
+                    var pos = k;
+                    while pos > 0 && bytes.compare(map.key_at(mr1, o[pos - 1]), map.key_at(mr1, en)) > 0 {
+                        o[pos] = o[pos - 1];
+                        pos = pos - 1;
+                    }
+                    o[pos] = en;
+                    k = k + 1;
+                }
+                en = en + 1;
+            }
+        }
+    }
+    return (Groups { m: m, order: order, nulls: nulls }, by, e);
+}
+
+// The refusal for a record `take_row` did not take: 1 ragged, 2 continues on the next line, 3 a bad quote, 5 the rows limit, 6 the cells limit.
+pub fn record_refusal[&h](heap: &!h Heap, e: fail.Errors, st: int, number: int, ncols: int, max_rows: int, max_cells: int) -> [heap] fail.Errors {
+    if st == 1 {
+        return rule.refuse_int(heap, e, "stats.csv-ragged", "a record has a different number of fields than the header", "check the delimiter and the quoting of that line", "line", number, "columns", ncols);
+    }
+    if st == 2 {
+        return rule.refuse_int(heap, e, "stats.csv-multiline", "a record continues on the next line, which this version does not read", "join the record onto one line", "line", number, "columns", ncols);
+    }
+    if st == 3 {
+        return rule.refuse_int(heap, e, "stats.csv-bad-quote", "a quote opens or closes where it may not", "write the line as RFC 4180", "line", number, "columns", ncols);
+    }
+    if st == 5 {
+        return rule.refuse_int(heap, e, "limit.too-many-rows", "more data rows than --max-rows", "raise --max-rows", "limit", max_rows, "line", number);
+    }
+    return rule.refuse_int(heap, e, "limit.too-many-cells", "more cells than --max-cells are needed to hold the columns for the quantiles", "raise --max-cells or describe fewer rows", "limit", max_cells, "line", number);
+}
+
+pub struct Scanned {
+    rows: int,
+    ncols: int,
+}
+
+// the file, line by line: the header, then the records
+pub fn read_file[&h, &f, &s, &k](heap: &!h Heap, cap: int, delim: int, max_rows: int, max_cols: int, max_cells: int, file: &!f File, shown: &s [byte], by: int, key: &k [byte], by_null: bool, errs: fail.Errors) -> [heap, file_read] (buffer.Buffer, vec.Vec[int], Cols, vec.Vec[int], Scanned, fail.Errors) {
+    var store = vec.empty(heap, 1024, 0);
+    var e = errs;
+    var names = buffer.empty(heap, 1);
+    var ends = vec.empty(heap, 1, 0);
+    var cols = make_cols(heap, 1);
+    var info = Scanned { rows: 0, ncols: 0 };
+    var r = lines.start(heap, cap);
+    var going = true;
+    var have_header = false;
+    var number = 0;
+    while going {
+        let (stepped, status) = lines.next(heap, r);
+        r = stepped;
+        if status == lines.need() {
+            r = lines.fill_file(r, file);
+        } else if status == lines.done() {
+            going = false;
+        } else if status == lines.long() {
+            var n = 0;
+            borrow r as &rr in {
+                n = lines.number(rr);
+            }
+            e = rule.refuse(heap, e, "limit.line-too-long", "a line is longer than --max-line-bytes", "raise --max-line-bytes", "file", shown);
+            going = false;
+        } else {
+            number = number + 1;
+            var stop = false;
+            borrow r as &rr in {
+                let line = lines.text(rr);
+                if !have_header {
+                    let (open, seps, badq) = reader.scan(line, delim, false, 0);
+                    if open {
+                        e = rule.refuse(heap, e, "stats.csv-multiline", "the header continues on the next line", "put the header on one line", "file", shown);
+                        stop = true;
+                    } else if badq {
+                        e = rule.refuse(heap, e, "stats.csv-bad-quote", "a quote in the header opens or closes where it may not", "write the header as RFC 4180", "file", shown);
+                        stop = true;
+                    } else if seps + 1 > max_cols {
+                        e = rule.refuse_int(heap, e, "limit.too-many-columns", "more columns than --max-cols", "raise --max-cols", "limit", max_cols, "columns", seps + 1);
+                        stop = true;
+                    } else {
+                        let (nb, ne) = reader.split_header(heap, line, delim);
+                        buffer.drop(heap, names);
+                        vec.drop(heap, ends);
+                        names = nb;
+                        ends = ne;
+                        drop_cols(heap, cols);
+                        cols = make_cols(heap, seps + 1);
+                        info = Scanned { rows: 0, ncols: seps + 1 };
+                        have_header = true;
+                    }
+                } else if len(line) > 0 || info.ncols == 1 {
+                    // a blank line is skipped, except in a file of one column, where it is one empty cell
+                    var room = 0;
+                    if info.rows >= max_rows {
+                        room = 1;
+                    } else if (info.rows + 1) * info.ncols > max_cells {
+                        room = 2;
+                    }
+                    borrow mut cols as &!cw in {
+                        let st = take_row(cw, line, delim, info.ncols, by, key, by_null, room);
+                        if st == 0 {
+                            info = Scanned { rows: info.rows + 1, ncols: info.ncols };
+                            var jj = 0;
+                            while jj < info.ncols {
+                                store = vec.push(heap, store, contents(cw.rowkeys)[jj]);
+                                jj = jj + 1;
+                            }
+                        } else if st != 4 {
+                            e = record_refusal(heap, e, st, number, info.ncols, max_rows, max_cells);
+                            stop = true;
+                        }
+                    }
+                }
+            }
+            if stop {
+                going = false;
+            }
+        }
+    }
+    var errno = 0;
+    borrow r as &rr in {
+        errno = lines.failed(rr);
+    }
+    lines.drop(heap, r);
+    if errno != 0 {
+        e = fail.io_error(heap, e, errno, false, shown);
+    }
+    if !have_header {
+        e = rule.refuse(heap, e, "stats.no-header", "the file has no header line", "give a CSV file whose first line names the columns", "file", shown);
+    }
+    return (names, ends, cols, store, info, e);
+}

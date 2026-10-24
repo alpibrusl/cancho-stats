@@ -213,6 +213,31 @@ jobs:
           python3 scripts/gate_test.py --files 200 --scipy
           python3 scripts/gate_test_calibration.py --replicates 2000
 
+      - name: stats test (t2 Welch and pooled, paired) against Fractions and mpmath, scipy, calibration, power and coverage
+        if: steps.stores.outputs.fetchable == 'yes'
+        run: |
+          python3 scripts/gate_test2.py --kind t2 --files 200 --scipy
+          python3 scripts/gate_test2.py --kind paired --files 200 --scipy
+          python3 scripts/gate_test2_calibration.py --kind t2 --replicates 2000
+          python3 scripts/gate_test2_calibration.py --kind paired --replicates 2000
+
+      - name: Every mutant pattern still applies exactly once (a pattern that drifted would be a mutant that tests nothing)
+        run: |
+          python3 scripts/mutants_bigint.py --check
+          python3 scripts/mutants_psum.py --check
+          python3 scripts/mutants_xsum.py --check
+          python3 scripts/mutants_stats.py --check
+          python3 scripts/mutants_central.py --check
+          python3 scripts/mutants_quantile.py --check
+          python3 scripts/mutants_histogram.py --check
+          python3 scripts/mutants_levels.py --check
+          python3 scripts/mutants_by.py --check
+          python3 scripts/mutants_cols.py --check
+          python3 scripts/mutants_corr.py --check
+          python3 scripts/mutants_test.py --check
+          python3 scripts/mutants_test2.py --check
+          python3 scripts/mutants_special.py --check
+
       - name: Quantiles (nine definitions) against an independent exact reference
         if: steps.stores.outputs.fetchable == 'yes'
         run: python3 scripts/gate_quantile.py --cases 3000
@@ -341,3 +366,4 @@ jobs:
           python3 scripts/mutants_cols.py
           python3 scripts/mutants_corr.py
           python3 scripts/mutants_test.py
+          python3 scripts/mutants_test2.py

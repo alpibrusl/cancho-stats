@@ -15,8 +15,8 @@ M = [
     ("filter-skips-column-zero", F, "if by >= 0 && !in_group(cells, line, by, key, by_null) {", "if by > 0 && !in_group(cells, line, by, key, by_null) {"),
     ("filter-ignored-in-rows", F, "if by >= 0 && !in_group(cells, line, by, key, by_null) {\n        return 4;", "if by >= 0 && in_group(cells, line, by, key, by_null) {\n        return 4;"),
     ("not-in-group-is-a-refusal", F, "} else if st != 4 {", "} else if st != 5 {"),
-    ("limit-rows-for-cells", F, "if st == 5 {\n        return refuse_int(heap, e, \"limit.too-many-rows\"", "if st == 6 {\n        return refuse_int(heap, e, \"limit.too-many-rows\""),
-    ("levels-filter-ignored", F, "mine = in_group(cs, line, by, key, by_null);", "mine = true;"),
+    ("limit-rows-for-cells", F, "if st == 5 {\n        return rule.refuse_int(heap, e, \"limit.too-many-rows\"", "if st == 6 {\n        return rule.refuse_int(heap, e, \"limit.too-many-rows\""),
+    ("levels-filter-ignored", F, "mine = scan.in_group(cs, line, by, key, by_null);", "mine = true;"),
     ("levels-row-not-uncounted", F, "if !mine {\n                            rows = rows - 1;", "if !mine {\n                            rows = rows - 0;"),
     ("group-limit-off-by-one", F, "room = map.size(mr) < max_groups;", "room = map.size(mr) <= max_groups;"),
     ("nulls-not-counted", F, "nulls = nulls + 1;", "nulls = nulls + 0;"),
@@ -24,12 +24,15 @@ M = [
     ("null-group-not-null", F, 'path.full(tp), by, "", true, true, w, e);', 'path.full(tp), by, "", false, true, w, e);'),
     ("groups-descending", F, "map.key_at(mr1, en)) > 0 {", "map.key_at(mr1, en)) < 0 {"),
     ("ambiguity-not-detected", F, "} else if matches > 1 {", "} else if matches > 2 {"),
-    ("no-match-wrong", F, "if matches == 0 {\n                            e = refuse(heap, e, \"stats.no-such-column\"", "if matches == 1 {\n                            e = refuse(heap, e, \"stats.no-such-column\""),
+    ("no-match-wrong", F, "if matches == 0 {\n                            e = rule.refuse(heap, e, \"stats.no-such-column\"", "if matches == 1 {\n                            e = rule.refuse(heap, e, \"stats.no-such-column\""),
     ("max-groups-ceiling", F, '"max-groups") > 1000 ||', '"max-groups") > 1001 ||'),
     ("max-groups-floor", F, '"max-groups") < 1 {', '"max-groups") < 0 {'),
     ("max-groups-default", F, "|none|50|the most groups", "|none|49|the most groups"),
     ("group-rows-wrong", F, 'w = json.put_key(heap, w, "rows");\n                                                w = json.put_int(heap, w, info.rows);\n                                            } else {', 'w = json.put_key(heap, w, "rows");\n                                                w = json.put_int(heap, w, info.ncols);\n                                            } else {'),
 ]
+sys.path.insert(0, str(ROOT / "scripts"))
+import mutsrc  # noqa: E402
+M = mutsrc.relocate(ROOT, M)
 
 EXPLAINED = {}
 

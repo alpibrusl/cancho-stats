@@ -25,7 +25,7 @@ M = [
     ("magnitude-sign", "        bigint.sub_in(out, len, acc[len..2 * len], len);\n        return 1;", "        bigint.sub_in(out, len, acc[len..2 * len], len);\n        return -1;"),
     ("unit-exponent", "bigint.round_bits(out, limbs(k), 0 - 1074 * k, 0);", "bigint.round_bits(out, limbs(k), 0 - 1074, 0);"),
     ("overflow-code", "    if code != 0 {\n        return (0, 1);\n    }\n    if sign < 0 {", "    if sign < 0 {"),
-    ("negative-sign-bit", "return (b | (0 - 9223372036854775807 - 1), 0);", "return (b, 0);"),
+    ("negative-sign-bit", "return (b | 0 - 9223372036854775807 - 1, 0);", "return (b, 0);"),
     ("zero-mantissa-row", "    if m == 0 {\n        return 0;\n    }\n    bigint.clear", "    bigint.clear"),
 ]
 

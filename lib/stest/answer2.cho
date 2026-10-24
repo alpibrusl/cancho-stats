@@ -1,0 +1,156 @@
+edition 5;
+
+module stest.answer2;
+
+import std.json;
+import std.vec;
+import flt;
+import stest.answer;
+import stest.ttest;
+import stest.welch;
+
+// One test of the answer for the kind t2 (docs/test.md sections 1 and 2): the difference of the means of column `col` between the groups a and b, whose keys are `keys_a` (rows_a rows) and `keys_b`. `pooled` is the
+// test with the pooled variance, else Welch's. `level` is the confidence level num / 10^k.
+fn float_of_bits(bits: int) -> [] float {
+    var key = bits;
+    if bits < 0 {
+        key = bits ^ 0x7fffffffffffffff;
+    }
+    return flt.float_of_key(key);
+}
+
+pub fn put_t2[&h, &n, &en, &ka, &kb](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], keys_a: &ka vec.Vec[int], rows_a: int, keys_b: &kb vec.Vec[int], rows_b: int, ncols: int, col: int, pooled: bool, lnum: int, lk: int, level: float) -> [heap] json.Writer {
+    var w = w0;
+    let r = welch.two_sample(heap, keys_a, rows_a, keys_b, rows_b, ncols, col, pooled);
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "column");
+    w = answer.put_name(heap, w, names, ends, col);
+    var reason = "";
+    var have_t = false;
+    var p = 0.0;
+    var have_p = false;
+    // the degrees of freedom: nu for the pooled test, the rational of Satterthwaite rounded once for Welch's (only where the variances are not both zero)
+    var df = 0.0;
+    var have_df = false;
+    if r.status != 1 {
+        if pooled {
+            df = float_of(r.n1 + r.n2 - 2);
+            have_df = true;
+        } else if r.status == 0 && r.fc == 0 {
+            df = float_of_bits(r.fb);
+            have_df = true;
+        }
+    }
+    if r.status == 1 {
+        reason = "too-few-rows";
+    } else if r.status == 2 {
+        reason = "variance-zero";
+    } else if r.tc == 0 && have_df {
+        have_t = true;
+        let (pv, code) = answer.p_two_sided_real(float_of_bits(r.tb & 9223372036854775807), df);
+        if code == 0 {
+            have_p = true;
+            p = pv;
+        } else {
+            reason = "p-not-computed";
+        }
+    } else {
+        reason = "statistic-beyond-double";
+    }
+    w = json.put_key(heap, w, "statistic");
+    if have_t {
+        w = json.put_float(heap, w, float_of_bits(r.tb));
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "df");
+    if have_df && pooled {
+        w = json.put_int(heap, w, r.n1 + r.n2 - 2);
+    } else if have_df {
+        w = json.put_float(heap, w, df);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_value");
+    if have_p {
+        w = json.put_float(heap, w, p);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_method");
+    w = json.put_string(heap, w, "t");
+    w = json.put_key(heap, w, "effect_size");
+    if have_t && r.dc == 0 {
+        w = json.begin_object(heap, w);
+        w = json.put_key(heap, w, "name");
+        w = json.put_string(heap, w, "cohen_d");
+        w = json.put_key(heap, w, "value");
+        w = json.put_float(heap, w, float_of_bits(r.db));
+        w = json.end_object(heap, w);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "interval");
+    var interval_ok = false;
+    var half = 0.0;
+    if r.status != 1 && r.ec == 0 && r.sc == 0 {
+        if r.status == 2 {
+            interval_ok = true;
+        } else {
+            let (q, qcode) = ttest.t_critical_real(lnum, lk, df);
+            if qcode == 0 {
+                interval_ok = true;
+                half = q * float_of_bits(r.sb);
+            } else if len(reason) == 0 {
+                reason = "interval-not-computed";
+            }
+        }
+    }
+    if interval_ok {
+        let est = float_of_bits(r.eb);
+        w = json.begin_object(heap, w);
+        w = json.put_key(heap, w, "of");
+        w = json.put_string(heap, w, "difference of means");
+        w = json.put_key(heap, w, "level");
+        w = json.put_float(heap, w, level);
+        w = json.put_key(heap, w, "estimate");
+        w = json.put_float(heap, w, est);
+        w = json.put_key(heap, w, "low");
+        w = json.put_float(heap, w, est - half);
+        w = json.put_key(heap, w, "high");
+        w = json.put_float(heap, w, est + half);
+        w = json.put_key(heap, w, "rounding");
+        w = json.put_string(heap, w, "double");
+        w = json.end_object(heap, w);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "n");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "a");
+    w = json.put_int(heap, w, r.n1);
+    w = json.put_key(heap, w, "b");
+    w = json.put_int(heap, w, r.n2);
+    w = json.end_object(heap, w);
+    w = json.put_key(heap, w, "method");
+    if pooled {
+        w = json.put_string(heap, w, "pooled");
+    } else {
+        w = json.put_string(heap, w, "welch");
+    }
+    w = json.put_key(heap, w, "assumptions");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "variance_ratio");
+    if r.vstate == 0 {
+        w = json.put_float(heap, w, float_of_bits(r.vb));
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.end_object(heap, w);
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}

@@ -35,6 +35,9 @@ M = [
     ("probability-count", "tools/stats/main.cho", "if n > 99 {", "if n > 100 {"),
     ("default-type", "tools/stats/main.cho", "|none|7|which of the nine", "|none|6|which of the nine"),
 ]
+sys.path.insert(0, str(ROOT / "scripts"))
+import mutsrc  # noqa: E402
+M = mutsrc.relocate(ROOT, M)
 
 EXPLAINED = {
     "type3-negative-guard": "the guard matters only for n p - 1/2 = -1/2 (p = 0 written without decimals); without it the rank is 1 instead of the clamped 0, and rank 0 and rank 1 are the same value (equivalent)",

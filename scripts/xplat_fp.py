@@ -7,7 +7,7 @@
     python3 scripts/xplat_fp.py --mutants        # the checks are shown able to fail
 
 The fingerprint is one tab-separated line per sweep: `kind  name  count  sha256`, the hash over the driver's output lines (`id  hex bits of the result  code`) for a fixed list of cases:
-`special` the first N cases of each range of gate_special.py (seed 1), `edge` the edge cases of gate_domain.py for each function, `acc` the vectors of three families of measure_acc.py through acc-check, `describe` the bytes `stats describe` prints for 12 seeded CSV files, `corr`, `corr-spearman` and `corr-kendall` those of `stats corr` (Pearson, --method spearman, --method kendall) for 8 files each, `test-t1` those of `stats test t1` for 8 files.
+`special` the first N cases of each range of gate_special.py (seed 1), `edge` the edge cases of gate_domain.py for each function, `acc` the vectors of three families of measure_acc.py through acc-check, `describe` the bytes `stats describe` prints for 12 seeded CSV files, `corr`, `corr-spearman` and `corr-kendall` those of `stats corr` (Pearson, --method spearman, --method kendall) for 8 files each, `test-t1`, `test-t2` and `test-paired` those of `stats test t1`, `t2` (Welch and pooled drawn) and `paired` for 8 files each.
 Equal to the golden is equal to each other: the golden was written on one machine and every other platform of the workflow must print its bytes.
 Thread check: for every sweep, `special-check FN --threads T` for T in 1, 2, 3, 4, 7, 8, 16 must print the bytes of the sequential run.
 Exit 0: the fingerprint equals the golden and the thread check holds. Exit 1: a difference (printed). Exit 2: the script could not run.
@@ -27,6 +27,7 @@ import measure_acc  # noqa: E402
 import gate_describe  # noqa: E402
 import gate_corr  # noqa: E402
 import gate_test  # noqa: E402
+import gate_test2  # noqa: E402
 import tempfile  # noqa: E402
 
 GOLDEN = ROOT / "docs" / "xplat_fp.txt"
@@ -169,6 +170,40 @@ def test_lines(stats):
     return out
 
 
+def test2_lines(stats):
+    """`stats test t2` and `paired` on 8 seeded CSV files each (the generators of gate_test2.py: groups of any size, missing cells, the method and the level drawn): the hash of the bytes they print."""
+    out = []
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        r = gate_special.SM64(41)
+        k = 0
+        fi = 1000
+        while k < 8:
+            fi += 1
+            names, rows, gcol, labels, shapes, vidx, method, level = gate_test2.gen_t2(r, fi)
+            num = [j for j in vidx if gate_test.numeric([rw[j] for rw in rows])]
+            if not num:
+                continue
+            p = gate_test2.run(stats, tmp, "t2", names, rows, ["--cols", ",".join(names[j] for j in num), "--group", "g", "--variance", method, "--level", level])
+            h = hashlib.sha256()
+            h.update(("exit %d %s" % (p.returncode, p.stdout)).encode())
+            out.append("test-t2\tfile%02d\t%d\t%s" % (k, len(rows), h.hexdigest()))
+            k += 1
+        r = gate_special.SM64(43)
+        k = 0
+        while k < 8:
+            fi += 1
+            names, rows, pairs, shapes, level = gate_test2.gen_paired(r, fi)
+            if not pairs:
+                continue
+            p = gate_test2.run(stats, tmp, "paired", names, rows, ["--pairs", ",".join("%s:%s" % pr for pr in pairs), "--level", level])
+            h = hashlib.sha256()
+            h.update(("exit %d %s" % (p.returncode, p.stdout)).encode())
+            out.append("test-paired\tfile%02d\t%d\t%s" % (k, len(rows), h.hexdigest()))
+            k += 1
+    return out
+
+
 def fingerprint(driver, acc, threads_check=True, stats=None):
     lines = []
     bad = []
@@ -194,6 +229,7 @@ def fingerprint(driver, acc, threads_check=True, stats=None):
         lines += corr_lines(stats, "spearman", "corr-spearman")
         lines += corr_lines(stats, "kendall", "corr-kendall")
         lines += test_lines(stats)
+        lines += test2_lines(stats)
     return lines, bad
 
 
