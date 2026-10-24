@@ -1,0 +1,220 @@
+edition 5;
+
+module stest.chisq;
+
+import std.bytes;
+import special.dd;
+
+// The chi-square statistic of a table of counts (docs/test.md sections 3 and 10), each term a quotient of two exact integers formed in double-double and summed in double-double, then rounded to a double:
+//     independence   X2 = sum (N n_ij - r_i c_j)^2 / (N r_i c_j)               fit   X2 = sum (O_i D - N P_i)^2 / (N P_i D)    with p_i = P_i / D
+// The numerator is the square of an integer below 2^47 and the denominator a product of up to three integers below 2^47: both exact in double-double. The sum is correctly rounded except when the exact value is within about
+// 2^-100 of a tie between two doubles. `df`, the effect size, the smallest expected count and the number of expected counts below 5 come with it.
+
+pub struct ChiSq {
+    n: int,
+    rows_: int,
+    cols_: int,
+    df: int,
+    x2: float,
+    effect: float,
+    min_expected: float,
+    below5: int,
+}
+
+// the integer v, |v| < 2^62, as an exact double-double: v = (v >> 31) 2^31 + (v & (2^31 - 1)) for a negative v as well (the shift rounds down, the mask keeps the low bits)
+fn of_int(v: int) -> [] (float, float) {
+    return dd.two_sum(float_of(v >> 31) * 2147483648.0, float_of(v & 2147483647));
+}
+
+// (numerator)^2 / denominator, the denominator a product of the exact integers p, q and (when r > 0) r, added to the sum (sh, sl)
+fn add_term(sh: float, sl: float, num: int, p: int, q: int, r: int) -> [] (float, float) {
+    if num == 0 {
+        return (sh, sl);
+    }
+    let (nh, nl) = of_int(num);
+    let (n2h, n2l) = dd.mul(nh, nl, nh, nl);
+    let (ph, pl) = of_int(p);
+    let (qh, ql) = of_int(q);
+    let (d1h, d1l) = dd.mul(ph, pl, qh, ql);
+    var dh = d1h;
+    var dl = d1l;
+    if r > 0 {
+        let (rh, rl) = of_int(r);
+        let (d2h, d2l) = dd.mul(dh, dl, rh, rl);
+        dh = d2h;
+        dl = d2l;
+    }
+    let (th, tl) = dd.div(n2h, n2l, dh, dl);
+    return dd.add(sh, sl, th, tl);
+}
+
+// a / b as a double, 0 for an empty table
+fn ratio(a: int, b: int) -> [] float {
+    if b == 0 {
+        return 0.0;
+    }
+    return float_of(a) / float_of(b);
+}
+
+// Independence of the table `counts` of r rows and c columns (every row and column has a count: the levels are those of the rows used)
+pub fn independence[&h, &k](heap: &!h Heap, counts: &k [int], r: int, c: int) -> [heap] ChiSq {
+    let rs = box_slice(heap, r + 1, 0);
+    let cs = box_slice(heap, c + 1, 0);
+    var n = 0;
+    var sh = 0.0;
+    var sl = 0.0;
+    var rc_min = 0;
+    var below5 = 0;
+    borrow mut rs as &!rw in {
+        borrow mut cs as &!cw in {
+            let rsum = contents(rw);
+            let csum = contents(cw);
+            var i = 0;
+            while i < r {
+                var j = 0;
+                while j < c {
+                    let v = counts[i * c + j];
+                    rsum[i] = rsum[i] + v;
+                    csum[j] = csum[j] + v;
+                    n = n + v;
+                    j = j + 1;
+                }
+                i = i + 1;
+            }
+            i = 0;
+            var first = true;
+            while i < r {
+                var j = 0;
+                while j < c {
+                    let rc = rsum[i] * csum[j];
+                    let (th, tl) = add_term(sh, sl, n * counts[i * c + j] - rc, n, rc, 0);
+                    sh = th;
+                    sl = tl;
+                    if first || rc < rc_min {
+                        rc_min = rc;
+                        first = false;
+                    }
+                    if rc < 5 * n {
+                        below5 = below5 + 1;
+                    }
+                    j = j + 1;
+                }
+                i = i + 1;
+            }
+        }
+    }
+    unbox_slice(heap, rs);
+    unbox_slice(heap, cs);
+    var m = r;
+    if c < r {
+        m = c;
+    }
+    var effect = 0.0;
+    if m > 1 && n > 0 {
+        effect = sqrt(sh / (float_of(n) * float_of(m - 1)));
+    }
+    return ChiSq { n: n, rows_: r, cols_: c, df: (r - 1) * (c - 1), x2: sh, effect: effect, min_expected: ratio(rc_min, n), below5: below5 };
+}
+
+// Goodness of fit of the k counts to the proportions p_i = P_i / D (the integers P, D = 10^digits)
+pub fn fit[&k, &p](counts: &k [int], props: &p [int], k: int, d: int) -> [] ChiSq {
+    var n = 0;
+    var i = 0;
+    while i < k {
+        n = n + counts[i];
+        i = i + 1;
+    }
+    var sh = 0.0;
+    var sl = 0.0;
+    var np_min = 0;
+    var below5 = 0;
+    i = 0;
+    while i < k {
+        let np = n * props[i];
+        let (th, tl) = add_term(sh, sl, counts[i] * d - np, np, d, 0);
+        sh = th;
+        sl = tl;
+        if i == 0 || np < np_min {
+            np_min = np;
+        }
+        if np < 5 * d {
+            below5 = below5 + 1;
+        }
+        i = i + 1;
+    }
+    var effect = 0.0;
+    if n > 0 {
+        effect = sqrt(sh / float_of(n));
+    }
+    return ChiSq { n: n, rows_: k, cols_: 1, df: k - 1, x2: sh, effect: effect, min_expected: ratio(np_min, d), below5: below5 };
+}
+
+// The proportions of --expected: k decimals with at most 9 decimals each, digits and one point only, each above 0, adding up to exactly 1. They are laid in `props` as integers over D = 10^9 (the box is k + 1 ints).
+// Answers (status, props, k): 0 all is well; 1 an item is not a decimal of that form; 2 an item is 0; 3 the sum is not 1; 4 more than 1,000 items.
+pub fn parse_expected[&h, &t](heap: &!h Heap, text: &t [byte]) -> [heap] (int, Box[[int]], int) {
+    let k = bytes.count_byte(text, ',') + 1;
+    if k > 1000 {
+        return (4, box_slice(heap, 1, 0), 0);
+    }
+    let props = box_slice(heap, k + 1, 0);
+    var status = 0;
+    var sum = 0;
+    borrow mut props as &!pw in {
+        let pr = contents(pw);
+        var i = 0;
+        while i < k && status == 0 {
+            let tok = bytes.field(text, ',', i + 1);
+            var whole = 0;
+            var frac = 0;
+            var decimals = 0;
+            var seen_point = false;
+            var digits = 0;
+            var j = 0;
+            while j < len(tok) && status == 0 {
+                let ch = int_of(tok[j]);
+                if ch >= 48 && ch <= 57 {
+                    digits = digits + 1;
+                    if seen_point {
+                        decimals = decimals + 1;
+                        if decimals > 9 {
+                            status = 1;
+                        } else {
+                            frac = frac * 10 + ch - 48;
+                        }
+                    } else if whole > 1 {
+                        status = 1;
+                    } else {
+                        whole = whole * 10 + ch - 48;
+                    }
+                } else if ch == 46 && !seen_point {
+                    seen_point = true;
+                } else {
+                    status = 1;
+                }
+                j = j + 1;
+            }
+            if digits == 0 {
+                status = 1;
+            }
+            if status == 0 {
+                var scale = 1;
+                var d = decimals;
+                while d < 9 {
+                    scale = scale * 10;
+                    d = d + 1;
+                }
+                let v = whole * 1000000000 + frac * scale;
+                if v == 0 {
+                    status = 2;
+                }
+                pr[i] = v;
+                sum = sum + v;
+            }
+            i = i + 1;
+        }
+    }
+    if status == 0 && sum != 1000000000 {
+        status = 3;
+    }
+    return (status, props, k);
+}

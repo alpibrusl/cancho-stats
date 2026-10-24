@@ -201,3 +201,71 @@ def paired(pairs, level):
     """the paired t: t1 of the exact differences a - b over the pairs where both are present (mu0 = 0)"""
     diffs = [Fraction(a) - Fraction(b) for a, b in pairs]
     return t1(diffs, 0.0, level)
+
+
+def chi2_sf(df, x2):
+    """P(chi-square with df degrees of freedom > x2) at 60 digits, x2 an exact Fraction"""
+    if x2 == 0:
+        return mpmath.mpf(1)
+    return mpmath.gammainc(mpmath.mpf(df) / 2, frac_mpf(x2) / 2, mpmath.inf, regularized=True)
+
+
+def _chisq_out(n, df, x2, effect_sq, rows, cols, min_exp, below5):
+    out = {"n": n, "df": df, "x2": x2, "statistic": None, "p": None, "effect": None, "min_expected": min_exp, "below5": below5, "rows": rows, "cols": cols, "reason": None}
+    if n == 0:
+        out["reason"] = "too-few-rows"
+        return out
+    if df < 1:
+        out["reason"] = "too-few-levels"
+        return out
+    out["statistic"] = rounded(x2)
+    out["p"] = chi2_sf(df, x2)
+    out["effect"] = mpmath.sqrt(frac_mpf(effect_sq))
+    return out
+
+
+def chisq_independence(table):
+    """Pearson's chi-square of a table of counts (a list of rows) from the textbook formula on Fractions: expected counts r_i c_j / N, X2 = sum (O - E)^2 / E (the program groups the terms differently)"""
+    r = len(table)
+    c = len(table[0]) if r else 0
+    n = sum(sum(row) for row in table)
+    if n == 0:
+        return _chisq_out(0, 0, Fraction(0), Fraction(0), 0, 0, None, 0)
+    rs = [sum(row) for row in table]
+    cs = [sum(table[i][j] for i in range(r)) for j in range(c)]
+    x2 = Fraction(0)
+    below5 = 0
+    min_exp = None
+    for i in range(r):
+        for j in range(c):
+            e = Fraction(rs[i] * cs[j], n)
+            x2 += (table[i][j] - e) ** 2 / e
+            if e < 5:
+                below5 += 1
+            if min_exp is None or e < min_exp:
+                min_exp = e
+    m = min(r, c)
+    out = _chisq_out(n, (r - 1) * (c - 1), x2, x2 / (n * max(m - 1, 1)), r, c, min_exp, below5)
+    out["expected"] = [[Fraction(rs[i] * cs[j], n) for j in range(c)] for i in range(r)]
+    return out
+
+
+def chisq_fit(counts, props):
+    """goodness of fit of the counts to the proportions (Fractions summing to 1): X2 = sum (O - N p)^2 / (N p)"""
+    k = len(counts)
+    n = sum(counts)
+    if n == 0:
+        return _chisq_out(0, 0, Fraction(0), Fraction(0), 0, 0, None, 0)
+    x2 = Fraction(0)
+    below5 = 0
+    min_exp = None
+    for o, p in zip(counts, props):
+        e = n * p
+        x2 += (o - e) ** 2 / e
+        if e < 5:
+            below5 += 1
+        if min_exp is None or e < min_exp:
+            min_exp = e
+    out = _chisq_out(n, k - 1, x2, x2 / n, k, 1, min_exp, below5)
+    out["expected"] = [n * p for p in props]
+    return out

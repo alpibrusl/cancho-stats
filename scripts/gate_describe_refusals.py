@@ -136,6 +136,39 @@ CASES = [
     ("test: paired second name ambiguous", b"a,b,b\n1,2,3\n", ["test", "paired", "--pairs", "a:b", "f.csv"], "stats.ambiguous-column", 2),
     ("test: paired second name missing", b"a,b\n1,2\n", ["test", "paired", "--pairs", "b:z", "f.csv"], "stats.no-such-column", 2),
     ("test: paired pairs at the limit", b"a,b,c\n1,2,3\n2,5,1\n", ["test", "paired", "--pairs", "a:b", "--max-pairs", "1", "f.csv"], None, 0),
+    # test chisq (docs/test.md section 10)
+    ("test: chisq independence", b"a,g\nx,u\nx,v\ny,u\ny,v\ny,v\n", ["test", "chisq", "--cols", "a", "--vs", "g", "f.csv"], None, 0),
+    ("test: chisq two columns, numbers as levels", b"a,b,g\n1,x,u\n10,y,v\n9,x,u\n1,y,v\n", ["test", "chisq", "--cols", "a,b", "--vs", "g", "f.csv"], None, 0),
+    ("test: chisq fit", b"a\nx\nx\ny\nz\n", ["test", "chisq", "--cols", "a", "--expected", "0.5,0.25,0.25", "f.csv"], None, 0),
+    ("test: chisq fit, nine decimals", b"a\nx\ny\ny\n", ["test", "chisq", "--cols", "a", "--expected", "0.333333333,0.666666667", "f.csv"], None, 0),
+    ("test: chisq missing cells", b"a,g\nx,u\n,v\ny,\ny,v\nx,v\n", ["test", "chisq", "--cols", "a", "--vs", "g", "f.csv"], None, 0),
+    ("test: chisq one level", b"a,g\nx,u\nx,v\n", ["test", "chisq", "--cols", "a", "--vs", "g", "f.csv"], None, 0),
+    ("test: chisq no complete row", b"a,g\nx,\n,v\n", ["test", "chisq", "--cols", "a", "--vs", "g", "f.csv"], None, 0),
+    ("test: chisq fit with one level", b"a\nx\nx\n", ["test", "chisq", "--cols", "a", "--expected", "1", "f.csv"], None, 0),
+    ("test: chisq neither vs nor expected", b"a,g\nx,u\n", ["test", "chisq", "--cols", "a", "f.csv"], "stats.test-columns", 2),
+    ("test: chisq both vs and expected", b"a,g\nx,u\n", ["test", "chisq", "--cols", "a", "--vs", "g", "--expected", "1", "f.csv"], "stats.test-columns", 2),
+    ("test: chisq no columns", b"a,g\nx,u\n", ["test", "chisq", "--vs", "g", "f.csv"], "stats.test-columns", 2),
+    ("test: chisq empty cols item", b"a,g\nx,u\n", ["test", "chisq", "--cols", "a,", "--vs", "g", "f.csv"], "args.bad-value", 2),
+    ("test: chisq no such column", b"a,g\nx,u\n", ["test", "chisq", "--cols", "z", "--vs", "g", "f.csv"], "stats.no-such-column", 2),
+    ("test: chisq no such vs column", b"a,g\nx,u\n", ["test", "chisq", "--cols", "a", "--vs", "z", "f.csv"], "stats.no-such-column", 2),
+    ("test: chisq ambiguous column", b"a,a,g\nx,x,u\n", ["test", "chisq", "--cols", "a", "--vs", "g", "f.csv"], "stats.ambiguous-column", 2),
+    ("test: chisq ambiguous vs column", b"a,g,g\nx,u,u\n", ["test", "chisq", "--cols", "a", "--vs", "g", "f.csv"], "stats.ambiguous-column", 2),
+    ("test: chisq expected not decimals", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "a,b", "f.csv"], "stats.expected-proportions", 2),
+    ("test: chisq expected empty item", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "0.5,0.5,", "f.csv"], "stats.expected-proportions", 2),
+    ("test: chisq expected sum", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "0.5,0.6", "f.csv"], "stats.expected-proportions", 2),
+    ("test: chisq expected sum below one", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "0.4,0.4", "f.csv"], "stats.expected-proportions", 2),
+    ("test: chisq expected two points", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "0.5.5,0.45", "f.csv"], "stats.expected-proportions", 2),
+    ("test: chisq expected zero", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "0,1", "f.csv"], "stats.expected-proportions", 2),
+    ("test: chisq expected ten decimals", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "0.0000000001,0.999999999", "f.csv"], "stats.expected-proportions", 2),
+    ("test: chisq expected negative", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "1.5,-0.5", "f.csv"], "stats.expected-proportions", 2),
+    ("test: chisq expected count differs", b"a\nx\ny\nz\n", ["test", "chisq", "--cols", "a", "--expected", "0.5,0.5", "f.csv"], "stats.expected-proportions", 2),
+    ("test: chisq expected count above the levels", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "0.2,0.3,0.5", "f.csv"], "stats.expected-proportions", 2),
+    ("test: chisq groups limit", b"a,g\nx,u\ny,v\n", ["test", "chisq", "--cols", "a", "--vs", "g", "--max-groups", "1", "f.csv"], "limit.too-many-groups", 8),
+    ("test: chisq groups limit on the second column", b"a,g\nx,u\nx,v\n", ["test", "chisq", "--cols", "a", "--vs", "g", "--max-groups", "1", "f.csv"], "limit.too-many-groups", 8),
+    ("test: chisq groups at the limit", b"a,g\nx,u\nx,v\n", ["test", "chisq", "--cols", "a", "--vs", "g", "--max-groups", "2", "f.csv"], None, 0),
+    ("test: chisq rows limit", b"a,g\nx,u\ny,v\nx,v\n", ["test", "chisq", "--cols", "a", "--vs", "g", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
+    ("test: chisq ragged", b"a,g\nx,u\ny\n", ["test", "chisq", "--cols", "a", "--vs", "g", "f.csv"], "stats.csv-ragged", 8),
+    ("test: chisq no header", b"", ["test", "chisq", "--cols", "a", "--vs", "g", "f.csv"], "stats.no-header", 8),
     ("test: paired text column", b"a,b\n1,x\n2,y\n", ["test", "paired", "--pairs", "a:b", "f.csv"], "stats.non-numeric", 2),
     ("test: paired pairs limit", b"a,b,c\n1,2,3\n", ["test", "paired", "--pairs", "a:b,b:c", "--max-pairs", "1", "f.csv"], "limit.too-many-pairs", 8),
     ("test: paired rows limit", b"a,b\n1,2\n2,3\n3,4\n", ["test", "paired", "--pairs", "a:b", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
@@ -269,7 +302,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 24)
+            k = int(r.next() % 27)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -312,6 +345,12 @@ def main():
                 argv = ["test", "t2", "--cols", "a,b", "--group", "a", "--variance", "pooled", "--max-groups", "3", "f.csv"]
             elif k == 22:
                 argv = ["test", "paired", "--pairs", "a:b", "f.csv"]
+            elif k == 24:
+                argv = ["test", "chisq", "--cols", "a", "--vs", "b", "f.csv"]
+            elif k == 25:
+                argv = ["test", "chisq", "--cols", "a,b", "--expected", "0.25,0.75", "--max-groups", "3", "f.csv"]
+            elif k == 26:
+                argv = ["test", "chisq", "--cols", "b,a", "--vs", "a", "--max-rows", "6", "f.csv"]
             elif k == 23:
                 argv = ["test", "paired", "--pairs", "b:a,a:a", "--level", "0.9", "--max-rows", "6", "f.csv"]
             try:

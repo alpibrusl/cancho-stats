@@ -1,0 +1,350 @@
+edition 5;
+
+module csvx.cross;
+
+import std.buffer;
+import std.bytes;
+import std.map;
+import std.vec;
+import csvx.rule;
+import csvx.scan;
+import reader;
+import toolbox.fail;
+import toolbox.lines;
+
+// The counts of a categorical test (docs/test.md section 10): one pass over the file that counts, for the rows where both cells are present, how many have each pair of cells (or each cell of one column), and notes the
+// distinct cells of each column. A cell is its bytes. A row with an empty cell in either column is dropped; the answer says how many. `dense` then numbers the levels by their bytes and lays the counts in a table.
+
+pub res struct Cross {
+    m: map.Map[int],
+    la: map.Map[int],
+    lb: map.Map[int],
+    rows: int,
+    used: int,
+}
+
+pub fn drop_cross[&h](heap: &!h Heap, c: Cross) -> [heap] int {
+    let Cross { m, la, lb, rows, used } = c;
+    map.drop(heap, m);
+    map.drop(heap, la);
+    map.drop(heap, lb);
+    return rows + used;
+}
+
+// The column of the header that has exactly the name: (the number of columns that have it, the index of the first)
+fn locate[&n, &en, &t](names: &n [byte], ends: &en vec.Vec[int], ncols: int, tok: &t [byte]) -> [] (int, int) {
+    var matches = 0;
+    var at = 0;
+    var j = 0;
+    while j < ncols {
+        var from = 0;
+        if j > 0 {
+            from = vec.get(ends, j - 1);
+        }
+        if bytes.equal(names[from..vec.get(ends, j)], tok) {
+            if matches == 0 {
+                at = j;
+            }
+            matches = matches + 1;
+        }
+        j = j + 1;
+    }
+    return (matches, at);
+}
+
+// the composite key of a pair: the length of the first cell in three bytes, the first cell, the second
+fn put_key[&h, &a, &b](heap: &!h Heap, kb: buffer.Buffer, a: &a [byte], b: &b [byte]) -> [heap] buffer.Buffer {
+    var k = kb;
+    borrow mut k as &!kw in {
+        buffer.clear(kw);
+    }
+    k = buffer.push(heap, k, byte_of(len(a) % 256));
+    k = buffer.push(heap, k, byte_of(len(a) / 256 % 256));
+    k = buffer.push(heap, k, byte_of(len(a) / 65536 % 256));
+    k = buffer.append(heap, k, a);
+    k = buffer.append(heap, k, b);
+    return k;
+}
+
+pub fn cross[&h, &f, &s, &a, &b](heap: &!h Heap, file: &!f File, shown: &s [byte], name_a: &a [byte], name_b: &b [byte], two: bool, delim: int, cap: int, max_rows: int, max_cols: int, max_groups: int, errs: fail.Errors) -> [heap, file_read] (Cross, fail.Errors) {
+    var m = map.empty(heap, 64, 0, 11);
+    var la = map.empty(heap, 64, 0, 13);
+    var lb = map.empty(heap, 64, 0, 17);
+    var e = errs;
+    var ia = 0 - 1;
+    var ib = 0 - 1;
+    var ncols = 0;
+    var cells = box_slice(heap, 4, 0);
+    var kb = buffer.empty(heap, 64);
+    var r = lines.start(heap, cap);
+    var going = true;
+    var have_header = false;
+    var number = 0;
+    var rows = 0;
+    var used = 0;
+    while going {
+        let (stepped, status) = lines.next(heap, r);
+        r = stepped;
+        if status == lines.need() {
+            r = lines.fill_file(r, file);
+        } else if status == lines.done() {
+            going = false;
+        } else if status == lines.long() {
+            e = rule.refuse(heap, e, "limit.line-too-long", "a line is longer than --max-line-bytes", "raise --max-line-bytes", "file", shown);
+            going = false;
+        } else {
+            number = number + 1;
+            var stop = false;
+            borrow r as &rr in {
+                let line = lines.text(rr);
+                if !have_header {
+                    let (open, seps, badq) = reader.scan(line, delim, false, 0);
+                    if open {
+                        e = rule.refuse(heap, e, "stats.csv-multiline", "the header continues on the next line", "put the header on one line", "file", shown);
+                        stop = true;
+                    } else if badq {
+                        e = rule.refuse(heap, e, "stats.csv-bad-quote", "a quote in the header opens or closes where it may not", "write the header as RFC 4180", "file", shown);
+                        stop = true;
+                    } else if seps + 1 > max_cols {
+                        e = rule.refuse_int(heap, e, "limit.too-many-columns", "more columns than --max-cols", "raise --max-cols", "limit", max_cols, "columns", seps + 1);
+                        stop = true;
+                    } else {
+                        let (nb, ne) = reader.split_header(heap, line, delim);
+                        borrow nb as &nbr in {
+                            borrow ne as &ner in {
+                                let (ma, xa) = locate(buffer.bytes(nbr), ner, seps + 1, name_a);
+                                if ma == 0 {
+                                    e = rule.refuse(heap, e, "stats.no-such-column", "a column named for the test is not in the header", "the header names are the first line of the file; the match is exact", "column", name_a);
+                                    stop = true;
+                                } else if ma > 1 {
+                                    e = rule.refuse(heap, e, "stats.ambiguous-column", "two or more columns have a name given for the test", "rename the columns so that the name is unique", "column", name_a);
+                                    stop = true;
+                                } else {
+                                    ia = xa;
+                                }
+                                if two && !stop {
+                                    let (mb, xb) = locate(buffer.bytes(nbr), ner, seps + 1, name_b);
+                                    if mb == 0 {
+                                        e = rule.refuse(heap, e, "stats.no-such-column", "a column named for the test is not in the header", "the header names are the first line of the file; the match is exact", "column", name_b);
+                                        stop = true;
+                                    } else if mb > 1 {
+                                        e = rule.refuse(heap, e, "stats.ambiguous-column", "two or more columns have a name given for the test", "rename the columns so that the name is unique", "column", name_b);
+                                        stop = true;
+                                    } else {
+                                        ib = xb;
+                                    }
+                                }
+                            }
+                        }
+                        buffer.drop(heap, nb);
+                        vec.drop(heap, ne);
+                        if !stop {
+                            ncols = seps + 1;
+                            unbox_slice(heap, cells);
+                            cells = box_slice(heap, 3 * ncols + 4, 0);
+                            have_header = true;
+                        }
+                    }
+                } else if len(line) > 0 || ncols == 1 {
+                    if rows >= max_rows {
+                        e = rule.refuse_int(heap, e, "limit.too-many-rows", "more data rows than --max-rows", "raise --max-rows", "limit", max_rows, "line", number);
+                        stop = true;
+                    } else {
+                        rows = rows + 1;
+                        borrow mut cells as &!cw in {
+                            let cs = contents(cw);
+                            let (n, inside, badq) = reader.fields(line, delim, cs, ncols);
+                            if inside {
+                                e = scan.record_refusal(heap, e, 2, number, ncols, max_rows, 0);
+                                stop = true;
+                            } else if badq {
+                                e = scan.record_refusal(heap, e, 3, number, ncols, max_rows, 0);
+                                stop = true;
+                            } else if n != ncols {
+                                e = scan.record_refusal(heap, e, 1, number, ncols, max_rows, 0);
+                                stop = true;
+                            } else {
+                                let fa = cs[3 * ia];
+                                let ta = cs[3 * ia + 1];
+                                var present = !(ta == fa && cs[3 * ia + 2] == 0);
+                                var fb = 0;
+                                var tb = 0;
+                                if two {
+                                    fb = cs[3 * ib];
+                                    tb = cs[3 * ib + 1];
+                                    if tb == fb && cs[3 * ib + 2] == 0 {
+                                        present = false;
+                                    }
+                                }
+                                if present {
+                                    var known_a = false;
+                                    var known_b = false;
+                                    var room_a = false;
+                                    var room_b = false;
+                                    borrow la as &lar in {
+                                        known_a = map.has(lar, line[fa..ta]);
+                                        room_a = map.size(lar) < max_groups;
+                                    }
+                                    if two {
+                                        borrow lb as &lbr in {
+                                            known_b = map.has(lbr, line[fb..tb]);
+                                            room_b = map.size(lbr) < max_groups;
+                                        }
+                                    } else {
+                                        known_b = true;
+                                    }
+                                    if !known_a && !room_a {
+                                        e = rule.refuse_int(heap, e, "limit.too-many-groups", "more levels in a column than --max-groups", "raise --max-groups or test a column with fewer values", "limit", max_groups, "line", number);
+                                        stop = true;
+                                    } else if !known_b && !room_b {
+                                        e = rule.refuse_int(heap, e, "limit.too-many-groups", "more levels in a column than --max-groups", "raise --max-groups or test a column with fewer values", "limit", max_groups, "line", number);
+                                        stop = true;
+                                    } else {
+                                        if !known_a {
+                                            la = map.put(heap, la, line[fa..ta], 0);
+                                        }
+                                        if two && !known_b {
+                                            lb = map.put(heap, lb, line[fb..tb], 0);
+                                        }
+                                        if two {
+                                            kb = put_key(heap, kb, line[fa..ta], line[fb..tb]);
+                                        } else {
+                                            kb = put_key(heap, kb, line[fa..ta], "");
+                                        }
+                                        borrow kb as &kr in {
+                                            var count = 0;
+                                            borrow m as &mr in {
+                                                count = map.get(mr, buffer.bytes(kr), 0);
+                                            }
+                                            m = map.put(heap, m, buffer.bytes(kr), count + 1);
+                                        }
+                                        used = used + 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if stop {
+                going = false;
+            }
+        }
+    }
+    var errno = 0;
+    borrow r as &rr in {
+        errno = lines.failed(rr);
+    }
+    lines.drop(heap, r);
+    unbox_slice(heap, cells);
+    buffer.drop(heap, kb);
+    if errno != 0 {
+        e = fail.io_error(heap, e, errno, false, shown);
+    }
+    if !have_header {
+        var refused = false;
+        borrow e as &er in {
+            refused = fail.count(er) > 0;
+        }
+        if !refused {
+            e = rule.refuse(heap, e, "stats.no-header", "the file has no header line", "give a CSV file whose first line names the columns", "file", shown);
+        }
+    }
+    return (Cross { m: m, la: la, lb: lb, rows: rows, used: used }, e);
+}
+
+// The levels of a column map in the order of their bytes (an insertion sort of the entry numbers, at most --max-groups of them): `order[k]` is the entry of the k-th level, and the map's value of that entry becomes k.
+fn number_levels[&h](heap: &!h Heap, lv: map.Map[int]) -> [heap] (map.Map[int], Box[[int]], int) {
+    var l = lv;
+    var n = 0;
+    borrow l as &lr0 in {
+        n = map.size(lr0);
+    }
+    let order = box_slice(heap, n + 1, 0);
+    borrow l as &lr1 in {
+        borrow mut order as &!ow in {
+            let o = contents(ow);
+            var k = 0;
+            var en = 0;
+            while en < map.entries(lr1) {
+                if map.is_live(lr1, en) {
+                    var pos = k;
+                    while pos > 0 && bytes.compare(map.key_at(lr1, o[pos - 1]), map.key_at(lr1, en)) > 0 {
+                        o[pos] = o[pos - 1];
+                        pos = pos - 1;
+                    }
+                    o[pos] = en;
+                    k = k + 1;
+                }
+                en = en + 1;
+            }
+        }
+    }
+    var k = 0;
+    while k < n {
+        var en = 0;
+        borrow order as &or in {
+            en = contents(or)[k];
+        }
+        borrow mut l as &!lw in {
+            map.set_value_at(lw, en, k);
+        }
+        k = k + 1;
+    }
+    return (l, order, n);
+}
+
+// The table of counts: `counts[i * c + j]` is how many rows have the i-th level of the first column and the j-th of the second (c = 1 and the second index 0 for one column), the levels numbered by their bytes.
+// Answers the table, its numbers of rows and columns, and the entries of the levels in order (to name them with `Cross.la` and `Cross.lb`).
+pub res struct Dense {
+    counts: Box[[int]],
+    rows_: int,
+    cols_: int,
+    order_a: Box[[int]],
+    order_b: Box[[int]],
+    total: int,
+    cross: Cross,
+}
+
+pub fn dense[&h](heap: &!h Heap, x: Cross, two: bool) -> [heap] Dense {
+    let Cross { m, la, lb, rows, used } = x;
+    let (la2, order_a, r) = number_levels(heap, la);
+    let (lb2, order_b, c0) = number_levels(heap, lb);
+    var c = c0;
+    if !two {
+        c = 1;
+    }
+    let counts = box_slice(heap, r * c + 1, 0);
+    borrow m as &mr in {
+        borrow la2 as &lar in {
+            borrow lb2 as &lbr in {
+                borrow mut counts as &!cw in {
+                    let cn = contents(cw);
+                    var en = 0;
+                    while en < map.entries(mr) {
+                        if map.is_live(mr, en) {
+                            let key = map.key_at(mr, en);
+                            let la_len = int_of(key[0]) + int_of(key[1]) * 256 + int_of(key[2]) * 65536;
+                            let ra = map.get(lar, key[3..3 + la_len], 0);
+                            var rb = 0;
+                            if two {
+                                rb = map.get(lbr, key[3 + la_len..len(key)], 0);
+                            }
+                            cn[ra * c + rb] = map.value_at(mr, en);
+                        }
+                        en = en + 1;
+                    }
+                }
+            }
+        }
+    }
+    return Dense { counts: counts, rows_: r, cols_: c, order_a: order_a, order_b: order_b, total: rows, cross: Cross { m: m, la: la2, lb: lb2, rows: rows, used: used } };
+}
+
+pub fn drop_dense[&h](heap: &!h Heap, d: Dense) -> [heap] int {
+    let Dense { counts, rows_, cols_, order_a, order_b, total, cross } = d;
+    unbox_slice(heap, counts);
+    unbox_slice(heap, order_a);
+    unbox_slice(heap, order_b);
+    return rows_ + cols_ + total + drop_cross(heap, cross);
+}
