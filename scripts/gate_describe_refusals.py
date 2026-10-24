@@ -162,6 +162,7 @@ CASES = [
     ("test: chisq expected ten decimals", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "0.0000000001,0.999999999", "f.csv"], "stats.expected-proportions", 2),
     ("test: chisq expected negative", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "1.5,-0.5", "f.csv"], "stats.expected-proportions", 2),
     ("test: chisq expected count differs", b"a\nx\ny\nz\n", ["test", "chisq", "--cols", "a", "--expected", "0.5,0.5", "f.csv"], "stats.expected-proportions", 2),
+    ("test: chisq expected count above the levels", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "0.2,0.3,0.5", "f.csv"], "stats.expected-proportions", 2),
     ("test: chisq groups limit", b"a,g\nx,u\ny,v\n", ["test", "chisq", "--cols", "a", "--vs", "g", "--max-groups", "1", "f.csv"], "limit.too-many-groups", 8),
     ("test: chisq groups limit on the second column", b"a,g\nx,u\nx,v\n", ["test", "chisq", "--cols", "a", "--vs", "g", "--max-groups", "1", "f.csv"], "limit.too-many-groups", 8),
     ("test: chisq groups at the limit", b"a,g\nx,u\nx,v\n", ["test", "chisq", "--cols", "a", "--vs", "g", "--max-groups", "2", "f.csv"], None, 0),
