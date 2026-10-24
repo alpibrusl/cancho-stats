@@ -180,7 +180,7 @@ python3 -m venv .venv &amp;&amp; .venv/bin/pip install -r ci/requirements.txt
 sh scripts/check.sh            # every gate, minutes
 echo "1 4000000000000000 4024000000000000" | build/special-check t_sf
 1 3fa2c98ee9420ee7 0           # t_sf(2, df 10): the bits of the answer</code></pre>
-  <p class="lead" style="margin-bottom:0"><code>--cols</code> picks columns and <code>--format text</code> prints the same document as one <code>path = value</code> line per value, for a person. Next: correlations, tests, intervals, resampling and regression.</p>
+  <p class="lead" style="margin-bottom:0"><code>--cols</code> picks columns and <code>--format text</code> prints the same document as one <code>path = value</code> line per value, for a person. Also here: <code>stats corr</code> (Pearson, Spearman, Kendall) and <code>stats test</code> (t1, t2, paired, chisq, prop, with <code>--correct</code>). Next: rank and exact tests, intervals, resampling and regression.</p>
 </div></section>
 
 <section class="alt"><div class="wrap">
@@ -401,6 +401,30 @@ echo "1 4000000000000000 4024000000000000" | build/special-check t_sf
   [
     "a",
     "columns[1].levels_capped = false"
+  ],
+  [
+    "d",
+    "$ stats corr readings.csv --cols temp,pressure"
+  ],
+  [
+    "g",
+    "{\"ok\":true,\"command\":\"stats\",\"schema\":\"stats.v1\",\"data\":{\"rows\":8,\"method\":\"pearson\",\"missing\":\"pairwise\",\"adjustment\":\"none\",\"columns\":[\"temp\",\"pressure\"],\"pairs\":[{\"x\":\"temp\",\"y\":\"pressure\",\"n\":6,\"r\":-0.566508780607394,\"statistic\":-1.3749283661491474,\"df\":4,\"p_value\":0.24114228330534562,\"p_method\":\"t\"}]},\"meta\":{\"version\":\"0.1.0\"}}"
+  ],
+  [
+    "d",
+    "$ stats test t1 readings.csv --cols temp --mu0 22"
+  ],
+  [
+    "g",
+    "{\"ok\":true,\"command\":\"stats\",\"schema\":\"stats.v1\",\"data\":{\"test\":\"t1\",\"rows\":8,\"mu0\":22.0,\"level\":0.95,\"adjustment\":\"none\",\"tests\":[{\"column\":\"temp\",\"statistic\":-1.2758537104946464,\"df\":6,\"p_value\":0.2491712996446719,\"p_method\":\"t\",\"effect_size\":{\"name\":\"cohen_d\",\"value\":-0.4822273753239762},\"interval\":{\"of\":\"mean\",\"level\":0.95,\"estimate\":21.84285714285714,\"low\":21.54147876671356,\"high\":22.144235519000723,\"rounding\":\"double\"},\"n\":{\"n\":7,\"missing\":1},\"method\":\"one-sample t\",\"assumptions\":{}}]},\"meta\":{\"version\":\"0.1.0\"}}"
+  ],
+  [
+    "d",
+    "$ stats test prop readings.csv --cols site --success north --p0 0.5"
+  ],
+  [
+    "g",
+    "{\"ok\":true,\"command\":\"stats\",\"schema\":\"stats.v1\",\"data\":{\"test\":\"prop\",\"success\":\"north\",\"p0\":0.5,\"level\":0.95,\"adjustment\":\"none\",\"tests\":[{\"column\":\"site\",\"statistic\":0.7071067811865476,\"df\":null,\"p_value\":0.47950012218695326,\"p_method\":\"normal\",\"effect_size\":{\"name\":\"difference\",\"value\":0.125,\"rounding\":\"single\"},\"interval\":{\"of\":\"proportion\",\"method\":\"wilson\",\"level\":0.95,\"estimate\":0.625,\"low\":0.30574239460262725,\"high\":0.8631557141764028,\"rounding\":\"double\"},\"n\":{\"n\":8,\"successes\":5,\"missing\":0},\"method\":\"one-sample z\",\"assumptions\":{\"n_p0\":4.0,\"n_1_minus_p0\":4.0}}]},\"meta\":{\"version\":\"0.1.0\"}}"
   ],
   [
     "d",
