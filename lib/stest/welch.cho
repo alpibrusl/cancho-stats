@@ -38,12 +38,12 @@ pub struct TwoSample {
     vstate: int,
 }
 
-fn slot() -> [] int {
+pub fn slot() -> [] int {
     return 24;
 }
 
 // the present values of column `col` of the group's keys into the accumulators acc = [S1 | S2]; answers how many
-fn fill[&k, &a, &w](keys: &k vec.Vec[int], ncols: int, col: int, rows: int, acc: &!a [int], wk: &!w [int]) -> [] int {
+pub fn fill[&k, &a, &w](keys: &k vec.Vec[int], ncols: int, col: int, rows: int, acc: &!a [int], wk: &!w [int]) -> [] int {
     let s1 = psum.size(1);
     let s2 = psum.size(2);
     var n = 0;
@@ -62,7 +62,7 @@ fn fill[&k, &a, &w](keys: &k vec.Vec[int], ncols: int, col: int, rows: int, acc:
 }
 
 // t[ro] = t[ra] (la limbs) times the lf limbs of slot fo of f
-fn mulf[&t, &f](t: &!t [int], ro: int, ra: int, la: int, f: &f [int], fo: int, lf: int) -> [] int {
+pub fn mulf[&t, &f](t: &!t [int], ro: int, ra: int, la: int, f: &f [int], fo: int, lf: int) -> [] int {
     let c = central.cap();
     bigint.clear(t[ro * c..ro * c + c], c);
     bigint.mul(t[ro * c..ro * c + c], t[ra * c..ra * c + la], la, f[fo * slot()..fo * slot() + lf], lf);
@@ -70,7 +70,7 @@ fn mulf[&t, &f](t: &!t [int], ro: int, ra: int, la: int, f: &f [int], fo: int, l
 }
 
 // t[ro] = t[ra] (la limbs) times t[rb] (lb limbs)
-fn mulr[&t](t: &!t [int], ro: int, ra: int, la: int, rb: int, lb: int) -> [] int {
+pub fn mulr[&t](t: &!t [int], ro: int, ra: int, la: int, rb: int, lb: int) -> [] int {
     let c = central.cap();
     bigint.clear(t[ro * c..ro * c + c], c);
     bigint.mul(t[ro * c..ro * c + c], t[ra * c..ra * c + la], la, t[rb * c..rb * c + lb], lb);
@@ -78,7 +78,7 @@ fn mulr[&t](t: &!t [int], ro: int, ra: int, la: int, rb: int, lb: int) -> [] int
 }
 
 // t[ro] = t[ra] + t[rb]
-fn sumr[&t](t: &!t [int], ro: int, ra: int, rb: int) -> [] int {
+pub fn sumr[&t](t: &!t [int], ro: int, ra: int, rb: int) -> [] int {
     let c = central.cap();
     bigint.clear(t[ro * c..ro * c + c], c);
     bigint.copy(t[ro * c..ro * c + c], t[ra * c..ra * c + c], c);
@@ -86,20 +86,20 @@ fn sumr[&t](t: &!t [int], ro: int, ra: int, rb: int) -> [] int {
     return 0;
 }
 
-fn len_of[&t](t: &t [int], r: int) -> [] int {
+pub fn len_of[&t](t: &t [int], r: int) -> [] int {
     let c = central.cap();
     return central.mag_len(t[r * c..r * c + c], c);
 }
 
 // small[ro] = small[ra] (la limbs) times small[rb] (lb limbs), the slots of f
-fn smul[&f](f: &!f [int], ro: int, ra: int, la: int, rb: int, lb: int) -> [] int {
+pub fn smul[&f](f: &!f [int], ro: int, ra: int, la: int, rb: int, lb: int) -> [] int {
     bigint.clear(f[ro * slot()..ro * slot() + slot()], slot());
     bigint.mul(f[ro * slot()..ro * slot() + slot()], f[ra * slot()..ra * slot() + la], la, f[rb * slot()..rb * slot() + lb], lb);
     return 0;
 }
 
 // t[ro] = n S2 - S1^2 for the magnitudes in t[rs1] and t[rs2]; n is slot fn of f; the scratch is t[rt]; pos and neg are c limbs each
-fn lval[&t, &f, &p, &q](t: &!t [int], f: &f [int], p: &!p [int], q: &!q [int], rs1: int, rs2: int, ro: int, rt: int, fo: int) -> [] int {
+pub fn lval[&t, &f, &p, &q](t: &!t [int], f: &f [int], p: &!p [int], q: &!q [int], rs1: int, rs2: int, ro: int, rt: int, fo: int) -> [] int {
     let c = central.cap();
     let l1 = psum.limbs(1);
     let l2 = psum.limbs(2);

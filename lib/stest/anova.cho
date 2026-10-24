@@ -1,0 +1,180 @@
+edition 5;
+
+module stest.anova;
+
+import acc.bigint;
+import acc.central;
+import acc.psum;
+import stest.welch;
+
+// One-way analysis of variance of the groups of one column (docs/rank.md section 3, S4.1). A group has n_i present values with S1_i = sum x and S2_i = sum x^2 from acc.psum (units 2^-1074 and 2^-2148); with
+//     L_i = n_i S2_i - S1_i^2          (so that the sum of squares of the group is L_i / n_i)          N = sum n_i          LT = N S2 - S1^2          (SST = LT / N)
+// and the common denominator D = prod n_i, the integers
+//     SSW = N sum_i L_i D / n_i          SST = LT D          SSB = SST - SSW          (all over N D, units 2^-2148)
+// give the classic F, eta^2 and omega^2 as exact rationals, each ONE rounding of a quotient of integers:
+//     F = SSB (N - k) / (SSW (k - 1))     eta^2 = SSB / SST     omega^2 = (SSB (N - k) - (k - 1) SSW) / (SST (N - k) + SSW)
+// The sum is folded group by group as a fraction (num = num n_i + L_i den, den = den n_i), never as k products of k - 1 factors. Welch's F* (the default) needs the weights w_i = n_i^2 (n_i - 1) / L_i and the
+// differences d_i = (S1_i N - S1 n_i) / (n_i N) of the group means from the grand mean, exact rationals: each is formed in double-double by one big-integer division (a quotient of 120 bits or more) and the rest
+// (weighted mean of the d_i, sum of w_i (d_i - m)^2, the sum T of (1 - w_i / W)^2 / (n_i - 1), F*, df2) in double-double. The values are scaled by powers of two so that the largest is near 2^60; a nonzero value more than
+// 2^360 below the largest is the status 3 (range): the weights or the distances of the means span more than 100 decimal digits. F* is then correct to about 2^-100 times the conditioning (1 + W m^2 / B).
+
+pub struct Anova {
+    k: int,
+    nn: int,
+    status: int,
+    fb: int,
+    fc: int,
+    eb: int,
+    ec: int,
+    es: int,
+    ob: int,
+    oc: int,
+    os: int,
+}
+
+// the regions 0 (|S1|), 1 (|S2|) and 2 (L = n S2 - S1^2) of t for the group whose accumulators are `a`; the small factors n (slot 0), n - 1 (slot 4), n (n - 1) (slot 5) of f; answers the sign of S1
+pub fn prep[&t, &f, &p, &q, &a](t: &!t [int], f: &!f [int], p: &!p [int], q: &!q [int], a: &a [int], n: int) -> [] int {
+    let c = central.cap();
+    let s1 = psum.size(1);
+    let g = s1 + psum.size(2);
+    let sg1 = psum.magnitude(a[0..s1], 1, t[0..c]);
+    psum.magnitude(a[s1..g], 2, t[c..2 * c]);
+    central.limbs_of(n, f[0..3]);
+    central.limbs_of(n - 1, f[4 * welch.slot()..4 * welch.slot() + 3]);
+    welch.smul(f, 5, 0, 3, 4, 3);
+    welch.lval(t, f, p, q, 0, 1, 2, 3, 0);
+    return sg1;
+}
+
+// The analysis of the `groups` groups whose accumulators lie one after another in `acc` (g ints each: S1 then S2) with the counts `ns`; a group of no value is not a group. `gs` receives three ints for each group: the bits of the
+// mean, the bits of the standard deviation, and 1 when the standard deviation is not defined (a group of one value).
+pub fn one_way[&h, &a, &n, &s](heap: &!h Heap, acc: &a [int], ns: &n [int], groups: int, g: int, gs: &!s [int]) -> [heap] Anova {
+    let c = central.cap();
+    let l1 = psum.limbs(1);
+    let l2 = psum.limbs(2);
+    var k = 0;
+    var nn = 0;
+    var i = 0;
+    while i < groups {
+        if ns[i] > 0 {
+            k = k + 1;
+            nn = nn + ns[i];
+        }
+        i = i + 1;
+    }
+    var status = 0;
+    var fb = 0;
+    var fc = 0;
+    var eb = 0;
+    var ec = 0;
+    var es = 1;
+    var ob = 0;
+    var oc = 0;
+    var os = 1;
+    let tmp = box_slice(heap, 16 * c + 1, 0);
+    let pos = box_slice(heap, c, 0);
+    let neg = box_slice(heap, c, 0);
+    let p1 = box_slice(heap, c, 0);
+    let q1 = box_slice(heap, c, 0);
+    let fs = box_slice(heap, 10 * welch.slot() + 8, 0);
+    borrow mut tmp as &!tw in {
+        borrow mut pos as &!pw in {
+            borrow mut neg as &!nw in {
+                borrow mut p1 as &!p1w in {
+                    borrow mut q1 as &!q1w in {
+                        borrow mut fs as &!fw in {
+                            let t = contents(tw);
+                            let p = contents(pw);
+                            let q = contents(nw);
+                            let pp = contents(p1w);
+                            let qq = contents(q1w);
+                            let f = contents(fw);
+                            // D = 1
+                            t[6 * c] = 1;
+                            i = 0;
+                            while i < groups {
+                                let n = ns[i];
+                                gs[3 * i] = 0;
+                                gs[3 * i + 1] = 0;
+                                gs[3 * i + 2] = 1;
+                                if n > 0 {
+                                    let sg1 = prep(t, f, p, q, acc[i * g..i * g + g], n);
+                                    let (mb, mc) = central.ratio_bits(heap, t[0..c], l1, f[0..3], 3, 0 - 1074, sg1 < 0);
+                                    gs[3 * i] = mb;
+                                    if n >= 2 {
+                                        let (sb, sc) = central.sqrt_ratio_bits_exp(heap, t[2 * c..3 * c], welch.len_of(t, 2), f[5 * welch.slot()..5 * welch.slot() + 6], 6, 0 - 1074);
+                                        gs[3 * i + 1] = sb;
+                                        gs[3 * i + 2] = 0;
+                                    }
+                                    central.put(pp, qq, t[0..c], l1, sg1 < 0);
+                                    bigint.add_in(t[8 * c..9 * c], c, t[c..c + l2], l2);
+                                    // Wn = Wn n + L D, D = D n
+                                    welch.mulf(t, 3, 5, welch.len_of(t, 5), f, 0, 3);
+                                    welch.mulr(t, 4, 2, welch.len_of(t, 2), 6, welch.len_of(t, 6));
+                                    welch.sumr(t, 13, 3, 4);
+                                    bigint.copy(t[5 * c..6 * c], t[13 * c..14 * c], c);
+                                    welch.mulf(t, 3, 6, welch.len_of(t, 6), f, 0, 3);
+                                    bigint.copy(t[6 * c..7 * c], t[3 * c..4 * c], c);
+                                }
+                                i = i + 1;
+                            }
+                            if k < 2 || nn - k < 1 {
+                                status = 1;
+                            } else {
+                                central.settle(pp, qq, t[7 * c..8 * c]);
+                                central.limbs_of(nn, f[welch.slot()..welch.slot() + 3]);
+                                central.limbs_of(nn - k, f[2 * welch.slot()..2 * welch.slot() + 3]);
+                                central.limbs_of(k - 1, f[3 * welch.slot()..3 * welch.slot() + 3]);
+                                welch.lval(t, f, p, q, 7, 8, 9, 3, 1);
+                                let ld = welch.len_of(t, 6);
+                                // SSW = N Wn, SST = LT D, SSB = SST - SSW
+                                welch.mulf(t, 10, 5, welch.len_of(t, 5), f, 1, 3);
+                                welch.mulr(t, 11, 9, welch.len_of(t, 9), 6, ld);
+                                bigint.copy(t[12 * c..13 * c], t[11 * c..12 * c], c);
+                                bigint.sub_in(t[12 * c..13 * c], c, t[10 * c..11 * c], c);
+                                let ssw_zero = bigint.is_zero(t[10 * c..11 * c], c);
+                                let sst_zero = bigint.is_zero(t[11 * c..12 * c], c);
+                                if ssw_zero {
+                                    status = 2;
+                                } else {
+                                    welch.mulf(t, 3, 12, welch.len_of(t, 12), f, 2, 3);
+                                    welch.mulf(t, 4, 10, welch.len_of(t, 10), f, 3, 3);
+                                    let (f3, f4) = central.ratio_bits(heap, t[3 * c..4 * c], welch.len_of(t, 3), t[4 * c..5 * c], welch.len_of(t, 4), 0, false);
+                                    fb = f3;
+                                    fc = f4;
+                                }
+                                if !sst_zero {
+                                    let (e3, e4) = central.ratio_bits(heap, t[12 * c..13 * c], welch.len_of(t, 12), t[11 * c..12 * c], welch.len_of(t, 11), 0, false);
+                                    eb = e3;
+                                    ec = e4;
+                                    es = 0;
+                                    // omega^2 = (SSB (N - k) - (k - 1) SSW) / (SST (N - k) + SSW)
+                                    bigint.clear(p, c);
+                                    bigint.clear(q, c);
+                                    welch.mulf(t, 3, 12, welch.len_of(t, 12), f, 2, 3);
+                                    central.put(p, q, t[3 * c..4 * c], welch.len_of(t, 3), false);
+                                    welch.mulf(t, 3, 10, welch.len_of(t, 10), f, 3, 3);
+                                    central.put(p, q, t[3 * c..4 * c], welch.len_of(t, 3), true);
+                                    let so = central.settle(p, q, t[13 * c..14 * c]);
+                                    welch.mulf(t, 3, 11, welch.len_of(t, 11), f, 2, 3);
+                                    welch.sumr(t, 14, 3, 10);
+                                    let (o3, o4) = central.ratio_bits(heap, t[13 * c..14 * c], welch.len_of(t, 13), t[14 * c..15 * c], welch.len_of(t, 14), 0, so < 0);
+                                    ob = o3;
+                                    oc = o4;
+                                    os = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    unbox_slice(heap, tmp);
+    unbox_slice(heap, pos);
+    unbox_slice(heap, neg);
+    unbox_slice(heap, p1);
+    unbox_slice(heap, q1);
+    unbox_slice(heap, fs);
+    return Anova { k: k, nn: nn, status: status, fb: fb, fc: fc, eb: eb, ec: ec, es: es, ob: ob, oc: oc, os: os };
+}

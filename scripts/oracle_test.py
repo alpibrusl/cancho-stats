@@ -365,3 +365,85 @@ def adjust(ps, method):
             run = min(run, min(Fraction(1), m * exact[i] / r))
             out[i] = rounded(run)
     return out
+
+
+def p_f(d1, d2, f):
+    """the upper tail of the F distribution on (d1, d2) degrees of freedom at the exact rational f >= 0 (d2 may be a Fraction): I_x(d2 / 2, d1 / 2) with x = d2 / (d2 + d1 f), 60 digits"""
+    if f == 0:
+        return mpmath.mpf(1)
+    x = Fraction(d2) / (Fraction(d2) + d1 * f)
+    return mpmath.betainc(frac_mpf(Fraction(d2)) / 2, mpmath.mpf(d1) / 2, 0, frac_mpf(x), regularized=True)
+
+
+def anova(groups, welch):
+    """one-way analysis of variance of the lists of present values `groups` (docs/rank.md section 3, S4.1), from the textbook formulas on Fractions: SSW = sum (S2_i - S1_i^2 / n_i), SST = S2 - S1^2 / N, SSB = SST - SSW,
+    F = (SSB / (k - 1)) / (SSW / (N - k)); Welch's F* = [sum w_i (m_i - mw)^2 / (k - 1)] / [1 + 2 (k - 2) / (k^2 - 1) T] with w_i = n_i / v_i, mw = sum w_i m_i / W, T = sum (1 - w_i / W)^2 / (n_i - 1) and
+    df2 = (k^2 - 1) / (3 T), all EXACT rationals. A group with no value is not a group (k counts the groups with at least one). eta^2 = SSB / SST and omega^2 = (SSB - (k - 1) MSW) / (SST + MSW) always from the sums of squares.
+    A dict: ns (n of each group as given, 0 for an empty one), k, N, statistic (the double), df1, df2 (Fraction or int), p (mpf), eta, omega (doubles), groups [(n, mean, sd)] for the groups given, reason."""
+    out = {"ns": [len(g) for g in groups], "k": 0, "N": 0, "statistic": None, "df1": None, "df2": None, "p": None, "eta": None, "omega": None, "reason": None, "f": None, "groups": []}
+    for g in groups:
+        n, s1, s2 = sums(g)
+        if n == 0:
+            out["groups"].append((0, None, None))
+            continue
+        m = s1 / n
+        sd = sqrt_round((s2 - s1 * s1 / n) / (n - 1)) if n >= 2 else None
+        out["groups"].append((n, rounded(m), sd))
+    live = [(sums(g), g) for g in groups if len(g) > 0]
+    k = len(live)
+    nn = sum(s[0][0] for s in live)
+    out["k"], out["N"] = k, nn
+    if k < 2 or nn - k < 1:
+        out["reason"] = "too-few-rows"
+        return out
+    s1 = sum((s[0][1] for s in live), Fraction(0))
+    s2 = sum((s[0][2] for s in live), Fraction(0))
+    ssw = sum((s[0][2] - s[0][1] * s[0][1] / s[0][0] for s in live), Fraction(0))
+    sst = s2 - s1 * s1 / nn
+    ssb = sst - ssw
+    out["df1"] = k - 1
+    if sst != 0:
+        out["eta"] = rounded(ssb / sst)
+    msw = ssw / (nn - k)
+    if sst + msw != 0:
+        out["omega"] = rounded((ssb - (k - 1) * msw) / (sst + msw))
+    if welch and any(s[0][0] < 2 for s in live):
+        out["reason"] = "too-few-rows"   # Welch's weights need a variance in every group; the effect sizes above stand
+        return out
+    if welch:
+        v = [(s[0][2] - s[0][1] * s[0][1] / s[0][0]) / (s[0][0] - 1) for s in live]
+        if any(x == 0 for x in v):
+            out["reason"] = "variance-zero"
+            return out
+        # the span of the scaled weights and distances (docs/rank.md section 3): bit lengths of the integers the program divides, a nonzero value more than 360 bits below the largest is `welch-range`
+        unit = Fraction(1, 2 ** 1074)
+        bw, bd = [], []
+        for (n_i, a1, a2), g in live:
+            l_int = (n_i * a2 - a1 * a1) / (unit * unit)
+            bw.append((n_i * n_i * (n_i - 1)).bit_length() - int(l_int).bit_length())
+            dn = abs((a1 / unit) * nn - (s1 / unit) * n_i)
+            if dn != 0:
+                bd.append(int(dn).bit_length() - (n_i * nn).bit_length())
+        out["spread"] = max(max(bw) - min(bw), (max(bd) - min(bd)) if bd else 0)
+        w = [Fraction(s[0][0]) / x for s, x in zip(live, v)]
+        ww = sum(w, Fraction(0))
+        m = [s[0][1] / s[0][0] for s in live]
+        mw = sum((wi * mi for wi, mi in zip(w, m)), Fraction(0)) / ww
+        t = sum(((1 - wi / ww) ** 2 / (s[0][0] - 1) for wi, s in zip(w, live)), Fraction(0))
+        num = sum((wi * (mi - mw) ** 2 for wi, mi in zip(w, m)), Fraction(0)) / (k - 1)
+        f = num / (1 + Fraction(2 * (k - 2), k * k - 1) * t)
+        out["df2"] = Fraction(k * k - 1) / (3 * t)
+    else:
+        if ssw == 0:
+            out["reason"] = "variance-zero"
+            return out
+        f = (ssb / (k - 1)) / (ssw / (nn - k))
+        out["df2"] = nn - k
+    out["f"] = f
+    try:
+        out["statistic"] = rounded(f)
+    except OverflowError:
+        out["reason"] = "statistic-beyond-double"
+        return out
+    out["p"] = p_f(k - 1, out["df2"], f)
+    return out

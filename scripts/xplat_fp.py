@@ -30,6 +30,7 @@ import gate_test  # noqa: E402
 import gate_test2  # noqa: E402
 import gate_test3  # noqa: E402
 import gate_test5  # noqa: E402
+import gate_anova  # noqa: E402
 import tempfile  # noqa: E402
 
 GOLDEN = ROOT / "docs" / "xplat_fp.txt"
@@ -276,6 +277,29 @@ def test5_lines(stats):
     return out
 
 
+def anova_lines(stats):
+    """`stats test anova` on 8 seeded CSV files (2 to 25 groups of unequal sizes with their own mean and spread, empty cells, shapes from the generator of scripts/gate_anova.py): the hash of the bytes of Welch's and of the classic answer."""
+    out = []
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        r = gate_special.SM64(61)
+        done = 0
+        fi = len(gate_anova.FIXED)
+        while done < 8:
+            names, rows, gcol, labels, vidx, shapes = gate_anova.gen(r, fi)
+            fi += 1
+            num = [j for j in vidx if gate_anova.column_numeric(rows, j)]
+            if not num:
+                continue
+            h = hashlib.sha256()
+            for method in ("welch", "pooled"):
+                p = gate_anova.run(stats, tmp, names, rows, ["--cols", ",".join(names[j] for j in num), "--group", "g", "--variance", method])
+                h.update(("exit %d %s" % (p.returncode, p.stdout)).encode())
+            out.append("test-anova\tfile%02d\t%d\t%s" % (done, len(rows), h.hexdigest()))
+            done += 1
+    return out
+
+
 def fingerprint(driver, acc, threads_check=True, stats=None):
     lines = []
     bad = []
@@ -305,6 +329,7 @@ def fingerprint(driver, acc, threads_check=True, stats=None):
         lines += test3_lines(stats)
         lines += test4_lines(stats)
         lines += test5_lines(stats)
+        lines += anova_lines(stats)
     return lines, bad
 
 

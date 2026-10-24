@@ -1,0 +1,338 @@
+edition 5;
+
+module stest.welchf;
+
+import std.math;
+import acc.bigint;
+import acc.central;
+import acc.psum;
+import special.dd;
+import stest.anova;
+import stest.welch;
+
+// Welch's one-way statistic (docs/rank.md section 3), for groups with n_i >= 2 values and a variance:
+//     w_i = n_i / s_i^2 = n_i^2 (n_i - 1) / L_i          W = sum w_i          T = sum (1 - w_i / W)^2 / (n_i - 1)
+//     B = sum w_i (m_i - m_w)^2 = (1 / W) sum over the pairs i < j of w_i w_j (m_i - m_j)^2          F* = (B / (k - 1)) / (1 + 2 (k - 2) T / (k^2 - 1))          df2 = (k^2 - 1) / (3 T)
+// with m_i = S1_i / n_i. Every w_i and every difference m_i - m_j = (S1_i n_j - S1_j n_i) / (n_i n_j) is an exact rational, formed in double-double by one big-integer division (the quotient of 120 bits or more of the top
+// bits of the numerator); the rest is double-double. The sum over the PAIRS has no term that is a difference of nearly equal quantities, whatever the weights and the offsets of the means (the form with the weighted mean m_w
+// has: its first run was off by 20% on groups of very different scales). The values are scaled by powers of two so that the largest is near 2^60; a nonzero weight or difference more than 2^360 below the largest is the status 3
+// (range): the variances or the distances between means of the groups span more than 100 decimal digits. F* is then correct to about 2^-100 times the relative size of the largest term in the sum.
+
+pub struct WelchF {
+    status: int,
+    f: float,
+    df: float,
+}
+
+// out = a >> sh (a has na limbs, out has na limbs, zero)
+fn shr_bits[&o, &a](out: &!o [int], a: &a [int], na: int, sh: int) -> [] int {
+    let q = sh / 26;
+    let r = sh % 26;
+    var i = 0;
+    while q + i < na {
+        var v = a[q + i] >> r;
+        if q + i + 1 < na {
+            v = v | ((a[q + i + 1] << (26 - r)) & 67108863);
+        }
+        out[i] = v;
+        i = i + 1;
+    }
+    return 0;
+}
+
+// the quotient of num * 2^k by den (k so that it has 120 bits or more) as a double-double, its top six limbs summed from the top, times 2^(e - k)
+fn dd_core[&h, &n, &d](heap: &!h Heap, num: &n [int], nn: int, den: &d [int], nd: int, e: int) -> [heap] (float, float) {
+    let bn = bigint.bit_length(num, nn);
+    if bn == 0 {
+        return (0.0, 0.0);
+    }
+    let bd = bigint.bit_length(den, nd);
+    var k = 120 + bd - bn;
+    if k < 0 {
+        k = 0;
+    }
+    let nq = (bn + k) / 26 + 3;
+    let q = box_slice(heap, nq, 0);
+    let r = box_slice(heap, nd + 2, 0);
+    var h = 0.0;
+    var l = 0.0;
+    var low = 0;
+    borrow mut q as &!qw in {
+        borrow mut r as &!rw in {
+            bigint.div_shifted(num, nn, den, nd, k, contents(qw), contents(rw));
+            let qv = contents(qw);
+            var top = nq - 1;
+            while top > 0 && qv[top] == 0 {
+                top = top - 1;
+            }
+            low = top - 5;
+            if low < 0 {
+                low = 0;
+            }
+            var j = top;
+            while j >= low {
+                h = h * 67108864.0;
+                l = l * 67108864.0;
+                let (sh, sl) = dd.add(h, l, float_of(qv[j]), 0.0);
+                h = sh;
+                l = sl;
+                j = j - 1;
+            }
+        }
+    }
+    unbox_slice(heap, q);
+    unbox_slice(heap, r);
+    let s = e - k + 26 * low;
+    return (math.ldexp(h, s), math.ldexp(l, s));
+}
+
+// num / den * 2^e as a double-double; a numerator more than 140 bits longer than the denominator is cut to its top bd + 140 bits first (a relative error below 2^-139)
+fn dd_ratio[&h, &n, &d](heap: &!h Heap, num: &n [int], nn: int, den: &d [int], nd: int, e: int) -> [heap] (float, float) {
+    let bn = bigint.bit_length(num, nn);
+    let bd = bigint.bit_length(den, nd);
+    if bn > bd + 140 {
+        let sh = bn - bd - 140;
+        let cut = box_slice(heap, nn + 1, 0);
+        var out = (0.0, 0.0);
+        borrow mut cut as &!cw in {
+            shr_bits(contents(cw), num, nn, sh);
+            out = dd_core(heap, contents(cw), nn, den, nd, e + sh);
+        }
+        unbox_slice(heap, cut);
+        return out;
+    }
+    return dd_core(heap, num, nn, den, nd, e);
+}
+
+// region 4 of t = |S1_a n_b - S1_b n_a| for the groups whose accumulators are aa and ab (counts na and nb); the f slots 8 and 9 hold the counts and slot 10 (6 limbs) their product, the denominator; answers the sign
+fn pair_num[&t, &f, &p, &q, &x, &y](t: &!t [int], f: &!f [int], p: &!p [int], q: &!q [int], aa: &x [int], ab: &y [int], na: int, nb: int) -> [] int {
+    let c = central.cap();
+    let s1 = psum.size(1);
+    let l1 = psum.limbs(1);
+    let sga = psum.magnitude(aa[0..s1], 1, t[0..c]);
+    let sgb = psum.magnitude(ab[0..s1], 1, t[c..2 * c]);
+    central.limbs_of(na, f[8 * welch.slot()..8 * welch.slot() + 3]);
+    central.limbs_of(nb, f[9 * welch.slot()..9 * welch.slot() + 3]);
+    welch.smul(f, 10, 8, 3, 9, 3);
+    bigint.clear(p, c);
+    bigint.clear(q, c);
+    welch.mulf(t, 3, 0, l1, f, 9, 3);
+    central.put(p, q, t[3 * c..4 * c], l1 + 3, sga < 0);
+    welch.mulf(t, 3, 1, l1, f, 8, 3);
+    central.put(p, q, t[3 * c..4 * c], l1 + 3, sgb >= 0);
+    return central.settle(p, q, t[4 * c..5 * c]);
+}
+
+// F* and df2 from the weights w (wh + wl), the counts n_i - 1 and the sum b = sum over the pairs of w_i w_j (m_i - m_j)^2, all scaled: answers (F*, its low part, df2, its low part) of the scaled values
+fn tail[&a, &b, &m](wh: &a [float], wl: &b [float], nm1: &m [int], k: int, bh: float, bl: float) -> [] (float, float, float, float) {
+    var sw_h = 0.0;
+    var sw_l = 0.0;
+    var t_h = 0.0;
+    var t_l = 0.0;
+    var i = 0;
+    while i < k {
+        let (ah, al) = dd.add(sw_h, sw_l, wh[i], wl[i]);
+        sw_h = ah;
+        sw_l = al;
+        i = i + 1;
+    }
+    let (b2h, b2l) = dd.div(bh, bl, sw_h, sw_l);
+    i = 0;
+    while i < k {
+        let (uh, ul) = dd.div(wh[i], wl[i], sw_h, sw_l);
+        let (rh, rl) = dd.add(1.0, 0.0, 0.0 - uh, 0.0 - ul);
+        let (r2h, r2l) = dd.mul(rh, rl, rh, rl);
+        let (qh, ql) = dd.div(r2h, r2l, float_of(nm1[i]), 0.0);
+        let (sh, sl) = dd.add(t_h, t_l, qh, ql);
+        t_h = sh;
+        t_l = sl;
+        i = i + 1;
+    }
+    let kk = float_of(k * k - 1);
+    let (ch, cl) = dd.div(float_of(2 * (k - 2)), 0.0, kk, 0.0);
+    let (xh, xl) = dd.mul(ch, cl, t_h, t_l);
+    let (dh2, dl2) = dd.add(1.0, 0.0, xh, xl);
+    let (fh, fl) = dd.div(b2h, b2l, float_of(k - 1), 0.0);
+    let (gh, gl) = dd.div(fh, fl, dh2, dl2);
+    let (th3, tl3) = dd.mul(3.0, 0.0, t_h, t_l);
+    let (vh, vl) = dd.div(kk, 0.0, th3, tl3);
+    return (gh, gl, vh, vl);
+}
+
+// Welch's statistic of the `groups` groups whose accumulators lie one after another in `acc` (g ints each) with the counts `ns`; a group of no value is not a group. Status 0 answered, 1 a group of one value (or fewer than two
+// groups), 2 a group without variance, 3 range, 4 the statistic is beyond the largest double.
+pub fn welch_f[&h, &a, &n](heap: &!h Heap, acc: &a [int], ns: &n [int], groups: int, g: int) -> [heap] WelchF {
+    let c = central.cap();
+    let l1 = psum.limbs(1);
+    var kk = 0;
+    var single = false;
+    var i = 0;
+    while i < groups {
+        if ns[i] > 0 {
+            kk = kk + 1;
+        }
+        if ns[i] == 1 {
+            single = true;
+        }
+        i = i + 1;
+    }
+    if kk < 2 || single {
+        return WelchF { status: 1, f: 0.0, df: 0.0 };
+    }
+    let tmp = box_slice(heap, 12 * c + 1, 0);
+    let pos = box_slice(heap, c, 0);
+    let neg = box_slice(heap, c, 0);
+    let fs = box_slice(heap, 12 * welch.slot() + 8, 0);
+    let gi = box_slice(heap, kk + 1, 0);
+    let bw = box_slice(heap, kk + 1, 0);
+    let nm1 = box_slice(heap, kk + 1, 0);
+    let wh = box_slice(heap, kk + 1, 0.0);
+    let wl = box_slice(heap, kk + 1, 0.0);
+    var status = 0;
+    var wf = 0.0;
+    var wdf = 0.0;
+    borrow mut tmp as &!tw in {
+        borrow mut pos as &!pw in {
+            borrow mut neg as &!nw in {
+                borrow mut fs as &!fw in {
+                    borrow mut gi as &!giw in {
+                        borrow mut bw as &!bww in {
+                            borrow mut nm1 as &!nmw in {
+                                borrow mut wh as &!whw in {
+                                    borrow mut wl as &!wlw in {
+                                        let t = contents(tw);
+                                        let p = contents(pw);
+                                        let q = contents(nw);
+                                        let f = contents(fw);
+                                        let giv = contents(giw);
+                                        let bwv = contents(bww);
+                                        let nmv = contents(nmw);
+                                        let whv = contents(whw);
+                                        let wlv = contents(wlw);
+                                        var a_ = 0;
+                                        i = 0;
+                                        while i < groups {
+                                            if ns[i] > 0 {
+                                                giv[a_] = i;
+                                                nmv[a_] = ns[i] - 1;
+                                                a_ = a_ + 1;
+                                            }
+                                            i = i + 1;
+                                        }
+                                        // the weights: n^2 (n - 1) / L
+                                        var maxw = 0 - 100000;
+                                        var minw = 100000;
+                                        var wzero = false;
+                                        a_ = 0;
+                                        while a_ < kk && !wzero {
+                                            let gx = giv[a_];
+                                            anova.prep(t, f, p, q, acc[gx * g..gx * g + g], ns[gx]);
+                                            if bigint.is_zero(t[2 * c..3 * c], c) {
+                                                wzero = true;
+                                            } else {
+                                                welch.smul(f, 6, 0, 3, 5, 6);
+                                                let bwi = bigint.bit_length(f[6 * welch.slot()..7 * welch.slot()], 9) - bigint.bit_length(t[2 * c..3 * c], welch.len_of(t, 2));
+                                                bwv[a_] = bwi;
+                                                if bwi > maxw {
+                                                    maxw = bwi;
+                                                }
+                                                if bwi < minw {
+                                                    minw = bwi;
+                                                }
+                                            }
+                                            a_ = a_ + 1;
+                                        }
+                                        if wzero {
+                                            status = 2;
+                                        } else {
+                                            // the sizes of the differences of the means
+                                            var maxd = 0 - 100000;
+                                            var mind = 100000;
+                                            var x = 0;
+                                            while x < kk {
+                                                var y = x + 1;
+                                                while y < kk {
+                                                    let gx = giv[x];
+                                                    let gy = giv[y];
+                                                    pair_num(t, f, p, q, acc[gx * g..gx * g + g], acc[gy * g..gy * g + g], ns[gx], ns[gy]);
+                                                    if !bigint.is_zero(t[4 * c..5 * c], c) {
+                                                        let bdi = bigint.bit_length(t[4 * c..5 * c], l1 + 3) - bigint.bit_length(f[10 * welch.slot()..11 * welch.slot()], 6);
+                                                        if bdi > maxd {
+                                                            maxd = bdi;
+                                                        }
+                                                        if bdi < mind {
+                                                            mind = bdi;
+                                                        }
+                                                    }
+                                                    y = y + 1;
+                                                }
+                                                x = x + 1;
+                                            }
+                                            if maxw - minw > 360 || maxd - mind > 360 && maxd > 0 - 100000 {
+                                                status = 3;
+                                            } else {
+                                                let ew = 60 - maxw;
+                                                var ed = 0;
+                                                if maxd > 0 - 100000 {
+                                                    ed = 60 - maxd;
+                                                }
+                                                a_ = 0;
+                                                while a_ < kk {
+                                                    let gx = giv[a_];
+                                                    anova.prep(t, f, p, q, acc[gx * g..gx * g + g], ns[gx]);
+                                                    welch.smul(f, 6, 0, 3, 5, 6);
+                                                    let (xh, xl) = dd_ratio(heap, f[6 * welch.slot()..7 * welch.slot()], 9, t[2 * c..3 * c], welch.len_of(t, 2), ew);
+                                                    whv[a_] = xh;
+                                                    wlv[a_] = xl;
+                                                    a_ = a_ + 1;
+                                                }
+                                                var b_h = 0.0;
+                                                var b_l = 0.0;
+                                                x = 0;
+                                                while x < kk {
+                                                    var y = x + 1;
+                                                    while y < kk {
+                                                        let gx = giv[x];
+                                                        let gy = giv[y];
+                                                        pair_num(t, f, p, q, acc[gx * g..gx * g + g], acc[gy * g..gy * g + g], ns[gx], ns[gy]);
+                                                        if !bigint.is_zero(t[4 * c..5 * c], c) {
+                                                            let (zh, zl) = dd_ratio(heap, t[4 * c..5 * c], l1 + 3, f[10 * welch.slot()..11 * welch.slot()], 6, ed);
+                                                            let (z2h, z2l) = dd.mul(zh, zl, zh, zl);
+                                                            let (ph, pl) = dd.mul(whv[x], wlv[x], whv[y], wlv[y]);
+                                                            let (th, tl) = dd.mul(ph, pl, z2h, z2l);
+                                                            let (ah, al) = dd.add(b_h, b_l, th, tl);
+                                                            b_h = ah;
+                                                            b_l = al;
+                                                        }
+                                                        y = y + 1;
+                                                    }
+                                                    x = x + 1;
+                                                }
+                                                let (fh, fl, vh, vl) = tail(whv, wlv, nmv, kk, b_h, b_l);
+                                                wf = math.ldexp(fh + fl, 0 - ew - 2 * ed);
+                                                wdf = vh + vl;
+                                                if wf > 1.7e308 {
+                                                    status = 4;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    unbox_slice(heap, tmp);
+    unbox_slice(heap, pos);
+    unbox_slice(heap, neg);
+    unbox_slice(heap, fs);
+    unbox_slice(heap, gi);
+    unbox_slice(heap, bw);
+    unbox_slice(heap, nm1);
+    unbox_slice(heap, wh);
+    unbox_slice(heap, wl);
+    return WelchF { status: status, f: wf, df: wdf };
+}

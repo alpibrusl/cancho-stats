@@ -96,7 +96,7 @@ M = [
     ("paired-output-order", F, "contents(par)[k], contents(pbr)[k], info.rows, 0,", "contents(pbr)[k], contents(par)[k], info.rows, 0,"),
     ("paired-name", F, "w = json.put_string(heap, w, \"paired\");", "w = json.put_string(heap, w, \"t1\");"),
     ("pairs-required", F, "if !cli.has(parsed, table, \"pairs\") {", "if false {"),
-    ("group-required", F, "&& !cli.has(parsed, table, \"group\") {", "&& false {"),
+    ("group-required", F, "\"t2\") && !cli.has(parsed, table, \"group\") {", "\"t2\") && false {"),
     ("group-levels-two", F, "if clean && nlevels != 2 {", "if clean && nlevels != 3 {"),
     ("group-a-is-second", F, "let key_a = map.key_at(gr.m, contents(gr.order)[0]);", "let key_a = map.key_at(gr.m, contents(gr.order)[1]);"),
     ("group-b-is-first", F, "let key_b = map.key_at(gr.m, contents(gr.order)[1]);", "let key_b = map.key_at(gr.m, contents(gr.order)[0]);"),
