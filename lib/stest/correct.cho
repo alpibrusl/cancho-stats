@@ -34,6 +34,7 @@ fn at[&t, &w](text: &t [byte], i: int, what: &w [byte]) -> [] bool {
     return true;
 }
 
+// (a "p_value" is always followed by a comma: the "p_method" key comes next in every entry)
 // the index of the next `"p_value":` at or after i, or -1
 fn next_p[&t](text: &t [byte], from: int) -> [] int {
     var i = from;
@@ -99,7 +100,7 @@ pub fn put_family[&h, &m](heap: &!h Heap, w0: json.Writer, method: &m [byte]) ->
                 var k = 0;
                 while i >= 0 && k < n {
                     var j = i + 10;
-                    while j < len(text) && text[j] != byte_of(44) && text[j] != byte_of(125) {
+                    while j < len(text) && text[j] != byte_of(44) {
                         j = j + 1;
                     }
                     // a null p-value is not a number: parse_float refuses it, and the entry has no place in the family

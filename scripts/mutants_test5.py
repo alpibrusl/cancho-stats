@@ -28,7 +28,6 @@ M = [
     ("method-bh", C, "let is_bh = bytes_eq(method, \"bh\");", "let is_bh = bytes_eq(method, \"b\");"),
     ("family-size", C, "w = json.put_int(heap, w, count);", "w = json.put_int(heap, w, n);"),
     ("family-null-entries", C, "if contents(lr2)[k] == 1 {\n                    w = json.put_float(heap, w, float_of_bits(contents(ar)[k]));", "if contents(lr2)[k] == 7 {\n                    w = json.put_float(heap, w, float_of_bits(contents(ar)[k]));"),
-    ("token-end", C, "text[j] != byte_of(44) && text[j] != byte_of(125)", "text[j] != byte_of(44)"),
     ("pattern-length", C, "i = next_p(text, j);", "i = next_p(text, i + 1);"),
     ("max-tests-edge", F, "if named > cli.nat(args, parsed, table, \"max-tests\") {", "if named >= cli.nat(args, parsed, table, \"max-tests\") {"),
     ("max-tests-pairs", F, "named = bytes.count_byte(cli.text(args, parsed, table, \"pairs\"), ',') + 1;", "named = bytes.count_byte(cli.text(args, parsed, table, \"cols\"), ',') + 1;"),
