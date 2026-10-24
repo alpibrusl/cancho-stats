@@ -215,7 +215,7 @@ def test3_lines(stats):
             la, lb, wt = gate_test3.draw_table(r)
             n = [2, 3, 5, 10, 30, 100, 400][int(r.next() % 7)]
             pairs = gate_test3.sample(r, la, lb, wt, n)
-            rows = [[p[0], p[1], p[0] if r.next() % 3 else ""] for p in pairs]
+            rows = [[p[0], p[1], p[0] if r.next() % 3 else None] for p in pairs]
             h = hashlib.sha256()
             p = gate_test3.run(stats, tmp, ["A", "G", "C"], rows, ["--cols", "A,C", "--vs", "G"])
             h.update(("exit %d %s" % (p.returncode, p.stdout)).encode())

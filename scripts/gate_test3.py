@@ -30,12 +30,26 @@ from gate_special import SM64  # noqa: E402
 import gate_describe as gd  # noqa: E402
 import oracle_test as ot  # noqa: E402
 
-POOLS = [["a", "b", "c", "d", "e", "f", "g"], ["1", "2", "3", "10", "9", "100", "20"], ["red", "green", "blue", "x y", "Z", "yes", "no"], ["0", "1", "1.0", "01", "-1", "2e0", "NA"], ["L%02d" % i for i in range(40)]]
+POOLS = [["a", "b", "c", "d", "e", "f", "g"], ["1", "2", "3", "10", "9", "100", "20"], ["red", "green", "blue", "x y", "Z", "yes", "no"], ["0", "1", "1.0", "01", "-1", "2e0", "NA"], ["L%02d" % i for i in range(40)], ["x,1", "", "y", "z w", "q\"r", "-"]]
 ULP = 2.0 ** -52
 
 
+def raw(v):
+    """the bytes the program sees between the quotes of a quoted cell: a doubled quote stays doubled (as `describe --by` names its groups), so a level is named by its raw text and ordered by it"""
+    return v.replace('"', '""')
+
+
+def csv_cell(v):
+    """None is an empty cell (missing); the empty label is written as a quoted empty cell, which is a level; a label with a comma or a quote is quoted (RFC 4180)"""
+    if v is None:
+        return ""
+    if v == "" or "," in v or '"' in v:
+        return '"' + v.replace('"', '""') + '"'
+    return v
+
+
 def run(binary, tmp, names, rows, extra):
-    text = ",".join(names) + "\n" + "\n".join(",".join(r) for r in rows) + "\n"
+    text = ",".join(names) + "\n" + "\n".join(",".join(csv_cell(c) for c in r) for r in rows) + "\n"
     (tmp / "f.csv").write_text(text)
     return subprocess.run([binary, "test", "chisq", "--root", str(tmp)] + list(extra) + ["f.csv"], capture_output=True, text=True, timeout=300)
 
@@ -212,7 +226,7 @@ def main():
             for name in cols:
                 for i in range(n):
                     if r.next() % 20 == 0:
-                        cols[name][i] = ""
+                        cols[name][i] = None
             names = ["A", "G", "C"]
             rows = [[cols[nm][i] for nm in names] for i in range(n)]
             # --- independence of A and C against G
@@ -228,9 +242,9 @@ def main():
                 bad.append((fi, "the header: %r" % {k: doc.get(k) for k in ("test", "vs", "adjustment")}))
                 continue
             for g, nm in zip(doc["tests"], ["A", "C"]):
-                used = [(cols[nm][i], cols["G"][i]) for i in range(n) if cols[nm][i] != "" and cols["G"][i] != ""]
-                ra = sorted(set(x for x, _ in used))
-                cb = sorted(set(y for _, y in used))
+                used = [(cols[nm][i], cols["G"][i]) for i in range(n) if cols[nm][i] is not None and cols["G"][i] is not None]
+                ra = sorted(set(x for x, _ in used), key=raw)
+                cb = sorted(set(y for _, y in used), key=raw)
                 table = [[sum(1 for u in used if u == (x, y)) for y in cb] for x in ra]
                 w = ot.chisq_independence(table) if used else ot.chisq_independence([])
                 if used:
@@ -264,8 +278,8 @@ def main():
             # --- goodness of fit of A and C
             used_levels = {}
             for nm in ("A", "C"):
-                vals = [v for v in cols[nm] if v != ""]
-                used_levels[nm] = sorted(set(vals))
+                vals = [v for v in cols[nm] if v is not None]
+                used_levels[nm] = sorted(set(vals), key=raw)
             if len(set(len(used_levels[nm]) for nm in used_levels)) == 1 and used_levels["A"]:
                 k = len(used_levels["A"])
                 props, texts = draw_props(r, k)
@@ -278,13 +292,13 @@ def main():
                 if doc.get("test") != "chisq" or doc.get("expected") != [float(x) for x in props]:
                     bad.append((fi, "the header of the fit: %r" % {k2: doc.get(k2) for k2 in ("test", "expected")}))
                 for g, nm in zip(doc["tests"], ["A", "C"]):
-                    vals = [v for v in cols[nm] if v != ""]
+                    vals = [v for v in cols[nm] if v is not None]
                     lv = used_levels[nm]
                     counts = [sum(1 for v in vals if v == x) for x in lv]
                     w = ot.chisq_fit(counts, props)
                     w["obs"] = counts
                     w["expected_flat"] = w["expected"]
-                    check_entry(bad, fi, "chisq %s fit" % nm, g, w, True, n, lv, st)
+                    check_entry(bad, fi, "chisq %s fit" % nm, g, w, True, n, [raw(x) for x in lv], st)
                     controls(st, g, w, True)
                     if a.scipy and w["statistic"] is not None and g.get("p_value") is not None:
                         import scipy.stats as ss

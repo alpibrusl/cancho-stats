@@ -162,6 +162,8 @@ CASES = [
     ("test: chisq expected negative", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "1.5,-0.5", "f.csv"], "stats.expected-proportions", 2),
     ("test: chisq expected count differs", b"a\nx\ny\nz\n", ["test", "chisq", "--cols", "a", "--expected", "0.5,0.5", "f.csv"], "stats.expected-proportions", 2),
     ("test: chisq groups limit", b"a,g\nx,u\ny,v\n", ["test", "chisq", "--cols", "a", "--vs", "g", "--max-groups", "1", "f.csv"], "limit.too-many-groups", 8),
+    ("test: chisq groups limit on the second column", b"a,g\nx,u\nx,v\n", ["test", "chisq", "--cols", "a", "--vs", "g", "--max-groups", "1", "f.csv"], "limit.too-many-groups", 8),
+    ("test: chisq groups at the limit", b"a,g\nx,u\nx,v\n", ["test", "chisq", "--cols", "a", "--vs", "g", "--max-groups", "2", "f.csv"], None, 0),
     ("test: chisq rows limit", b"a,g\nx,u\ny,v\nx,v\n", ["test", "chisq", "--cols", "a", "--vs", "g", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
     ("test: chisq ragged", b"a,g\nx,u\ny\n", ["test", "chisq", "--cols", "a", "--vs", "g", "f.csv"], "stats.csv-ragged", 8),
     ("test: chisq no header", b"", ["test", "chisq", "--cols", "a", "--vs", "g", "f.csv"], "stats.no-header", 8),
