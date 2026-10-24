@@ -46,7 +46,7 @@ fn next_p[&t](text: &t [byte], from: int) -> [] int {
     return 0 - 1;
 }
 
-// min(1, p * mult / div) for the finite double p >= 0 with bits `bits`, as bits: ONE rounding
+// min(1, p * mult / div) for the finite double p >= 0 with bits `bits`, as bits: ONE rounding (a p of 0 gives 0: ratio_bits answers 0 for a zero numerator)
 fn scaled[&h](heap: &!h Heap, bits: int, mult: int, div: int) -> [heap] int {
     let ef = bits >> 52 & 2047;
     var m = bits & 4503599627370495;
@@ -54,9 +54,6 @@ fn scaled[&h](heap: &!h Heap, bits: int, mult: int, div: int) -> [heap] int {
     if ef != 0 {
         m = m | 4503599627370496;
         f = ef - 1;
-    }
-    if m == 0 {
-        return 0;
     }
     let nl = box_slice(heap, 4, 0);
     let dl = box_slice(heap, 4, 0);
