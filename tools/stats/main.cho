@@ -1715,13 +1715,8 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
                         w = json.end_array(heap, w);
                     }
                     if is_test && !bytes.equal(cli.text(args, parsed, table, "correct"), "none") {
-                        var family_ok = false;
-                        borrow e as &erf in {
-                            family_ok = fail.count(erf) == 0;
-                        }
-                        if family_ok {
-                            w = correct.put_family(heap, w, cli.text(args, parsed, table, "correct"));
-                        }
+                        // (when an error was recorded the document is dropped, the family on it too)
+                        w = correct.put_family(heap, w, cli.text(args, parsed, table, "correct"));
                     }
                     w = json.end_object(heap, w);
                     let doc = json.finish(w);

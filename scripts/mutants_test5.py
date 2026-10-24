@@ -34,8 +34,7 @@ M = [
     ("max-tests-ceiling", F, "cli.nat(args, parsed, table, \"max-tests\") > 32640 ||", "cli.nat(args, parsed, table, \"max-tests\") > 32641 ||"),
     ("max-tests-floor", F, "|| cli.nat(args, parsed, table, \"max-tests\") < 1 {", "|| cli.nat(args, parsed, table, \"max-tests\") < 0 {"),
     ("correct-only-for-test", F, "if cli.has(parsed, table, \"correct\") && !is_test {", "if cli.has(parsed, table, \"correct\") && false {"),
-    ("family-written", F, "if is_test && !bytes.equal(cli.text(args, parsed, table, \"correct\"), \"none\") {\n                        var family_ok = false;", "if is_test && bytes.equal(cli.text(args, parsed, table, \"correct\"), \"none\") {\n                        var family_ok = false;"),
-    ("family-after-errors", F, "                        if family_ok {\n                            w = correct.put_family", "                        if true {\n                            w = correct.put_family"),
+    ("family-written", F, "if is_test && !bytes.equal(cli.text(args, parsed, table, \"correct\"), \"none\") {\n                        // (when an error", "if is_test && bytes.equal(cli.text(args, parsed, table, \"correct\"), \"none\") {\n                        // (when an error"),
     ("adjustment-echo", F, "var w = json.put_key(heap, w0, \"adjustment\");\n    w = json.put_string(heap, w, correction);", "var w = json.put_key(heap, w0, \"adjustment\");\n    w = json.put_string(heap, w, \"none\");"),
     ("correct-none-allowed", F, "if is_test && !bytes.equal(cli.text(args, parsed, table, \"correct\"), \"none\") {\n        var named", "if is_test && bytes.equal(cli.text(args, parsed, table, \"correct\"), \"none\") {\n        var named"),
 ]
