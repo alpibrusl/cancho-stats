@@ -1,0 +1,127 @@
+edition 5;
+
+module stest.answer3;
+
+import std.json;
+import std.map;
+import csvx.cross;
+import special.dist;
+import stest.chisq;
+
+// One test of the answer for the kind chisq (docs/test.md sections 1 and 10): independence of the column `name` and `vs` (`fit` false), or the fit of the column to given proportions (`fit` true). `d` holds the table and
+// the levels, `rows` is the number of data rows of the file (the rows with an empty cell in either column are the difference to `n`).
+pub fn put_chisq[&h, &a, &b, &x](heap: &!h Heap, w0: json.Writer, name: &a [byte], vs: &b [byte], fit: bool, d: &x cross.Dense, r: chisq.ChiSq, rows: int) -> [heap] json.Writer {
+    var w = w0;
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "column");
+    w = json.put_string(heap, w, name);
+    if !fit {
+        w = json.put_key(heap, w, "vs");
+        w = json.put_string(heap, w, vs);
+    }
+    var reason = "";
+    var have = false;
+    var p = 0.0;
+    var have_p = false;
+    if r.n == 0 {
+        reason = "too-few-rows";
+    } else if r.df < 1 {
+        reason = "too-few-levels";
+    } else {
+        have = true;
+        let (pv, code) = dist.chi2_sf(r.x2, float_of(r.df));
+        if code == 0 {
+            have_p = true;
+            p = pv;
+        } else {
+            reason = "p-not-computed";
+        }
+    }
+    w = json.put_key(heap, w, "statistic");
+    if have {
+        w = json.put_float(heap, w, r.x2);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "df");
+    if r.n > 0 && r.df >= 1 {
+        w = json.put_int(heap, w, r.df);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_value");
+    if have_p {
+        w = json.put_float(heap, w, p);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_method");
+    w = json.put_string(heap, w, "chi2");
+    w = json.put_key(heap, w, "effect_size");
+    if have {
+        w = json.begin_object(heap, w);
+        w = json.put_key(heap, w, "name");
+        if fit {
+            w = json.put_string(heap, w, "cohen_w");
+        } else {
+            w = json.put_string(heap, w, "cramers_v");
+        }
+        w = json.put_key(heap, w, "value");
+        w = json.put_float(heap, w, r.effect);
+        w = json.put_key(heap, w, "rounding");
+        w = json.put_string(heap, w, "double");
+        w = json.end_object(heap, w);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "interval");
+    w = json.put_null(heap, w);
+    w = json.put_key(heap, w, "n");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "n");
+    w = json.put_int(heap, w, r.n);
+    w = json.put_key(heap, w, "missing");
+    w = json.put_int(heap, w, rows - r.n);
+    w = json.end_object(heap, w);
+    w = json.put_key(heap, w, "method");
+    if fit {
+        w = json.put_string(heap, w, "goodness of fit");
+    } else {
+        w = json.put_string(heap, w, "independence");
+    }
+    w = json.put_key(heap, w, "rounding");
+    w = json.put_string(heap, w, "double-double");
+    w = json.put_key(heap, w, "assumptions");
+    w = json.begin_object(heap, w);
+    if r.n > 0 {
+        if fit {
+            w = json.put_key(heap, w, "levels");
+            w = json.begin_array(heap, w);
+            var k = 0;
+            while k < r.rows_ {
+                w = json.put_string(heap, w, map.key_at(d.cross.la, contents(d.order_a)[k]));
+                k = k + 1;
+            }
+            w = json.end_array(heap, w);
+        } else {
+            w = json.put_key(heap, w, "table");
+            w = json.begin_object(heap, w);
+            w = json.put_key(heap, w, "rows");
+            w = json.put_int(heap, w, r.rows_);
+            w = json.put_key(heap, w, "cols");
+            w = json.put_int(heap, w, r.cols_);
+            w = json.end_object(heap, w);
+        }
+        w = json.put_key(heap, w, "min_expected");
+        w = json.put_float(heap, w, r.min_expected);
+        w = json.put_key(heap, w, "expected_below_5");
+        w = json.put_int(heap, w, r.below5);
+    }
+    w = json.end_object(heap, w);
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}

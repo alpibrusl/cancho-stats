@@ -24,6 +24,9 @@ import csvx.pick;
 import csvx.rule;
 import csvx.scan;
 import stest.answer2;
+import stest.answer3;
+import stest.chisq;
+import csvx.cross;
 import metrics.rank;
 import special.dist;
 import flt;
@@ -39,11 +42,11 @@ import toolbox.place;
 import toolbox.text;
 
 fn flag_table() -> [] &static [byte] {
-    return "root||path|root||resolve FILE relative to this directory and refuse paths outside it;delim|d|text|none|,|the one byte that separates fields (default comma);ddof||nat|none|1|the divisor of the variance is n minus this (1 is the sample variance, 0 the population variance);max-rows||nat|none|1000000|the most data rows read, one more is limit.too-many-rows (ceiling 10000000);max-cols||nat|none|256|the most columns, more is limit.too-many-columns (ceiling 4096);max-line-bytes||nat|none|1048576|the longest line read, a longer one is limit.line-too-long (ceiling 16777216);max-cells||nat|none|20000000|the most cells (rows times columns) held for the quantiles, more is limit.too-many-cells (ceiling 100000000);quantiles||text|none|0,0.25,0.5,0.75,1|the probabilities of the quantiles, comma separated decimals from 0 to 1 with at most 9 decimals (at most 99 of them);quantile-type||nat|none|7|which of the nine Hyndman-Fan definitions, 1 to 9 (7 is the default of R and numpy);bins||nat|none|10|the number of equal-width histogram bins over [min, max], 0 for none (ceiling 1000);levels||nat|none|10|how many of the most frequent levels of a text column to print, 0 for none and no second pass (ceiling 100);max-levels||nat|none|100000|the most distinct (column, level) pairs held for all text columns together, a column that would need one more is levels_capped (ceiling 1000000);by||text|none||the header name of a column: describe each group of rows that have the same value in it, one after the other;max-groups||nat|none|50|the most groups with --by, one more is limit.too-many-groups (ceiling 1000);cols||text|none||the columns to describe, correlate or test: header names separated by commas, printed in the order of the file;format||choice:json/text|none|json|json for a program, text (one line per value, path = value) for a person;method||choice:pearson/spearman/kendall|none|pearson|corr: the coefficient: pearson, spearman (the Pearson coefficient of the average ranks) or kendall (tau-b);missing||choice:pairwise/listwise|none|pairwise|corr: pairwise uses, for each pair, the rows where both cells are numbers, listwise only the rows where every chosen column has a number;max-pairs||nat|none|1000|corr: the most pairs of columns, more is limit.too-many-pairs (ceiling 32640);mu0||text|none|0|test t1: the mean under the null hypothesis, a number;level||text|none|0.95|test: the confidence level of the interval, a decimal strictly between 0 and 1 with at most 9 decimals;group||text|none||test t2: the header name of the column that has the two groups (exactly two levels; the level that is first by bytes is the group a);variance||choice:welch/pooled|none|welch|test t2: welch (the default, the variances may differ) or pooled (the variances are equal);pairs||text|none||test paired: the columns to compare, A:B,C:D, the differences are A minus B over the rows where both are numbers";
+    return "root||path|root||resolve FILE relative to this directory and refuse paths outside it;delim|d|text|none|,|the one byte that separates fields (default comma);ddof||nat|none|1|the divisor of the variance is n minus this (1 is the sample variance, 0 the population variance);max-rows||nat|none|1000000|the most data rows read, one more is limit.too-many-rows (ceiling 10000000);max-cols||nat|none|256|the most columns, more is limit.too-many-columns (ceiling 4096);max-line-bytes||nat|none|1048576|the longest line read, a longer one is limit.line-too-long (ceiling 16777216);max-cells||nat|none|20000000|the most cells (rows times columns) held for the quantiles, more is limit.too-many-cells (ceiling 100000000);quantiles||text|none|0,0.25,0.5,0.75,1|the probabilities of the quantiles, comma separated decimals from 0 to 1 with at most 9 decimals (at most 99 of them);quantile-type||nat|none|7|which of the nine Hyndman-Fan definitions, 1 to 9 (7 is the default of R and numpy);bins||nat|none|10|the number of equal-width histogram bins over [min, max], 0 for none (ceiling 1000);levels||nat|none|10|how many of the most frequent levels of a text column to print, 0 for none and no second pass (ceiling 100);max-levels||nat|none|100000|the most distinct (column, level) pairs held for all text columns together, a column that would need one more is levels_capped (ceiling 1000000);by||text|none||the header name of a column: describe each group of rows that have the same value in it, one after the other;max-groups||nat|none|50|the most groups with --by, one more is limit.too-many-groups (ceiling 1000);cols||text|none||the columns to describe, correlate or test: header names separated by commas, printed in the order of the file;format||choice:json/text|none|json|json for a program, text (one line per value, path = value) for a person;method||choice:pearson/spearman/kendall|none|pearson|corr: the coefficient: pearson, spearman (the Pearson coefficient of the average ranks) or kendall (tau-b);missing||choice:pairwise/listwise|none|pairwise|corr: pairwise uses, for each pair, the rows where both cells are numbers, listwise only the rows where every chosen column has a number;max-pairs||nat|none|1000|corr: the most pairs of columns, more is limit.too-many-pairs (ceiling 32640);mu0||text|none|0|test t1: the mean under the null hypothesis, a number;level||text|none|0.95|test: the confidence level of the interval, a decimal strictly between 0 and 1 with at most 9 decimals;group||text|none||test t2: the header name of the column that has the two groups (exactly two levels; the level that is first by bytes is the group a);vs||text|none||test chisq: the header name of the column to test the others against (independence);expected||text|none||test chisq: the proportions the column is tested against (goodness of fit), k decimals with at most 9 decimals that add up to 1, in the order of the levels by their bytes;variance||choice:welch/pooled|none|welch|test t2: welch (the default, the variances may differ) or pooled (the variances are equal);pairs||text|none||test paired: the columns to compare, A:B,C:D, the differences are A minus B over the rows where both are numbers";
 }
 
 fn tool() -> [] describe.Tool {
-    return describe.Tool { name: "stats", version: "0.1.0", summary: "Describe the columns of a CSV file: counts, minimum, maximum, mean, variance and standard deviation from exact sums rounded once; the same bytes on every platform and at any thread count.", usage: "stats describe [--root DIR] [--delim D] [--ddof N] [--max-rows N] [--max-cols N] [--max-line-bytes N] [--max-cells N] [--quantiles P,P,..] [--quantile-type N] [--bins N] [--levels N] [--max-levels N] [--by COL] [--max-groups N] [--cols A,B,..] [--format json|text] FILE; stats corr [--cols A,B,..] [--method pearson|spearman|kendall] [--missing pairwise|listwise] [--max-pairs N] FILE; stats test t1 --cols A,B,.. [--mu0 X] [--level 0.95] FILE; stats test t2 --cols A,B,.. --group G [--variance welch|pooled] [--level 0.95] FILE; stats test paired --pairs A:B,C:D [--level 0.95] FILE", output: "document", schema: "stats.v1", flags: flag_table(), operands: "VERB|none|1|1|describe, corr or test;FILE|path-read|1|2|the CSV file (after the kind of test, t1, t2 or paired, for test)", rules: "args.unknown-flag;args.missing-value;args.bad-value;args.duplicate-flag;args.missing-operand;args.too-many-operands;path.empty;path.dotdot;path.absolute;path.outside-root;path.too-long;path.symlink;io.not-found;io.not-a-directory;io.is-a-directory;io.permission-denied;io.read-failed;limit.line-too-long;stats.csv-ragged;stats.csv-multiline;stats.csv-bad-quote;stats.no-header;stats.bad-verb;limit.too-many-rows;limit.too-many-columns;limit.too-many-cells;stats.file-changed;stats.no-such-column;stats.ambiguous-column;limit.too-many-groups;stats.corr-columns;stats.non-numeric;limit.too-many-pairs;stats.test-columns;stats.group-levels", extra_rules: rule.extra(), limits: "max-rows|1000000|10000000;max-cols|256|4096;max-line-bytes|1048576|16777216;max-cells|20000000|100000000;bins|10|1000;levels|10|100;max-levels|100000|1000000;max-groups|50|1000;max-pairs|1000|32640", reversibility: "reversible-cheap", stdin: "never", guarantees: "deterministic;idempotent;bounded_memory" };
+    return describe.Tool { name: "stats", version: "0.1.0", summary: "Describe the columns of a CSV file: counts, minimum, maximum, mean, variance and standard deviation from exact sums rounded once; the same bytes on every platform and at any thread count.", usage: "stats describe [--root DIR] [--delim D] [--ddof N] [--max-rows N] [--max-cols N] [--max-line-bytes N] [--max-cells N] [--quantiles P,P,..] [--quantile-type N] [--bins N] [--levels N] [--max-levels N] [--by COL] [--max-groups N] [--cols A,B,..] [--format json|text] FILE; stats corr [--cols A,B,..] [--method pearson|spearman|kendall] [--missing pairwise|listwise] [--max-pairs N] FILE; stats test t1 --cols A,B,.. [--mu0 X] [--level 0.95] FILE; stats test t2 --cols A,B,.. --group G [--variance welch|pooled] [--level 0.95] FILE; stats test paired --pairs A:B,C:D [--level 0.95] FILE; stats test chisq --cols A,B,.. (--vs G | --expected P,P,..) FILE", output: "document", schema: "stats.v1", flags: flag_table(), operands: "VERB|none|1|1|describe, corr or test;FILE|path-read|1|2|the CSV file (after the kind of test, t1, t2, paired or chisq, for test)", rules: "args.unknown-flag;args.missing-value;args.bad-value;args.duplicate-flag;args.missing-operand;args.too-many-operands;path.empty;path.dotdot;path.absolute;path.outside-root;path.too-long;path.symlink;io.not-found;io.not-a-directory;io.is-a-directory;io.permission-denied;io.read-failed;limit.line-too-long;stats.csv-ragged;stats.csv-multiline;stats.csv-bad-quote;stats.no-header;stats.bad-verb;limit.too-many-rows;limit.too-many-columns;limit.too-many-cells;stats.file-changed;stats.no-such-column;stats.ambiguous-column;limit.too-many-groups;stats.corr-columns;stats.non-numeric;limit.too-many-pairs;stats.test-columns;stats.group-levels;stats.expected-proportions", extra_rules: rule.extra(), limits: "max-rows|1000000|10000000;max-cols|256|4096;max-line-bytes|1048576|16777216;max-cells|20000000|100000000;bins|10|1000;levels|10|100;max-levels|100000|1000000;max-groups|50|1000;max-pairs|1000|32640", reversibility: "reversible-cheap", stdin: "never", guarantees: "deterministic;idempotent;bounded_memory" };
 }
 
 fn built() -> [] describe.Built {
@@ -1271,6 +1274,119 @@ fn t2_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &
     return (w, e);
 }
 
+// The tests of the categorical columns named by --cols, kind chisq (docs/test.md section 10): each against the column of --vs (independence), or against the proportions of --expected (goodness of fit). One pass over
+// the file for each column.
+fn chisq_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
+    let table = flag_table();
+    var w = w0;
+    var e = errs;
+    let fit = cli.has(parsed, table, "expected");
+    let list = cli.text(args, parsed, table, "cols");
+    let ncols_named = bytes.count_byte(list, ',') + 1;
+    var ok = true;
+    var i = 0;
+    while i < ncols_named {
+        if len(bytes.field(list, ',', i + 1)) == 0 {
+            ok = false;
+        }
+        i = i + 1;
+    }
+    if !ok {
+        e = rule.refuse(heap, e, "args.bad-value", "--cols has an empty item", "--cols name1,name2: no empty item, no leading or trailing comma", "flag", "--cols");
+    }
+    let (pst, props, kprops) = chisq.parse_expected(heap, cli.text(args, parsed, table, "expected"));
+    if fit && pst != 0 {
+        ok = false;
+        e = rule.refuse_int(heap, e, "stats.expected-proportions", "--expected is not decimals above 0 with at most 9 decimals that add up to 1", "--expected 0.25,0.25,0.5: at most 1,000 items, no sign, no exponent", "problem", pst, "items", kprops);
+    }
+    let opened_header = ok;
+    if ok {
+        w = json.put_key(heap, w, "test");
+        w = json.put_string(heap, w, "chisq");
+        if fit {
+            w = json.put_key(heap, w, "expected");
+            w = json.begin_array(heap, w);
+            borrow props as &pr0 in {
+                var k = 0;
+                while k < kprops {
+                    w = json.put_float(heap, w, float_of(contents(pr0)[k]) / 1000000000.0);
+                    k = k + 1;
+                }
+            }
+            w = json.end_array(heap, w);
+        } else {
+            w = json.put_key(heap, w, "vs");
+            w = json.put_string(heap, w, cli.text(args, parsed, table, "vs"));
+        }
+        w = json.put_key(heap, w, "adjustment");
+        w = json.put_string(heap, w, "none");
+        w = json.put_key(heap, w, "tests");
+        w = json.begin_array(heap, w);
+    }
+    i = 0;
+    while ok && i < ncols_named {
+        let name = bytes.field(list, ',', i + 1);
+        match place.open_operand(fs, root, rel, full) {
+            Opened::Failed(reason) => {
+                e = fail.io_error(heap, e, reason, false, rel);
+            }
+            Opened::Ok(opened) => {
+                var file = opened;
+                borrow mut file as &!handle in {
+                    let (x, e2) = cross.cross(heap, handle, rel, name, cli.text(args, parsed, table, "vs"), !fit, int_of(cli.text(args, parsed, table, "delim")[0]), cli.nat(args, parsed, table, "max-line-bytes"), cli.nat(args, parsed, table, "max-rows"), cli.nat(args, parsed, table, "max-cols"), cli.nat(args, parsed, table, "max-groups"), e);
+                    e = e2;
+                    var clean = false;
+                    borrow e as &er1 in {
+                        clean = fail.count(er1) == 0;
+                    }
+                    if clean {
+                        let dn = cross.dense(heap, x, !fit);
+                        var stat = chisq.ChiSq { n: 0, rows_: 0, cols_: 0, df: 0, x2: 0.0, effect: 0.0, min_expected: 0.0, below5: 0 };
+                        borrow dn as &dr in {
+                            if dr.rows_ == 0 {
+                                stat = chisq.ChiSq { n: 0, rows_: 0, cols_: 0, df: 0, x2: 0.0, effect: 0.0, min_expected: 0.0, below5: 0 };
+                            } else if fit {
+                                if dr.rows_ != kprops {
+                                    e = rule.refuse_int(heap, e, "stats.expected-proportions", "--expected has a different number of proportions than the column has levels", "give one proportion for each level, in the order of the levels by their bytes", "levels", dr.rows_, "expected", kprops);
+                                } else {
+                                    borrow props as &pr1 in {
+                                        stat = chisq.fit(contents(dr.counts), contents(pr1), kprops, 1000000000);
+                                    }
+                                }
+                            } else {
+                                stat = chisq.independence(heap, contents(dr.counts), dr.rows_, dr.cols_);
+                            }
+                            borrow e as &er2 in {
+                                clean = fail.count(er2) == 0;
+                            }
+                            if clean {
+                                w = answer3.put_chisq(heap, w, name, cli.text(args, parsed, table, "vs"), fit, dr, stat, dr.total);
+                            }
+                        }
+                        cross.drop_dense(heap, dn);
+                    } else {
+                        cross.drop_cross(heap, x);
+                    }
+                }
+                file_close(file);
+            }
+        }
+        var more = false;
+        borrow e as &er3 in {
+            more = fail.count(er3) == 0;
+        }
+        if !more {
+            ok = false;
+        }
+        i = i + 1;
+    }
+    if opened_header {
+        w = json.end_array(heap, w);
+    }
+    unbox_slice(heap, props);
+    return (w, e);
+}
+
 fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), io: &!i Io, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read, io_write, err_write] int {
     let table = flag_table();
     var e = errs;
@@ -1285,8 +1401,8 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
         fidx = 2;
         if cli.operand_count(parsed) < 2 {
             e = rule.refuse(heap, e, "args.missing-operand", "no kind of test: the second operand names it", "stats test t1 --cols A,B FILE", "", "");
-        } else if !bytes.equal(cli.operand(args, parsed, 1), "t1") && !bytes.equal(cli.operand(args, parsed, 1), "t2") && !bytes.equal(cli.operand(args, parsed, 1), "paired") {
-            e = rule.refuse(heap, e, "args.bad-value", "the kind of test is not one this tool has", "the kinds so far are: t1, t2, paired", "kind", cli.operand(args, parsed, 1));
+        } else if !bytes.equal(cli.operand(args, parsed, 1), "t1") && !bytes.equal(cli.operand(args, parsed, 1), "t2") && !bytes.equal(cli.operand(args, parsed, 1), "paired") && !bytes.equal(cli.operand(args, parsed, 1), "chisq") {
+            e = rule.refuse(heap, e, "args.bad-value", "the kind of test is not one this tool has", "the kinds so far are: t1, t2, paired, chisq", "kind", cli.operand(args, parsed, 1));
         } else if cli.operand_count(parsed) < 3 {
             e = rule.refuse(heap, e, "args.missing-operand", "no FILE to test", "stats test t1 --cols A,B FILE", "", "");
         } else if cli.operand_count(parsed) > 3 {
@@ -1298,6 +1414,9 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
             }
         } else if !cli.has(parsed, table, "cols") {
             e = rule.refuse(heap, e, "stats.test-columns", "test names no column: --cols is required", "stats test t1 --cols A,B FILE", "flag", "--cols");
+        }
+        if cli.operand_count(parsed) >= 2 && bytes.equal(cli.operand(args, parsed, 1), "chisq") && cli.has(parsed, table, "vs") == cli.has(parsed, table, "expected") {
+            e = rule.refuse(heap, e, "stats.test-columns", "chisq needs exactly one of --vs (independence) and --expected (goodness of fit)", "stats test chisq --cols A --vs G FILE, or --cols A --expected 0.5,0.5 FILE", "flag", "--vs");
         }
         if cli.operand_count(parsed) >= 2 && bytes.equal(cli.operand(args, parsed, 1), "t2") && !cli.has(parsed, table, "group") {
             e = rule.refuse(heap, e, "stats.test-columns", "t2 names no group column: --group is required", "stats test t2 --cols A,B --group G FILE", "flag", "--group");
@@ -1373,7 +1492,11 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
                     w = json.begin_object(heap, w);
                     let ddof = cli.nat(args, parsed, table, "ddof");
                     let qtype = cli.nat(args, parsed, table, "quantile-type");
-                    if is_test && bytes.equal(cli.operand(args, parsed, 1), "t2") {
+                    if is_test && bytes.equal(cli.operand(args, parsed, 1), "chisq") {
+                        let (w2, e2) = chisq_one(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), w, e);
+                        w = w2;
+                        e = e2;
+                    } else if is_test && bytes.equal(cli.operand(args, parsed, 1), "t2") {
                         let (w2, e2) = t2_one(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), w, e);
                         w = w2;
                         e = e2;

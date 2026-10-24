@@ -221,6 +221,12 @@ jobs:
           python3 scripts/gate_test2_calibration.py --kind t2 --replicates 2000
           python3 scripts/gate_test2_calibration.py --kind paired --replicates 2000
 
+      - name: stats test (chisq) against Fractions and mpmath, scipy and calibration
+        if: steps.stores.outputs.fetchable == 'yes'
+        run: |
+          python3 scripts/gate_test3.py --files 300 --scipy
+          python3 scripts/gate_test3_calibration.py --replicates 2000
+
       - name: Every mutant pattern still applies exactly once (a pattern that drifted would be a mutant that tests nothing)
         run: |
           python3 scripts/mutants_bigint.py --check
@@ -236,6 +242,7 @@ jobs:
           python3 scripts/mutants_corr.py --check
           python3 scripts/mutants_test.py --check
           python3 scripts/mutants_test2.py --check
+          python3 scripts/mutants_test3.py --check
           python3 scripts/mutants_special.py --check
 
       - name: Quantiles (nine definitions) against an independent exact reference
@@ -367,3 +374,4 @@ jobs:
           python3 scripts/mutants_corr.py
           python3 scripts/mutants_test.py
           python3 scripts/mutants_test2.py
+          python3 scripts/mutants_test3.py
