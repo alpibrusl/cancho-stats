@@ -233,6 +233,10 @@ def main():
                 for i in range(n):
                     if fi >= 2 and r.next() % 20 == 0:
                         cols[name][i] = None
+            if fi == 2:
+                # a hand case with no complete row: nothing to count
+                n = 2
+                cols = {"A": ["x", None], "G": [None, "u"], "C": [None, None]}
             names = ["A", "G", "C"]
             rows = [[cols[nm][i] for nm in names] for i in range(n)]
             # --- independence of A and C against G
