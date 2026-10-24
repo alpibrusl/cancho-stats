@@ -28,6 +28,12 @@ def lines():
     cmd = ["describe", "--root", str(ROOT / "docs" / "example"), "--cols", "temp,site", "--bins", "3", "--quantiles", "0.5", "--levels", "2", "--format", "text", "readings.csv"]
     tx = subprocess.run([binary] + cmd, capture_output=True, text=True, check=True)
     out += [["d", "$ stats describe readings.csv --cols temp,site --bins 3 --quantiles 0.5 --levels 2 --format text"]] + [["a", ln] for ln in tx.stdout.rstrip("\n").split("\n")]
+    ex = str(ROOT / "docs" / "example")
+    for shown, args in (("stats corr readings.csv --cols temp,pressure", ["corr", "--cols", "temp,pressure"]),
+                        ("stats test t1 readings.csv --cols temp --mu0 22", ["test", "t1", "--cols", "temp", "--mu0", "22"]),
+                        ("stats test prop readings.csv --cols site --success north --p0 0.5", ["test", "prop", "--cols", "site", "--success", "north", "--p0", "0.5"])):
+        run = subprocess.run([binary] + args[:2 if args[0] == "test" else 1] + ["--root", ex] + args[2 if args[0] == "test" else 1:] + ["readings.csv"], capture_output=True, text=True, check=True)
+        out += [["d", "$ " + shown], ["g", run.stdout.rstrip("\n")]]
     with tempfile.TemporaryDirectory() as t:
         (pathlib.Path(t) / "broken.csv").write_text(BROKEN)
         bad = subprocess.run([binary, "describe", "--root", t, "broken.csv"], capture_output=True, text=True)

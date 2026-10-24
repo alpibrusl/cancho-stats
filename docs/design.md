@@ -136,8 +136,8 @@ model file, no server. An MCP surface is derived from the flag table later, as `
 |---|---|---|
 | S0 | accuracy harness: exact accumulation of products, special functions, the determinism of `exp`/`ln`, the stores consumed | mpmath agreement bounds written first; the platform-math question answered |
 | S1 | `describe` | oracle bytes for every exact statistic; quantile types vs a Python implementation |
-| S2 | `corr` (design: `docs/corr.md`) | oracle bytes (Pearson from exact sums, ranks); scipy bounds |
-| S3 | `test` t family, `chisq`, `prop`, corrections (design: `docs/test.md`) | calibration + oracle |
+| S2 | `corr` (design: `docs/corr.md`; done 2026-10-23) | oracle bytes (Pearson from exact sums, ranks); scipy bounds |
+| S3 | `test` t family, `chisq`, `prop`, corrections (design and results: `docs/test.md`; done 2026-10-24) | calibration + oracle |
 | S4 | `test` rank tests, `anova`, `kruskal`, `ks`, `fisher` | calibration + exact-test oracles |
 | S5 | `ci`, `resample` | thread-invariant seeded streams; coverage gate (an interval covers the truth at its nominal rate) |
 | S6 | `lm`, then `glm` | oracle for the normal equations in exact arithmetic; statsmodels bounds; leverage identities |
