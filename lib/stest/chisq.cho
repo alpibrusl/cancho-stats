@@ -21,17 +21,9 @@ pub struct ChiSq {
     below5: int,
 }
 
-// the integer v, |v| below 2^62, as an exact double-double
+// the integer v, 0 <= v < 2^62, as an exact double-double
 fn of_int(v: int) -> [] (float, float) {
-    var a = v;
-    if v < 0 {
-        a = 0 - v;
-    }
-    let (s, e) = dd.two_sum(float_of(a >> 31) * 2147483648.0, float_of(a & 2147483647));
-    if v < 0 {
-        return (0.0 - s, 0.0 - e);
-    }
-    return (s, e);
+    return dd.two_sum(float_of(v >> 31) * 2147483648.0, float_of(v & 2147483647));
 }
 
 // (numerator)^2 / denominator, the denominator a product of the exact integers p, q and (when r > 0) r, added to the sum (sh, sl)
@@ -39,7 +31,11 @@ fn add_term(sh: float, sl: float, num: int, p: int, q: int, r: int) -> [] (float
     if num == 0 {
         return (sh, sl);
     }
-    let (nh, nl) = of_int(num);
+    var a = num;
+    if num < 0 {
+        a = 0 - num;
+    }
+    let (nh, nl) = of_int(a);
     let (n2h, n2l) = dd.mul(nh, nl, nh, nl);
     let (ph, pl) = of_int(p);
     let (qh, ql) = of_int(q);
