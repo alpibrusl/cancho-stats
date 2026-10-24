@@ -7,7 +7,7 @@
     python3 scripts/xplat_fp.py --mutants        # the checks are shown able to fail
 
 The fingerprint is one tab-separated line per sweep: `kind  name  count  sha256`, the hash over the driver's output lines (`id  hex bits of the result  code`) for a fixed list of cases:
-`special` the first N cases of each range of gate_special.py (seed 1), `edge` the edge cases of gate_domain.py for each function, `acc` the vectors of three families of measure_acc.py through acc-check, `describe` the bytes `stats describe` prints for 12 seeded CSV files, `corr`, `corr-spearman` and `corr-kendall` those of `stats corr` (Pearson, --method spearman, --method kendall) for 8 files each, `test-t1`, `test-t2`, `test-paired` and `test-chisq` those of `stats test t1`, `t2` (Welch and pooled drawn), `paired` and `chisq` (independence and fit) for 8 files each.
+`special` the first N cases of each range of gate_special.py (seed 1), `edge` the edge cases of gate_domain.py for each function, `acc` the vectors of three families of measure_acc.py through acc-check, `describe` the bytes `stats describe` prints for 12 seeded CSV files, `corr`, `corr-spearman` and `corr-kendall` those of `stats corr` (Pearson, --method spearman, --method kendall) for 8 files each, `test-t1`, `test-t2`, `test-paired` and `test-chisq` and `test-prop` those of `stats test t1`, `t2` (Welch and pooled drawn), `paired`, `chisq` (independence and fit) and `prop` (one and two samples) for 8 files each.
 Equal to the golden is equal to each other: the golden was written on one machine and every other platform of the workflow must print its bytes.
 Thread check: for every sweep, `special-check FN --threads T` for T in 1, 2, 3, 4, 7, 8, 16 must print the bytes of the sequential run.
 Exit 0: the fingerprint equals the golden and the thread check holds. Exit 1: a difference (printed). Exit 2: the script could not run.
@@ -227,6 +227,34 @@ def test3_lines(stats):
     return out
 
 
+def test4_lines(stats):
+    """`stats test prop` on 8 seeded CSV files (an outcome column with a success label, a group column of two labels, empty cells, trials from 1 to 3,000; p0 and the level drawn): the hash of the bytes of the one-sample and the two-sample answers."""
+    out = []
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        r = gate_special.SM64(53)
+        for k in range(8):
+            n = [1, 2, 5, 30, 100, 400, 3000][int(r.next() % 7)]
+            ps = (r.next() % 1000) / 1000.0
+            rows = []
+            for _ in range(n):
+                y = "yes" if (r.next() % 100000) / 100000.0 < ps else "no"
+                if r.next() % 25 == 0:
+                    y = None
+                g = ("g1" if r.next() % 2 else "g2") if r.next() % 25 else None
+                rows.append([y, g])
+            p0 = r.pick(["0.5", "0.1", "0.25", "0.9", "0.333333333"])
+            level = r.pick(["0.95", "0.9", "0.99"])
+            h = hashlib.sha256()
+            for extra in (["--cols", "y", "--success", "yes", "--p0", p0, "--level", level], ["--cols", "y", "--success", "yes", "--group", "g", "--level", level]):
+                text = "y,g\n" + "\n".join(",".join("" if c is None else c for c in row) for row in rows) + "\n"
+                (tmp / "f.csv").write_text(text)
+                p = subprocess.run([stats, "test", "prop", "--root", str(tmp)] + extra + ["f.csv"], capture_output=True, text=True, timeout=300)
+                h.update(("exit %d %s" % (p.returncode, p.stdout)).encode())
+            out.append("test-prop\tfile%02d\t%d\t%s" % (k, n, h.hexdigest()))
+    return out
+
+
 def fingerprint(driver, acc, threads_check=True, stats=None):
     lines = []
     bad = []
@@ -254,6 +282,7 @@ def fingerprint(driver, acc, threads_check=True, stats=None):
         lines += test_lines(stats)
         lines += test2_lines(stats)
         lines += test3_lines(stats)
+        lines += test4_lines(stats)
     return lines, bad
 
 

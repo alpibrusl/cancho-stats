@@ -169,6 +169,31 @@ CASES = [
     ("test: chisq rows limit", b"a,g\nx,u\ny,v\nx,v\n", ["test", "chisq", "--cols", "a", "--vs", "g", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
     ("test: chisq ragged", b"a,g\nx,u\ny\n", ["test", "chisq", "--cols", "a", "--vs", "g", "f.csv"], "stats.csv-ragged", 8),
     ("test: chisq no header", b"", ["test", "chisq", "--cols", "a", "--vs", "g", "f.csv"], "stats.no-header", 8),
+    # test prop (docs/test.md section 11)
+    ("test: prop one sample", b"o\ny\nn\ny\ny\n", ["test", "prop", "--cols", "o", "--success", "y", "f.csv"], None, 0),
+    ("test: prop p0, level, two columns", b"o,w\ny,n\nn,n\ny,y\n,y\n", ["test", "prop", "--cols", "o,w", "--success", "y", "--p0", "0.333333333", "--level", "0.9", "f.csv"], None, 0),
+    ("test: prop two samples", b"o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n", ["test", "prop", "--cols", "o", "--success", "y", "--group", "g", "f.csv"], None, 0),
+    ("test: prop no success in the file", b"o\nn\nn\n", ["test", "prop", "--cols", "o", "--success", "y", "f.csv"], None, 0),
+    ("test: prop every row a success", b"o,g\ny,a\ny,b\n", ["test", "prop", "--cols", "o", "--success", "y", "--group", "g", "f.csv"], None, 0),
+    ("test: prop no complete row", b"o,g\n,a\ny,\n", ["test", "prop", "--cols", "o", "--success", "y", "f.csv"], None, 0),
+    ("test: prop a group without a trial", b"o,g\ny,a\n,b\nn,a\n", ["test", "prop", "--cols", "o", "--success", "y", "--group", "g", "f.csv"], None, 0),
+    ("test: prop no success flag", b"o\ny\n", ["test", "prop", "--cols", "o", "f.csv"], "stats.test-columns", 2),
+    ("test: prop no columns", b"o\ny\n", ["test", "prop", "--success", "y", "f.csv"], "stats.test-columns", 2),
+    ("test: prop empty cols item", b"o\ny\n", ["test", "prop", "--cols", "o,", "--success", "y", "f.csv"], "args.bad-value", 2),
+    ("test: prop p0 zero", b"o\ny\n", ["test", "prop", "--cols", "o", "--success", "y", "--p0", "0", "f.csv"], "args.bad-value", 2),
+    ("test: prop p0 one", b"o\ny\n", ["test", "prop", "--cols", "o", "--success", "y", "--p0", "1", "f.csv"], "args.bad-value", 2),
+    ("test: prop p0 above one", b"o\ny\n", ["test", "prop", "--cols", "o", "--success", "y", "--p0", "1.5", "f.csv"], "args.bad-value", 2),
+    ("test: prop p0 text", b"o\ny\n", ["test", "prop", "--cols", "o", "--success", "y", "--p0", "half", "f.csv"], "args.bad-value", 2),
+    ("test: prop p0 ten decimals", b"o\ny\n", ["test", "prop", "--cols", "o", "--success", "y", "--p0", "0.1234567891", "f.csv"], "args.bad-value", 2),
+    ("test: prop p0 with group", b"o,g\ny,a\nn,b\n", ["test", "prop", "--cols", "o", "--success", "y", "--group", "g", "--p0", "0.5", "f.csv"], "args.bad-value", 2),
+    ("test: prop one group level", b"o,g\ny,a\nn,a\n", ["test", "prop", "--cols", "o", "--success", "y", "--group", "g", "f.csv"], "stats.group-levels", 2),
+    ("test: prop three group levels", b"o,g\ny,a\nn,b\ny,c\n", ["test", "prop", "--cols", "o", "--success", "y", "--group", "g", "f.csv"], "stats.group-levels", 2),
+    ("test: prop no such column", b"o\ny\n", ["test", "prop", "--cols", "z", "--success", "y", "f.csv"], "stats.no-such-column", 2),
+    ("test: prop no such group column", b"o\ny\n", ["test", "prop", "--cols", "o", "--success", "y", "--group", "z", "f.csv"], "stats.no-such-column", 2),
+    ("test: prop ambiguous column", b"o,o\ny,n\n", ["test", "prop", "--cols", "o", "--success", "y", "f.csv"], "stats.ambiguous-column", 2),
+    ("test: prop levels limit", b"o\ny\nn\n", ["test", "prop", "--cols", "o", "--success", "y", "--max-groups", "1", "f.csv"], "limit.too-many-groups", 8),
+    ("test: prop rows limit", b"o\ny\nn\ny\n", ["test", "prop", "--cols", "o", "--success", "y", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
+    ("test: prop ragged", b"o,g\ny,a\nn\n", ["test", "prop", "--cols", "o", "--success", "y", "--group", "g", "f.csv"], "stats.csv-ragged", 8),
     ("test: paired text column", b"a,b\n1,x\n2,y\n", ["test", "paired", "--pairs", "a:b", "f.csv"], "stats.non-numeric", 2),
     ("test: paired pairs limit", b"a,b,c\n1,2,3\n", ["test", "paired", "--pairs", "a:b,b:c", "--max-pairs", "1", "f.csv"], "limit.too-many-pairs", 8),
     ("test: paired rows limit", b"a,b\n1,2\n2,3\n3,4\n", ["test", "paired", "--pairs", "a:b", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
@@ -302,7 +327,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 27)
+            k = int(r.next() % 30)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -345,6 +370,12 @@ def main():
                 argv = ["test", "t2", "--cols", "a,b", "--group", "a", "--variance", "pooled", "--max-groups", "3", "f.csv"]
             elif k == 22:
                 argv = ["test", "paired", "--pairs", "a:b", "f.csv"]
+            elif k == 27:
+                argv = ["test", "prop", "--cols", "a", "--success", "1", "f.csv"]
+            elif k == 28:
+                argv = ["test", "prop", "--cols", "a,b", "--success", "a", "--group", "b", "--level", "0.99", "f.csv"]
+            elif k == 29:
+                argv = ["test", "prop", "--cols", "b", "--success", "", "--p0", "0.000000001", "--max-rows", "5", "f.csv"]
             elif k == 24:
                 argv = ["test", "chisq", "--cols", "a", "--vs", "b", "f.csv"]
             elif k == 25:

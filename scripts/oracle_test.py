@@ -269,3 +269,74 @@ def chisq_fit(counts, props):
     out = _chisq_out(n, k - 1, x2, x2 / n, k, 1, min_exp, below5)
     out["expected"] = [n * p for p in props]
     return out
+
+
+def z_quantile(level_text):
+    """q > 0 with P(|Z| < q) = level, at 60 digits (the level a decimal text)"""
+    num, k = level_parts(level_text)
+    return mpmath.sqrt(2) * mpmath.erfinv(mpmath.mpf(num) / mpmath.mpf(10) ** k)
+
+
+def p_normal_two_sided(z2):
+    """2 P(Z > |z|) at 60 digits from the exact z^2 (a Fraction)"""
+    return mpmath.erfc(mpmath.sqrt(frac_mpf(z2)) / mpmath.sqrt(2))
+
+
+def wilson(x, n, q):
+    """Wilson's score interval at 60 digits, clamped to [0, 1]"""
+    x, n = mpmath.mpf(x), mpmath.mpf(n)
+    c = (x + q * q / 2) / (n + q * q)
+    h = q * mpmath.sqrt(x * (n - x) / n + q * q / 4) / (n + q * q)
+    return max(c - h, mpmath.mpf(0)), min(c + h, mpmath.mpf(1))
+
+
+def prop_one(x, n, p0, level):
+    """one sample: x successes of n against p0 (a Fraction), z^2 = (x - n p0)^2 / (n p0 (1 - p0)) exactly"""
+    out = {"n": n, "x": x, "statistic": None, "p": None, "diff": None, "low": None, "high": None, "estimate": None, "reason": None, "z2": None}
+    if n == 0:
+        out["reason"] = "too-few-rows"
+        return out
+    z2 = (x - n * p0) ** 2 / (n * p0 * (1 - p0))
+    z = sqrt_round(z2)
+    out["statistic"] = -z if x < n * p0 else z
+    out["diff"] = rounded(Fraction(x, n) - p0)
+    out["estimate"] = rounded(Fraction(x, n))
+    out["z2"] = z2
+    out["p"] = p_normal_two_sided(z2)
+    q = z_quantile(level)
+    out["q"] = q
+    out["low"], out["high"] = wilson(x, n, q)
+    out["n_p0"] = rounded(n * p0)
+    out["n_q0"] = rounded(n * (1 - p0))
+    return out
+
+
+def prop_two(x1, n1, x2, n2, level):
+    """two samples with the pooled z: z^2 = (p1 - p2)^2 / (p (1 - p) (1/n1 + 1/n2)), p = (x1 + x2) / (n1 + n2)"""
+    out = {"statistic": None, "p": None, "diff": None, "low": None, "high": None, "h": None, "reason": None, "z2": None, "pooled": None}
+    if n1 == 0 or n2 == 0:
+        out["reason"] = "too-few-rows"
+        return out
+    p1, p2 = Fraction(x1, n1), Fraction(x2, n2)
+    out["diff"] = rounded(p1 - p2)
+    xx, nn = x1 + x2, n1 + n2
+    out["pooled"] = rounded(Fraction(xx, nn))
+    q = z_quantile(level)
+    out["q"] = q
+    l1, u1 = wilson(x1, n1, q)
+    l2, u2 = wilson(x2, n2, q)
+    d = frac_mpf(p1 - p2)
+    mp1, mp2 = frac_mpf(p1), frac_mpf(p2)
+    out["low"] = d - mpmath.sqrt((mp1 - l1) ** 2 + (u2 - mp2) ** 2)
+    out["high"] = d + mpmath.sqrt((u1 - mp1) ** 2 + (mp2 - l2) ** 2)
+    out["h"] = 2 * mpmath.asin(mpmath.sqrt(mp1)) - 2 * mpmath.asin(mpmath.sqrt(mp2))
+    if xx == 0 or xx == nn:
+        out["reason"] = "variance-zero"
+        return out
+    pp = Fraction(xx, nn)
+    z2 = (p1 - p2) ** 2 / (pp * (1 - pp) * (Fraction(1, n1) + Fraction(1, n2)))
+    z = sqrt_round(z2)
+    out["statistic"] = -z if p1 < p2 else z
+    out["z2"] = z2
+    out["p"] = p_normal_two_sided(z2)
+    return out

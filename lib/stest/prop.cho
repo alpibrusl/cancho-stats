@@ -1,0 +1,166 @@
+edition 5;
+
+module stest.prop;
+
+import acc.bigint;
+import acc.central;
+
+// The exact quantities of the test of proportions (docs/test.md section 11). Every one is ONE rounding of an exact rational of integers: the statistic z is sign * sqrt(z^2) through central.sqrt_ratio_bits, the
+// proportions and their differences through central.ratio_bits.
+//     one sample, x of n, p0 = P / D (D = 10^9):     z^2 = (x D - n P)^2 / (n P (D - P))        p - p0 = (x D - n P) / (n D)
+//     two samples, x1 of n1 and x2 of n2, X = x1 + x2, N = n1 + n2:     z^2 = (x1 n2 - x2 n1)^2 N / (n1 n2 X (N - X))        p1 - p2 = (x1 n2 - x2 n1) / (n1 n2)
+
+pub struct Prop {
+    status: int,
+    zb: int,
+    zc: int,
+    db: int,
+    dc: int,
+    p1b: int,
+    p2b: int,
+}
+
+fn sign_bit() -> [] int {
+    return 0 - 9223372036854775807 - 1;
+}
+
+// |v|
+fn abs_int(v: int) -> [] int {
+    if v < 0 {
+        return 0 - v;
+    }
+    return v;
+}
+
+// the proportion a / b as the bits of the nearest double (b above 0)
+fn ratio[&h](heap: &!h Heap, a: int, b: int) -> [heap] int {
+    let na = box_slice(heap, 4, 0);
+    let nb = box_slice(heap, 4, 0);
+    var bits = 0;
+    borrow mut na as &!aw in {
+        borrow mut nb as &!bw in {
+            central.limbs_of(a, contents(aw));
+            central.limbs_of(b, contents(bw));
+            let (x, code) = central.ratio_bits(heap, contents(aw), 3, contents(bw), 3, 0, false);
+            bits = x;
+        }
+    }
+    unbox_slice(heap, na);
+    unbox_slice(heap, nb);
+    return bits;
+}
+
+// One sample: x successes of n trials against p0 = P / D. Status 0 answered; 1 no trial. p1b is the proportion x / n.
+pub fn one_sample[&h](heap: &!h Heap, x: int, n: int, p: int, d: int) -> [heap] Prop {
+    if n == 0 {
+        return Prop { status: 1, zb: 0, zc: 0, db: 0, dc: 0, p1b: 0, p2b: 0 };
+    }
+    let sd = x * d - n * p;
+    let num = box_slice(heap, 8, 0);
+    let den = box_slice(heap, 8, 0);
+    let t1 = box_slice(heap, 4, 0);
+    let t2 = box_slice(heap, 4, 0);
+    let t3 = box_slice(heap, 4, 0);
+    var zb = 0;
+    var zc = 0;
+    var db = 0;
+    var dc = 0;
+    borrow mut num as &!nw in {
+        borrow mut den as &!dw in {
+            borrow mut t1 as &!w1 in {
+                borrow mut t2 as &!w2 in {
+                    borrow mut t3 as &!w3 in {
+                        // z^2 = (x D - n P)^2 / (n P (D - P))
+                        central.limbs_of(abs_int(sd), contents(w1));
+                        bigint.mul(contents(nw), contents(w1), 3, contents(w1), 3);
+                        central.limbs_of(n * p, contents(w2));
+                        central.limbs_of(d - p, contents(w3));
+                        bigint.mul(contents(dw), contents(w2), 3, contents(w3), 3);
+                        let (a, b) = central.sqrt_ratio_bits(heap, contents(nw), 6, contents(dw), 6);
+                        zb = a;
+                        zc = b;
+                        if sd < 0 && b == 0 {
+                            zb = zb | sign_bit();
+                        }
+                        // p - p0 = (x D - n P) / (n D)
+                        central.limbs_of(n * d, contents(w2));
+                        let (c, e) = central.ratio_bits(heap, contents(w1), 3, contents(w2), 3, 0, sd < 0);
+                        db = c;
+                        dc = e;
+                    }
+                }
+            }
+        }
+    }
+    unbox_slice(heap, num);
+    unbox_slice(heap, den);
+    unbox_slice(heap, t1);
+    unbox_slice(heap, t2);
+    unbox_slice(heap, t3);
+    let pb = ratio(heap, x, n);
+    return Prop { status: 0, zb: zb, zc: zc, db: db, dc: dc, p1b: pb, p2b: 0 };
+}
+
+// Two samples, pooled. Status 0 answered; 1 a group has no trial; 2 X is 0 or N (the pooled variance is 0: the difference is answered, the statistic is not).
+pub fn two_sample[&h](heap: &!h Heap, x1: int, n1: int, x2: int, n2: int) -> [heap] Prop {
+    if n1 == 0 || n2 == 0 {
+        return Prop { status: 1, zb: 0, zc: 0, db: 0, dc: 0, p1b: 0, p2b: 0 };
+    }
+    let sd = x1 * n2 - x2 * n1;
+    let nn = n1 + n2;
+    let xx = x1 + x2;
+    let num = box_slice(heap, 12, 0);
+    let den = box_slice(heap, 12, 0);
+    let t1 = box_slice(heap, 8, 0);
+    let t2 = box_slice(heap, 8, 0);
+    let t3 = box_slice(heap, 8, 0);
+    let t4 = box_slice(heap, 12, 0);
+    var status = 0;
+    var zb = 0;
+    var zc = 0;
+    var db = 0;
+    var dc = 0;
+    borrow mut num as &!nw in {
+        borrow mut den as &!dw in {
+            borrow mut t1 as &!w1 in {
+                borrow mut t2 as &!w2 in {
+                    borrow mut t3 as &!w3 in {
+                      borrow mut t4 as &!w4 in {
+                        central.limbs_of(abs_int(sd), contents(w1));
+                        // p1 - p2 = (x1 n2 - x2 n1) / (n1 n2)
+                        central.limbs_of(n1 * n2, contents(w2));
+                        let (c, e) = central.ratio_bits(heap, contents(w1), 3, contents(w2), 3, 0, sd < 0);
+                        db = c;
+                        dc = e;
+                        if xx == 0 || xx == nn {
+                            status = 2;
+                        } else {
+                            // z^2 = (x1 n2 - x2 n1)^2 N / (n1 n2 X (N - X))
+                            bigint.mul(contents(nw), contents(w1), 3, contents(w1), 3);
+                            central.limbs_of(nn, contents(w3));
+                            bigint.mul(contents(w4), contents(nw), 6, contents(w3), 3);
+                            central.limbs_of(xx * (nn - xx), contents(w3));
+                            bigint.mul(contents(dw), contents(w2), 3, contents(w3), 3);
+                            let (a, b) = central.sqrt_ratio_bits(heap, contents(w4), 9, contents(dw), 6);
+                            zb = a;
+                            zc = b;
+                            if sd < 0 && b == 0 {
+                                zb = zb | sign_bit();
+                            }
+                        }
+                      }
+                    }
+                }
+            }
+        }
+    }
+    unbox_slice(heap, num);
+    unbox_slice(heap, den);
+    unbox_slice(heap, t1);
+    unbox_slice(heap, t2);
+    unbox_slice(heap, t3);
+    unbox_slice(heap, t4);
+    let p1 = ratio(heap, x1, n1);
+    let p2 = ratio(heap, x2, n2);
+    return Prop { status: status, zb: zb, zc: zc, db: db, dc: dc, p1b: p1, p2b: p2 };
+}
