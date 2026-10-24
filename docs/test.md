@@ -1,4 +1,4 @@
-# `stats test`: design (milestones S3 and, for the rank and exact tests, S4)
+# `stats test`: design (milestone S3; the rank and exact tests of S4 are in `docs/rank.md`)
 
 **Status (2026-10-24): S3 is built and measured: sections 2 to 6 are the design, written 2026-10-23 before any code; sections 10 to 12 are the decisions of S3.3 to S3.5, written before their code; section 9 has what each slice measured, and its last entry the whole of S3 in one table. Every bound is a [choice] fixed before the first run and corrected in place, in this document, when a run showed it false (the places are named in section 9).** Tags: **[read]** read from a document or source, **[measured]** printed by a script (section 9), **[choice]** a decision the maintainer can overturn, **[open]** not decided. Issue #4. S3 is the t family, the chi-square test, the test of proportions and the correction for several tests; the rank tests, ANOVA, Kruskal-Wallis, Kolmogorov-Smirnov and Fisher are S4 (issue #5) and are not designed here.
 
