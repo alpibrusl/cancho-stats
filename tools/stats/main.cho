@@ -1276,6 +1276,18 @@ fn t2_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &
     return (w, e);
 }
 
+// whether none of the comma separated items of the list is empty
+fn no_empty_item[&l](list: &l [byte]) -> [] bool {
+    var i = 0;
+    while i < bytes.count_byte(list, ',') + 1 {
+        if len(bytes.field(list, ',', i + 1)) == 0 {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
 // The tests of the categorical columns named by --cols, kind chisq (docs/test.md section 10): each against the column of --vs (independence), or against the proportions of --expected (goodness of fit). One pass over
 // the file for each column.
 fn chisq_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
@@ -1285,14 +1297,8 @@ fn chisq_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed
     let fit = cli.has(parsed, table, "expected");
     let list = cli.text(args, parsed, table, "cols");
     let ncols_named = bytes.count_byte(list, ',') + 1;
-    var ok = true;
+    var ok = no_empty_item(list);
     var i = 0;
-    while i < ncols_named {
-        if len(bytes.field(list, ',', i + 1)) == 0 {
-            ok = false;
-        }
-        i = i + 1;
-    }
     if !ok {
         e = rule.refuse(heap, e, "args.bad-value", "--cols has an empty item", "--cols name1,name2: no empty item, no leading or trailing comma", "flag", "--cols");
     }
@@ -1398,14 +1404,8 @@ fn prop_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed:
     let list = cli.text(args, parsed, table, "cols");
     let ncols_named = bytes.count_byte(list, ',') + 1;
     let success = cli.text(args, parsed, table, "success");
-    var ok = true;
+    var ok = no_empty_item(list);
     var i = 0;
-    while i < ncols_named {
-        if len(bytes.field(list, ',', i + 1)) == 0 {
-            ok = false;
-        }
-        i = i + 1;
-    }
     if !ok {
         e = rule.refuse(heap, e, "args.bad-value", "--cols has an empty item", "--cols name1,name2: no empty item, no leading or trailing comma", "flag", "--cols");
     }
