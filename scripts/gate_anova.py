@@ -51,6 +51,11 @@ FIXED = [
     [[1e8, 100000001.0, 100000002.0], [100000000.5, 100000001.5, 100000002.5], [100000001.0, 100000002.0, 100000003.0]],
     [[1.0, 2.0, 3.0], [], [4.0, 5.0, 7.0]],
     [[1.0, 2.0, 3.0, 4.0], [2.0, 3.0, 4.0, 5.0], [3.0, 4.0, 5.0, 6.0], [1.5, 2.5, 3.5, 4.5]],
+    # variances 2^418 apart (Welch: range), the distances of the means 2^637 apart with equal variances (Welch: range), F* near 1e32 (tiny variances, far means), F beyond the largest double (classic)
+    [[1.0, 2.0, 3.0], [1e63, 2e63, 3e63], [4.0, 5.0, 6.0]],
+    [[-2.0 ** 500, 2.0 ** 500, 0.0], [-2.0 ** 500, 2.0 ** 500, 1e-100], [-2.0 ** 500, 2.0 ** 500, 3.0 * 2.0 ** 302]],
+    [[1.0, 1.0000000000000002, 1.0], [2.0, 2.0000000000000004, 2.0], [3.0, 3.0000000000000004, 3.0]],
+    [[0.0, 5e-324], [1e300, 1e300], [1e300, 2e300]],
 ]
 
 
@@ -106,8 +111,8 @@ def ulp_distance(a, b):
 
 def gen(r, fi):
     """names, rows, group column, the sorted labels, value column indices, groups-of-values per column built later"""
-    if fi < len(FIXED):
-        groups = FIXED[fi]
+    if fi < 2 * len(FIXED):
+        groups = FIXED[fi % len(FIXED)]
         labs = LABELSETS[fi % len(LABELSETS)][:len(groups)]
         rows = []
         for lab, g in zip(labs, groups):
@@ -183,9 +188,12 @@ def main():
             if not num:
                 continue
             chosen = [j for j in num if r.next() % 3 != 0] or [num[0]]
-            method = r.pick(["welch", "pooled"]) if fi >= len(FIXED) else ("welch" if fi % 2 == 0 else "pooled")
+            method = r.pick(["welch", "pooled"]) if fi >= 2 * len(FIXED) else ("welch" if fi < len(FIXED) else "pooled")
             pooled = method == "pooled"
             extra = ["--cols", ",".join(names[j] for j in chosen), "--group", "g", "--variance", method]
+            correction = r.pick(["none", "none", "holm", "bh", "bonferroni"])
+            if correction != "none":
+                extra += ["--correct", correction]
             try:
                 p = run(a.bin, tmp, names, rows, extra)
             except subprocess.TimeoutExpired:
@@ -198,12 +206,17 @@ def main():
                 return 2
             files += 1
             doc = json.loads(p.stdout)["data"]
-            if doc.get("test") != "anova" or doc.get("rows") != n or doc.get("group") != "g" or doc.get("levels") != labels or doc.get("variance") != method or doc.get("adjustment") != "none":
+            if doc.get("test") != "anova" or doc.get("rows") != n or doc.get("group") != "g" or doc.get("levels") != labels or doc.get("variance") != method or doc.get("adjustment") != correction:
                 bad.append((fi, "the header: want anova rows %d group g levels %r variance %s; got %r" % (n, labels, method, {k: doc.get(k) for k in ("test", "rows", "group", "levels", "variance", "adjustment")})))
             tests = doc["tests"]
             if [x["column"] for x in tests] != [names[j] for j in chosen]:
                 bad.append((fi, "the tests are %r" % [x["column"] for x in tests]))
                 continue
+            if correction != "none":
+                want_adj = ot.adjust([x["p_value"] for x in tests], correction)
+                fam = doc.get("family") or {}
+                if fam.get("correction") != correction or fam.get("size") != len([x for x in tests if x["p_value"] is not None]) or not all(gd.same(a_, b_) for a_, b_ in zip(fam.get("p_adjusted", []), want_adj)):
+                    bad.append((fi, "the family: want %s %r got %r" % (correction, want_adj, fam)))
             for g, j in zip(tests, chosen):
                 gv = [[v for v in (parse(rw[j]) for rw in rows if rw[gcol] == lab) if v is not None] for lab in labels]
                 w = ot.anova(gv, not pooled)

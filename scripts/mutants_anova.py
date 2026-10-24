@@ -15,9 +15,6 @@ M = [
     # Welch's statistic: the double-double conversion, the pairs, the tail
     ("ratio-extra-bits", W, "var k = 120 + bd - bn;", "var k = 20 + bd - bn;"),
     ("ratio-limb-scale", W, "h = h * 67108864.0;\n                l = l * 67108864.0;", "h = h * 33554432.0;\n                l = l * 33554432.0;"),
-    ("ratio-top-limbs", W, "low = top - 5;", "low = top - 1;"),
-    ("ratio-exponent", W, "let s = e - k + 26 * low;", "let s = e - k + 25 * low;"),
-    ("ratio-zero-numerator", W, "    if bn == 0 {\n        return (0.0, 0.0);", "    if bn == 1 {\n        return (0.0, 0.0);"),
     ("ratio-cut-bits", W, "let sh = bn - bd - 140;", "let sh = bn - bd - 20;"),
     ("ratio-cut-exponent", W, "dd_core(heap, contents(cw), nn, den, nd, e + sh);", "dd_core(heap, contents(cw), nn, den, nd, e);"),
     ("shift-top-limb", W, "if q + i + 1 < na {", "if q + i + 1 < na - 1 {"),
@@ -95,7 +92,7 @@ M = [
     ("main-group-required", F, "\"anova\") && !cli.has(parsed, table, \"group\") {", "\"anova\") && false {"),
     ("main-dispatch", F, "is_test && bytes.equal(cli.operand(args, parsed, 1), \"anova\") {", "is_test && false {"),
     ("run-levels-min", R, "if clean && k < 2 {", "if clean && k < 3 {"),
-    ("run-memory-limit", R, "} else if k * nsel > 8192 {", "} else if k * nsel > 8193 {"),
+    ("run-memory-limit", R, "} else if k * nsel > 8192 {", "} else if k * nsel >= 8192 {"),
     ("run-first-group-header", R, "if clean && i == 0 {", "if clean && i == 1 {"),
     ("run-null-rows", R, "var rows_total = gr.nulls;", "var rows_total = 0;"),
     ("run-rows", R, "rows_total = rows_total + info.rows;", "rows_total = rows_total + info.rows + 1;"),
@@ -110,7 +107,16 @@ M = [
     ("run-adjustment", R, "w = json.put_string(heap, w, cli.text(args, parsed, table, \"correct\"));", "w = json.put_string(heap, w, \"none\");"),
 ]
 
-EXPLAINED = {}
+EXPLAINED = {
+    "welch-weight-numerator": "equivalent: that product only estimates the bit length of a weight to choose the power of two it is scaled by; a few bits of difference move the scale, not the answer (the scaled weights are formed from their own product)",
+    "total-s1-sign": "equivalent: the total S1 enters only as S1^2 (LT = N S2 - S1^2); negating every group's sign before summing negates the total",
+    "welch-scale-weights": "equivalent: a power of two is exact in double-double, so the scale 2^50 against 2^60 changes the answer only at the edges of the range, and the status 3 (range) is gated at 360 bits, far from them",
+    "welch-scale-distances": "equivalent: as welch-scale-weights",
+    "pairs-second-from": "equivalent: the pair (x, x) has a zero difference and is skipped by the test for a zero numerator",
+    "sd-needs-two": "equivalent in the answer: the entry prints null for a group of fewer than two values whatever this field holds; the guard only keeps the division by n (n - 1) = 0 from being attempted",
+    "shift-top-limb": "equivalent: the guard is an index bound; the top limb of a numerator is always zero (the magnitudes have room for 64 bits more than any sum), so what it would contribute is zero",
+    "entry-beyond": "unreachable for Welch (argument, not measured): with the weights within 2^360 and the values doubles, F* stays below about 2^466 = 1e140, so the status 4 cannot be set; the pooled F beyond the largest double is reachable and gated",
+}
 
 
 def gates(binary, files):

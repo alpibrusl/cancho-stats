@@ -219,6 +219,7 @@ CASES = [
     ("test: anova variance unknown", b"v,g\n1,a\n2,b\n", ["test", "anova", "--cols", "v", "--group", "g", "--variance", "equal", "f.csv"], "args.bad-value", 2),
     ("test: anova groups limit", b"v,g\n1,a\n2,b\n3,c\n", ["test", "anova", "--cols", "v", "--group", "g", "--max-groups", "2", "f.csv"], "limit.too-many-groups", 8),
     ("test: anova groups times columns limit", b"g," + b",".join(b"c%d" % i for i in range(100)) + b"\n" + b"".join(b"g%d," % i + b",".join(b"%d" % (i + j) for j in range(100)) + b"\n" for i in range(90)), ["test", "anova", "--cols", ",".join("c%d" % i for i in range(100)), "--group", "g", "--max-groups", "100", "f.csv"], "limit.too-many-groups", 8),
+    ("test: anova groups times columns exactly at the limit", b"g," + b",".join(b"c%d" % i for i in range(128)) + b"\n" + b"".join(b"g%d," % i + b",".join(b"%d" % (i * j % 17 + j) for j in range(128)) + b"\n" for i in range(64)) * 2, ["test", "anova", "--cols", ",".join("c%d" % i for i in range(128)), "--group", "g", "--max-groups", "64", "f.csv"], None, 0),
     ("test: anova rows limit", b"v,g\n1,a\n2,b\n3,b\n", ["test", "anova", "--cols", "v", "--group", "g", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
     ("test: anova ragged", b"v,g\n1,a\n2\n", ["test", "anova", "--cols", "v", "--group", "g", "f.csv"], "stats.csv-ragged", 8),
     ("test: anova too many tests for a family", b"a,b,c,g\n1,5,3,u\n2,5,3,v\n", ["test", "anova", "--cols", "a,b,c", "--group", "g", "--correct", "holm", "--max-tests", "2", "f.csv"], "limit.too-many-tests", 8),

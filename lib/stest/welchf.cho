@@ -40,12 +40,9 @@ fn shr_bits[&o, &a](out: &!o [int], a: &a [int], na: int, sh: int) -> [] int {
     return 0;
 }
 
-// the quotient of num * 2^k by den (k so that it has 120 bits or more) as a double-double, its top six limbs summed from the top, times 2^(e - k)
+// the quotient of num * 2^k by den (k so that it has 120 bits or more, and at most 156 once the caller has cut the numerator: six limbs) as a double-double, its limbs summed from the top, times 2^(e - k); a zero numerator gives a zero quotient
 fn dd_core[&h, &n, &d](heap: &!h Heap, num: &n [int], nn: int, den: &d [int], nd: int, e: int) -> [heap] (float, float) {
     let bn = bigint.bit_length(num, nn);
-    if bn == 0 {
-        return (0.0, 0.0);
-    }
     let bd = bigint.bit_length(den, nd);
     var k = 120 + bd - bn;
     if k < 0 {
@@ -56,7 +53,6 @@ fn dd_core[&h, &n, &d](heap: &!h Heap, num: &n [int], nn: int, den: &d [int], nd
     let r = box_slice(heap, nd + 2, 0);
     var h = 0.0;
     var l = 0.0;
-    var low = 0;
     borrow mut q as &!qw in {
         borrow mut r as &!rw in {
             bigint.div_shifted(num, nn, den, nd, k, contents(qw), contents(rw));
@@ -65,12 +61,8 @@ fn dd_core[&h, &n, &d](heap: &!h Heap, num: &n [int], nn: int, den: &d [int], nd
             while top > 0 && qv[top] == 0 {
                 top = top - 1;
             }
-            low = top - 5;
-            if low < 0 {
-                low = 0;
-            }
             var j = top;
-            while j >= low {
+            while j >= 0 {
                 h = h * 67108864.0;
                 l = l * 67108864.0;
                 let (sh, sl) = dd.add(h, l, float_of(qv[j]), 0.0);
@@ -82,7 +74,7 @@ fn dd_core[&h, &n, &d](heap: &!h Heap, num: &n [int], nn: int, den: &d [int], nd
     }
     unbox_slice(heap, q);
     unbox_slice(heap, r);
-    let s = e - k + 26 * low;
+    let s = e - k;
     return (math.ldexp(h, s), math.ldexp(l, s));
 }
 

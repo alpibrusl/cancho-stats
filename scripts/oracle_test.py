@@ -421,9 +421,12 @@ def anova(groups, welch):
         for (n_i, a1, a2), g in live:
             l_int = (n_i * a2 - a1 * a1) / (unit * unit)
             bw.append((n_i * n_i * (n_i - 1)).bit_length() - int(l_int).bit_length())
-            dn = abs((a1 / unit) * nn - (s1 / unit) * n_i)
-            if dn != 0:
-                bd.append(int(dn).bit_length() - (n_i * nn).bit_length())
+        for x_ in range(len(live)):
+            for y_ in range(x_ + 1, len(live)):
+                (nx, ax, _), (ny, ay, _) = live[x_][0], live[y_][0]
+                dn = abs((ax / unit) * ny - (ay / unit) * nx)
+                if dn != 0:
+                    bd.append(int(dn).bit_length() - (nx * ny).bit_length())
         out["spread"] = max(max(bw) - min(bw), (max(bd) - min(bd)) if bd else 0)
         w = [Fraction(s[0][0]) / x for s, x in zip(live, v)]
         ww = sum(w, Fraction(0))
