@@ -41,6 +41,7 @@ M = [
 ]
 
 EXPLAINED = {
+    "pattern-length": "equivalent: the next \"p_value\": after i + 1 is the same as the next after j, the bytes between them hold no such key (a string is escaped)",
     "sort-ties": "equivalent: the order of equal p-values cannot change an adjusted value (the running maximum of Holm and the running minimum of BH make tied entries equal), as docs/test.md section 12 says",
 }
 
