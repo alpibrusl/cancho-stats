@@ -61,7 +61,7 @@ M = [
     # the answer
     ("pooled-df-value", B, "df = float_of(r.n1 + r.n2 - 2);", "df = float_of(r.n1 + r.n2 - 1);"),
     ("pooled-df-printed", B, "w = json.put_int(heap, w, r.n1 + r.n2 - 2);", "w = json.put_int(heap, w, r.n1 + r.n2 - 1);"),
-    ("welch-df-rounded-down", B, "df = float_of_bits(r.fb);", "df = float_of(int_of(float_of_bits(r.fb)));"),
+    ("welch-df-scaled", B, "df = float_of_bits(r.fb);", "df = float_of_bits(r.fb) * 0.999;"),
     ("interval-df", B, "ttest.t_critical_real(lnum, lk, df)", "ttest.t_critical_real(lnum, lk, df + 1.0)"),
     ("interval-width", B, "half = q * float_of_bits(r.sb);", "half = q * float_of_bits(r.sb) * 2.0;"),
     ("p-df", B, "r.tb & 9223372036854775807), df);", "r.tb & 9223372036854775807), df + 1.0);"),
