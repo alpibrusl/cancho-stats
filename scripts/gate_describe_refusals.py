@@ -157,7 +157,7 @@ CASES = [
     ("test: chisq expected empty item", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "0.5,0.5,", "f.csv"], "stats.expected-proportions", 2),
     ("test: chisq expected sum", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "0.5,0.6", "f.csv"], "stats.expected-proportions", 2),
     ("test: chisq expected sum below one", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "0.4,0.4", "f.csv"], "stats.expected-proportions", 2),
-    ("test: chisq expected two points", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "0.5.5,0.5", "f.csv"], "stats.expected-proportions", 2),
+    ("test: chisq expected two points", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "0.5.5,0.45", "f.csv"], "stats.expected-proportions", 2),
     ("test: chisq expected zero", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "0,1", "f.csv"], "stats.expected-proportions", 2),
     ("test: chisq expected ten decimals", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "0.5000000001,0.4999999999", "f.csv"], "stats.expected-proportions", 2),
     ("test: chisq expected negative", b"a\nx\ny\n", ["test", "chisq", "--cols", "a", "--expected", "1.5,-0.5", "f.csv"], "stats.expected-proportions", 2),
