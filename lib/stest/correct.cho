@@ -1,0 +1,218 @@
+edition 5;
+
+module stest.correct;
+
+import std.json;
+import acc.central;
+import flt;
+
+// The correction for several tests (docs/test.md sections 4 and 12). The family is the entries of the answer written so far that have a p-value: the p-values are read back from the text of the answer (the doubles that
+// were printed), sorted ascending (ties by the order of the entries), and with m of them
+//     bonferroni   min(1, m p)          holm   p~(r) = max over j <= r of min(1, (m - j + 1) p(j))          bh   p~(r) = min over j >= r of min(1, m p(j) / j)
+// Each product or quotient of a double and small integers is an exact rational rounded ONCE (central.ratio_bits); the maxima and minima of correctly rounded values are the roundings of the maxima and minima.
+
+fn float_of_bits(bits: int) -> [] float {
+    var key = bits;
+    if bits < 0 {
+        key = bits ^ 0x7fffffffffffffff;
+    }
+    return flt.float_of_key(key);
+}
+
+// whether the text has the bytes of `what` at i
+fn at[&t, &w](text: &t [byte], i: int, what: &w [byte]) -> [] bool {
+    if i + len(what) > len(text) {
+        return false;
+    }
+    var k = 0;
+    while k < len(what) {
+        if text[i + k] != what[k] {
+            return false;
+        }
+        k = k + 1;
+    }
+    return true;
+}
+
+// the index of the next `"p_value":` at or after i, or -1
+fn next_p[&t](text: &t [byte], from: int) -> [] int {
+    var i = from;
+    while i < len(text) {
+        if at(text, i, "\"p_value\":") {
+            return i;
+        }
+        i = i + 1;
+    }
+    return 0 - 1;
+}
+
+// min(1, p * mult / div) for the finite double p >= 0 with bits `bits`, as bits: ONE rounding
+fn scaled[&h](heap: &!h Heap, bits: int, mult: int, div: int) -> [heap] int {
+    let ef = bits >> 52 & 2047;
+    var m = bits & 4503599627370495;
+    var f = 0;
+    if ef != 0 {
+        m = m | 4503599627370496;
+        f = ef - 1;
+    }
+    if m == 0 {
+        return 0;
+    }
+    let nl = box_slice(heap, 4, 0);
+    let dl = box_slice(heap, 4, 0);
+    var out = 0;
+    borrow mut nl as &!nw in {
+        borrow mut dl as &!dw in {
+            central.limbs_of(m * mult, contents(nw));
+            central.limbs_of(div, contents(dw));
+            let (b, code) = central.ratio_bits(heap, contents(nw), 3, contents(dw), 3, f - 1074, false);
+            out = b;
+        }
+    }
+    unbox_slice(heap, nl);
+    unbox_slice(heap, dl);
+    if float_of_bits(out) > 1.0 {
+        return bits_of(1.0);
+    }
+    return out;
+}
+
+// The adjusted p-values of the family written in `w0` by `method` (bonferroni, holm, bh), as the object `family` after the tests: size, correction and p_adjusted, one value (or null) for each entry that has a "p_value" key.
+pub fn put_family[&h, &m](heap: &!h Heap, w0: json.Writer, method: &m [byte]) -> [heap] json.Writer {
+    var w = w0;
+    var n = 0;
+    borrow w as &wr0 in {
+        var i = next_p(json.bytes(wr0), 0);
+        while i >= 0 {
+            n = n + 1;
+            i = next_p(json.bytes(wr0), i + 10);
+        }
+    }
+    // keys[k]: the order-preserving key of the k-th p-value (-1 for null), bits[k] its bits
+    let bits = box_slice(heap, n + 1, 0);
+    let live = box_slice(heap, n + 1, 0);
+    let order = box_slice(heap, n + 1, 0);
+    let adj = box_slice(heap, n + 1, 0);
+    var count = 0;
+    borrow w as &wr1 in {
+        borrow mut bits as &!bw in {
+            borrow mut live as &!lw in {
+                let text = json.bytes(wr1);
+                var i = next_p(text, 0);
+                var k = 0;
+                while i >= 0 && k < n {
+                    var j = i + 10;
+                    while j < len(text) && text[j] != byte_of(44) && text[j] != byte_of(125) {
+                        j = j + 1;
+                    }
+                    // a null p-value is not a number: parse_float refuses it, and the entry has no place in the family
+                    let (key, st) = flt.parse_float(text[i + 10..j]);
+                    if st == 0 {
+                        contents(bw)[k] = bits_of(flt.float_of_key(key));
+                        contents(lw)[k] = 1;
+                        count = count + 1;
+                    }
+                    k = k + 1;
+                    i = next_p(text, j);
+                }
+            }
+        }
+    }
+    borrow mut order as &!ow in {
+        borrow bits as &br in {
+            borrow live as &lr in {
+                // the live entries in order of their p-value, ties by position: an insertion sort of the positions (at most --max-tests of them)
+                let o = contents(ow);
+                var k = 0;
+                var pos = 0;
+                while k < n {
+                    if contents(lr)[k] == 1 {
+                        var at_ = pos;
+                        while at_ > 0 && float_of_bits(contents(br)[o[at_ - 1]]) > float_of_bits(contents(br)[k]) {
+                            o[at_] = o[at_ - 1];
+                            at_ = at_ - 1;
+                        }
+                        o[at_] = k;
+                        pos = pos + 1;
+                    }
+                    k = k + 1;
+                }
+            }
+        }
+    }
+    let is_holm = bytes_eq(method, "holm");
+    let is_bh = bytes_eq(method, "bh");
+    borrow mut adj as &!aw in {
+        borrow bits as &br2 in {
+            borrow order as &or in {
+                let a = contents(aw);
+                let o = contents(or);
+                let b = contents(br2);
+                var r = 0;
+                if is_bh {
+                    // step up: from the largest down, the running minimum of min(1, m p(j) / j)
+                    var run = bits_of(1.0);
+                    r = count;
+                    while r >= 1 {
+                        let t = scaled(heap, b[o[r - 1]], count, r);
+                        if float_of_bits(t) < float_of_bits(run) {
+                            run = t;
+                        }
+                        a[o[r - 1]] = run;
+                        r = r - 1;
+                    }
+                } else if is_holm {
+                    // step down: from the smallest up, the running maximum of min(1, (m - j + 1) p(j))
+                    var run = 0;
+                    r = 1;
+                    while r <= count {
+                        let t = scaled(heap, b[o[r - 1]], count - r + 1, 1);
+                        if float_of_bits(t) > float_of_bits(run) {
+                            run = t;
+                        }
+                        a[o[r - 1]] = run;
+                        r = r + 1;
+                    }
+                } else {
+                    r = 1;
+                    while r <= count {
+                        a[o[r - 1]] = scaled(heap, b[o[r - 1]], count, 1);
+                        r = r + 1;
+                    }
+                }
+            }
+        }
+    }
+    w = json.put_key(heap, w, "family");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "size");
+    w = json.put_int(heap, w, count);
+    w = json.put_key(heap, w, "correction");
+    w = json.put_string(heap, w, method);
+    w = json.put_key(heap, w, "p_adjusted");
+    w = json.begin_array(heap, w);
+    borrow live as &lr2 in {
+        borrow adj as &ar in {
+            var k = 0;
+            while k < n {
+                if contents(lr2)[k] == 1 {
+                    w = json.put_float(heap, w, float_of_bits(contents(ar)[k]));
+                } else {
+                    w = json.put_null(heap, w);
+                }
+                k = k + 1;
+            }
+        }
+    }
+    w = json.end_array(heap, w);
+    w = json.end_object(heap, w);
+    unbox_slice(heap, bits);
+    unbox_slice(heap, live);
+    unbox_slice(heap, order);
+    unbox_slice(heap, adj);
+    return w;
+}
+
+fn bytes_eq[&a, &b](a: &a [byte], b: &b [byte]) -> [] bool {
+    return at(a, 0, b) && len(a) == len(b);
+}
