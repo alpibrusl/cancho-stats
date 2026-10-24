@@ -21,7 +21,7 @@ pub struct ChiSq {
     below5: int,
 }
 
-// the integer v, 0 <= v < 2^62, as an exact double-double
+// the integer v, |v| < 2^62, as an exact double-double: v = (v >> 31) 2^31 + (v & (2^31 - 1)) for a negative v as well (the shift rounds down, the mask keeps the low bits)
 fn of_int(v: int) -> [] (float, float) {
     return dd.two_sum(float_of(v >> 31) * 2147483648.0, float_of(v & 2147483647));
 }
@@ -31,11 +31,7 @@ fn add_term(sh: float, sl: float, num: int, p: int, q: int, r: int) -> [] (float
     if num == 0 {
         return (sh, sl);
     }
-    var a = num;
-    if num < 0 {
-        a = 0 - num;
-    }
-    let (nh, nl) = of_int(a);
+    let (nh, nl) = of_int(num);
     let (n2h, n2l) = dd.mul(nh, nl, nh, nl);
     let (ph, pl) = of_int(p);
     let (qh, ql) = of_int(q);

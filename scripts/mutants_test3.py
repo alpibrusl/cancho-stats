@@ -42,7 +42,6 @@ M = [
     ("fit-effect", Q, "effect = sqrt(sh / float_of(n));\n    }\n    return ChiSq { n: n, rows_: k", "effect = sqrt(sh / float_of(k));\n    }\n    return ChiSq { n: n, rows_: k"),
     ("fit-df", Q, "df: k - 1,", "df: k,"),
     ("int-split-low", Q, "float_of(v >> 31) * 2147483648.0", "float_of(v >> 30) * 2147483648.0"),
-    ("numerator-abs", Q, "    if num < 0 {\n        a = 0 - num;", "    if num < 0 {\n        a = num;"),
     ("term-zero-skipped-wrongly", Q, "if num == 0 {\n        return (sh, sl);", "if num == 1 {\n        return (sh, sl);"),
     ("ratio-empty", Q, "if b == 0 {\n        return 0.0;", "if b == 7 {\n        return 0.0;"),
     # --expected
