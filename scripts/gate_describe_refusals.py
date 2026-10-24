@@ -135,6 +135,7 @@ CASES = [
     ("test: paired ambiguous column", b"a,a\n1,2\n", ["test", "paired", "--pairs", "a:a", "f.csv"], "stats.ambiguous-column", 2),
     ("test: paired second name ambiguous", b"a,b,b\n1,2,3\n", ["test", "paired", "--pairs", "a:b", "f.csv"], "stats.ambiguous-column", 2),
     ("test: paired second name missing", b"a,b\n1,2\n", ["test", "paired", "--pairs", "b:z", "f.csv"], "stats.no-such-column", 2),
+    ("test: paired pairs at the limit", b"a,b,c\n1,2,3\n2,5,1\n", ["test", "paired", "--pairs", "a:b", "--max-pairs", "1", "f.csv"], None, 0),
     ("test: paired text column", b"a,b\n1,x\n2,y\n", ["test", "paired", "--pairs", "a:b", "f.csv"], "stats.non-numeric", 2),
     ("test: paired pairs limit", b"a,b,c\n1,2,3\n", ["test", "paired", "--pairs", "a:b,b:c", "--max-pairs", "1", "f.csv"], "limit.too-many-pairs", 8),
     ("test: paired rows limit", b"a,b\n1,2\n2,3\n3,4\n", ["test", "paired", "--pairs", "a:b", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
