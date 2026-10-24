@@ -106,7 +106,7 @@ M = [
     ("numeric-needs-a-number", F, "let numeric = num_a[j] + num_b[j] > 0 && bad_a[j] == 0 && bad_b[j] == 0;", "let numeric = bad_a[j] == 0 && bad_b[j] == 0;"),
     ("t2-dispatch", F, "if is_test && bytes.equal(cli.operand(args, parsed, 1), \"t2\") {", "if false {"),
     ("t2-group-test-name", F, "w = json.put_string(heap, w, \"t2\");", "w = json.put_string(heap, w, \"t1\");"),
-    ("kinds-accepted", F, "&& !bytes.equal(cli.operand(args, parsed, 1), \"paired\") {", "&& false {"),
+    ("kinds-accepted", F, "&& !bytes.equal(cli.operand(args, parsed, 1), \"paired\") && !bytes", "&& false && !bytes"),
 ]
 
 EXPLAINED = {}
