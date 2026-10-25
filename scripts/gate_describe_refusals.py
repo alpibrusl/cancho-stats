@@ -223,6 +223,32 @@ CASES = [
     ("test: anova rows limit", b"v,g\n1,a\n2,b\n3,b\n", ["test", "anova", "--cols", "v", "--group", "g", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
     ("test: anova ragged", b"v,g\n1,a\n2\n", ["test", "anova", "--cols", "v", "--group", "g", "f.csv"], "stats.csv-ragged", 8),
     ("test: anova too many tests for a family", b"a,b,c,g\n1,5,3,u\n2,5,3,v\n", ["test", "anova", "--cols", "a,b,c", "--group", "g", "--correct", "holm", "--max-tests", "2", "f.csv"], "limit.too-many-tests", 8),
+    # test kruskal (docs/rank.md section 2)
+    ("test: kruskal three groups", b"v,g\n1,a\n2,a\n3,a\n2,b\n3,b\n4,b\n5,b\n7,c\n8,c\n9.5,c\n", ["test", "kruskal", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: kruskal two groups", b"v,g\n1,a\n2,a\n4,b\n7,b\n", ["test", "kruskal", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: kruskal groups of one row each", b"v,g\n1,a\n2,b\n3,c\n", ["test", "kruskal", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: kruskal a group of one row", b"v,g\n1,a\n2,b\n3,b\n5,c\n6,c\n", ["test", "kruskal", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: kruskal constant groups", b"v,g\n3,a\n3,a\n5,b\n5,b\n7,c\n7,c\n", ["test", "kruskal", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: kruskal all values equal", b"v,g\n3,a\n3,a\n3,b\n3,b\n", ["test", "kruskal", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: kruskal a group with no value", b"v,g\n1,a\n2,a\n,b\n,b\n5,c\n7,c\n", ["test", "kruskal", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: kruskal missing group cells and values", b"v,g\n1,a\n,a\n2,\n4,b\n7,b\n9,a\n5,c\n8,c\n", ["test", "kruskal", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: kruskal holm", b"v,w,g\n1,5,a\n2,3,a\n4,3,b\n7,1,b\n8,2,b\n9,9,c\n3,4,c\n", ["test", "kruskal", "--cols", "v,w", "--group", "g", "--correct", "holm", "f.csv"], None, 0),
+    ("test: kruskal no group flag", b"v,g\n1,a\n2,b\n", ["test", "kruskal", "--cols", "v", "f.csv"], "stats.test-columns", 2),
+    ("test: kruskal no columns", b"v,g\n1,a\n2,b\n", ["test", "kruskal", "--group", "g", "f.csv"], "stats.test-columns", 2),
+    ("test: kruskal one level", b"v,g\n1,a\n2,a\n", ["test", "kruskal", "--cols", "v", "--group", "g", "f.csv"], "stats.group-levels", 2),
+    ("test: kruskal group column empty", b"v,g\n1,\n2,\n", ["test", "kruskal", "--cols", "v", "--group", "g", "f.csv"], "stats.group-levels", 2),
+    ("test: kruskal no such group column", b"v,g\n1,a\n2,b\n", ["test", "kruskal", "--cols", "v", "--group", "z", "f.csv"], "stats.no-such-column", 2),
+    ("test: kruskal ambiguous group column", b"v,g,g\n1,a,a\n2,b,b\n", ["test", "kruskal", "--cols", "v", "--group", "g", "f.csv"], "stats.ambiguous-column", 2),
+    ("test: kruskal no such column", b"v,g\n1,a\n2,b\n", ["test", "kruskal", "--cols", "z", "--group", "g", "f.csv"], "stats.no-such-column", 2),
+    ("test: kruskal text column", b"v,w,g\n1,x,a\n2,y,b\n", ["test", "kruskal", "--cols", "w", "--group", "g", "f.csv"], "stats.non-numeric", 2),
+    ("test: kruskal text in the last group", b"v,g\n1,a\n2,a\n3,b\n4,b\nx,c\n3,c\n", ["test", "kruskal", "--cols", "v", "--group", "g", "f.csv"], "stats.non-numeric", 2),
+    ("test: kruskal column with no number", b"v,g\n,a\n,b\n,c\n", ["test", "kruskal", "--cols", "v", "--group", "g", "f.csv"], "stats.non-numeric", 2),
+    ("test: kruskal groups limit", b"v,g\n1,a\n2,b\n3,c\n", ["test", "kruskal", "--cols", "v", "--group", "g", "--max-groups", "2", "f.csv"], "limit.too-many-groups", 8),
+    ("test: kruskal wide file, many groups", b"g," + b",".join(b"c%d" % i for i in range(100)) + b"\n" + b"".join(b"g%d," % i + b",".join(b"%d" % (i + j) for j in range(100)) + b"\n" for i in range(90)), ["test", "kruskal", "--cols", ",".join("c%d" % i for i in range(100)), "--group", "g", "--max-groups", "100", "f.csv"], None, 0),
+    ("test: kruskal many groups and columns", b"g," + b",".join(b"c%d" % i for i in range(128)) + b"\n" + b"".join(b"g%d," % i + b",".join(b"%d" % (i * j % 17 + j) for j in range(128)) + b"\n" for i in range(64)) * 2, ["test", "kruskal", "--cols", ",".join("c%d" % i for i in range(128)), "--group", "g", "--max-groups", "64", "f.csv"], None, 0),
+    ("test: kruskal rows limit", b"v,g\n1,a\n2,b\n3,b\n", ["test", "kruskal", "--cols", "v", "--group", "g", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
+    ("test: kruskal ragged", b"v,g\n1,a\n2\n", ["test", "kruskal", "--cols", "v", "--group", "g", "f.csv"], "stats.csv-ragged", 8),
+    ("test: kruskal too many tests for a family", b"a,b,c,g\n1,5,3,u\n2,5,3,v\n", ["test", "kruskal", "--cols", "a,b,c", "--group", "g", "--correct", "holm", "--max-tests", "2", "f.csv"], "limit.too-many-tests", 8),
     # --correct and --max-tests (docs/test.md section 12)
     ("test: t1 holm", b"a,b,c\n1,5,3\n2,5,3\n4,1,3\n", ["test", "t1", "--cols", "a,b,c", "--correct", "holm", "f.csv"], None, 0),
     ("test: t1 bh with a constant column", b"a,b\n1,3\n2,3\n4,3\n", ["test", "t1", "--cols", "a,b", "--correct", "bh", "f.csv"], None, 0),
@@ -377,7 +403,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 36)
+            k = int(r.next() % 38)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -432,6 +458,10 @@ def main():
                 argv = ["test", "anova", "--cols", "a,b", "--group", "a", "--variance", "pooled", "--max-groups", "3", "f.csv"]
             elif k == 35:
                 argv = ["test", "anova", "--cols", "b", "--group", "a", "--correct", "holm", "--max-rows", "6", "f.csv"]
+            elif k == 36:
+                argv = ["test", "kruskal", "--cols", "a", "--group", "b", "f.csv"]
+            elif k == 37:
+                argv = ["test", "kruskal", "--cols", "b", "--group", "a", "--correct", "bh", "--max-groups", "3", "--max-rows", "6", "f.csv"]
             elif k == 27:
                 argv = ["test", "prop", "--cols", "a", "--success", "1", "f.csv"]
             elif k == 28:

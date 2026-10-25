@@ -450,3 +450,59 @@ def anova(groups, welch):
         return out
     out["p"] = p_f(k - 1, out["df2"], f)
     return out
+
+
+def chi2_sf_exact(df, x):
+    """the upper tail of chi-square on df degrees of freedom at the exact rational x >= 0, 60 digits"""
+    if x == 0:
+        return mpmath.mpf(1)
+    return mpmath.gammainc(mpmath.mpf(df) / 2, frac_mpf(Fraction(x)) / 2, mpmath.inf, regularized=True)
+
+
+def kruskal(groups):
+    """Kruskal-Wallis H of the lists of present values `groups` (docs/rank.md section 2), from the definition on Fractions: the average ranks of all the values together (found by sorting the exact values and counting the
+    ones below and equal, not from the program's keys), R_i the rank sum of group i, H = 12 / (N (N + 1)) sum R_i^2 / n_i - 3 (N + 1), C = 1 - sum (t^3 - t) / (N^3 - N), H* = H / C, epsilon^2 = H* / (N - 1).
+    A group with no value is not a group. A dict: ns (as given), k, N, statistic (double), df (k - 1), p (mpf), eps (double), ties (the number of tie groups of more than one value), mean_ranks (doubles, None for an empty group), reason."""
+    out = {"ns": [len(g) for g in groups], "k": 0, "N": 0, "statistic": None, "df": None, "p": None, "eps": None, "ties": 0, "mean_ranks": [], "reason": None, "h": None}
+    allv = sorted(Fraction(v) for g in groups for v in g)
+    nn = len(allv)
+    live = [g for g in groups if len(g) > 0]
+    out["k"], out["N"] = len(live), nn
+
+    def avg_rank(v):
+        below = sum(1 for x in allv if x < v)
+        equal = sum(1 for x in allv if x == v)
+        return Fraction(2 * below + equal + 1, 2)
+
+    rs = []
+    for g in groups:
+        if not g:
+            rs.append(None)
+            continue
+        rs.append(sum((avg_rank(Fraction(v)) for v in g), Fraction(0)))
+    out["mean_ranks"] = [None if r is None else rounded(r / len(g)) for r, g in zip(rs, groups)]
+    if len(live) < 2:
+        out["reason"] = "too-few-rows"
+        return out
+    out["df"] = len(live) - 1
+    t3 = 0
+    seen = set()
+    for v in allv:
+        if v in seen:
+            continue
+        seen.add(v)
+        t = sum(1 for x in allv if x == v)
+        if t > 1:
+            out["ties"] += 1
+            t3 += t ** 3 - t
+    base = nn ** 3 - nn
+    if base - t3 == 0:
+        out["reason"] = "variance-zero"
+        return out
+    h = Fraction(12, nn * (nn + 1)) * sum((r * r / len(g) for r, g in zip(rs, groups) if r is not None), Fraction(0)) - 3 * (nn + 1)
+    hs = h / (1 - Fraction(t3, base))
+    out["h"] = hs
+    out["statistic"] = rounded(hs)
+    out["eps"] = rounded(hs / (nn - 1))
+    out["p"] = chi2_sf_exact(len(live) - 1, hs)
+    return out

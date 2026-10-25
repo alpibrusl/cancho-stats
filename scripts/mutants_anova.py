@@ -90,9 +90,9 @@ M = [
     ("entry-p-method", E, "w = json.put_string(heap, w, \"f\");", "w = json.put_string(heap, w, \"t\");"),
     # the driver
     ("main-group-required", F, "\"anova\") && !cli.has(parsed, table, \"group\") {", "\"anova\") && false {"),
-    ("main-dispatch", F, "is_test && bytes.equal(cli.operand(args, parsed, 1), \"anova\") {", "is_test && false {"),
+    ("main-dispatch", F, "is_test && (bytes.equal(cli.operand(args, parsed, 1), \"anova\") ||", "is_test && (false ||"),
     ("run-levels-min", R, "if clean && k < 2 {", "if clean && k < 3 {"),
-    ("run-memory-limit", R, "} else if k * nsel > 8192 {", "} else if k * nsel >= 8192 {"),
+    ("run-memory-limit", R, "} else if kind == 0 && k * nsel > 8192 {", "} else if kind == 0 && k * nsel >= 8192 {"),
     ("run-first-group-header", R, "if clean && i == 0 {", "if clean && i == 1 {"),
     ("run-null-rows", R, "var rows_total = gr.nulls;", "var rows_total = 0;"),
     ("run-rows", R, "rows_total = rows_total + info.rows;", "rows_total = rows_total + info.rows + 1;"),

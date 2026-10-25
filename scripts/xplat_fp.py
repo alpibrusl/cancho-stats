@@ -31,6 +31,7 @@ import gate_test2  # noqa: E402
 import gate_test3  # noqa: E402
 import gate_test5  # noqa: E402
 import gate_anova  # noqa: E402
+import gate_kruskal  # noqa: E402
 import tempfile  # noqa: E402
 
 GOLDEN = ROOT / "docs" / "xplat_fp.txt"
@@ -300,6 +301,26 @@ def anova_lines(stats):
     return out
 
 
+def kruskal_lines(stats):
+    """`stats test kruskal` on 8 seeded CSV files (2 to 25 groups of unequal sizes, lattices with heavy ties, empty cells, the shapes of scripts/gate_kruskal.py): the hash of the bytes of the answer."""
+    out = []
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        r = gate_special.SM64(67)
+        done = 0
+        fi = len(gate_kruskal.FIXED)
+        while done < 8:
+            names, rows, gcol, labels, vidx, shapes = gate_kruskal.gen(r, fi)
+            fi += 1
+            num = [j for j in vidx if gate_kruskal.column_numeric(rows, j)]
+            if not num:
+                continue
+            p = gate_kruskal.run(stats, tmp, names, rows, ["--cols", ",".join(names[j] for j in num), "--group", "g"])
+            out.append("test-kruskal\tfile%02d\t%d\t%s" % (done, len(rows), hashlib.sha256(("exit %d %s" % (p.returncode, p.stdout)).encode()).hexdigest()))
+            done += 1
+    return out
+
+
 def fingerprint(driver, acc, threads_check=True, stats=None):
     lines = []
     bad = []
@@ -330,6 +351,7 @@ def fingerprint(driver, acc, threads_check=True, stats=None):
         lines += test4_lines(stats)
         lines += test5_lines(stats)
         lines += anova_lines(stats)
+        lines += kruskal_lines(stats)
     return lines, bad
 
 
