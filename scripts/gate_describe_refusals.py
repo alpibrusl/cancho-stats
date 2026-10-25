@@ -194,6 +194,35 @@ CASES = [
     ("test: prop levels limit", b"o\ny\nn\n", ["test", "prop", "--cols", "o", "--success", "y", "--max-groups", "1", "f.csv"], "limit.too-many-groups", 8),
     ("test: prop rows limit", b"o\ny\nn\ny\n", ["test", "prop", "--cols", "o", "--success", "y", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
     ("test: prop ragged", b"o,g\ny,a\nn\n", ["test", "prop", "--cols", "o", "--success", "y", "--group", "g", "f.csv"], "stats.csv-ragged", 8),
+    # test anova (docs/rank.md section 3)
+    ("test: anova three groups", b"v,g\n1,a\n2,a\n3,a\n2,b\n3,b\n4,b\n5,b\n7,c\n8,c\n9.5,c\n", ["test", "anova", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: anova pooled, two columns", b"v,w,g\n1,5,a\n2,3,a\n4,3,b\n7,1,b\n8,2,b\n9,9,c\n3,4,c\n", ["test", "anova", "--cols", "v,w", "--group", "g", "--variance", "pooled", "f.csv"], None, 0),
+    ("test: anova two groups", b"v,g\n1,a\n2,a\n4,b\n7,b\n", ["test", "anova", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: anova groups of one row each", b"v,g\n1,a\n2,b\n3,c\n", ["test", "anova", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: anova a group of one row", b"v,g\n1,a\n2,b\n3,b\n5,c\n6,c\n", ["test", "anova", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: anova constant groups", b"v,g\n3,a\n3,a\n5,b\n5,b\n7,c\n7,c\n", ["test", "anova", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: anova constant groups pooled", b"v,g\n3,a\n3,a\n5,b\n5,b\n7,c\n7,c\n", ["test", "anova", "--cols", "v", "--group", "g", "--variance", "pooled", "f.csv"], None, 0),
+    ("test: anova all values equal", b"v,g\n3,a\n3,a\n3,b\n3,b\n", ["test", "anova", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: anova a group with no value", b"v,g\n1,a\n2,a\n,b\n,b\n5,c\n7,c\n", ["test", "anova", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: anova missing group cells and values", b"v,g\n1,a\n,a\n2,\n4,b\n7,b\n9,a\n5,c\n8,c\n", ["test", "anova", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: anova holm", b"v,w,g\n1,5,a\n2,3,a\n4,3,b\n7,1,b\n8,2,b\n9,9,c\n3,4,c\n", ["test", "anova", "--cols", "v,w", "--group", "g", "--correct", "holm", "f.csv"], None, 0),
+    ("test: anova no group flag", b"v,g\n1,a\n2,b\n", ["test", "anova", "--cols", "v", "f.csv"], "stats.test-columns", 2),
+    ("test: anova no columns", b"v,g\n1,a\n2,b\n", ["test", "anova", "--group", "g", "f.csv"], "stats.test-columns", 2),
+    ("test: anova one level", b"v,g\n1,a\n2,a\n", ["test", "anova", "--cols", "v", "--group", "g", "f.csv"], "stats.group-levels", 2),
+    ("test: anova group column empty", b"v,g\n1,\n2,\n", ["test", "anova", "--cols", "v", "--group", "g", "f.csv"], "stats.group-levels", 2),
+    ("test: anova no such group column", b"v,g\n1,a\n2,b\n", ["test", "anova", "--cols", "v", "--group", "z", "f.csv"], "stats.no-such-column", 2),
+    ("test: anova ambiguous group column", b"v,g,g\n1,a,a\n2,b,b\n", ["test", "anova", "--cols", "v", "--group", "g", "f.csv"], "stats.ambiguous-column", 2),
+    ("test: anova no such column", b"v,g\n1,a\n2,b\n", ["test", "anova", "--cols", "z", "--group", "g", "f.csv"], "stats.no-such-column", 2),
+    ("test: anova text column", b"v,w,g\n1,x,a\n2,y,b\n", ["test", "anova", "--cols", "w", "--group", "g", "f.csv"], "stats.non-numeric", 2),
+    ("test: anova text in the last group", b"v,g\n1,a\n2,a\n3,b\n4,b\nx,c\n3,c\n", ["test", "anova", "--cols", "v", "--group", "g", "f.csv"], "stats.non-numeric", 2),
+    ("test: anova column with no number", b"v,g\n,a\n,b\n,c\n", ["test", "anova", "--cols", "v", "--group", "g", "f.csv"], "stats.non-numeric", 2),
+    ("test: anova variance unknown", b"v,g\n1,a\n2,b\n", ["test", "anova", "--cols", "v", "--group", "g", "--variance", "equal", "f.csv"], "args.bad-value", 2),
+    ("test: anova groups limit", b"v,g\n1,a\n2,b\n3,c\n", ["test", "anova", "--cols", "v", "--group", "g", "--max-groups", "2", "f.csv"], "limit.too-many-groups", 8),
+    ("test: anova groups times columns limit", b"g," + b",".join(b"c%d" % i for i in range(100)) + b"\n" + b"".join(b"g%d," % i + b",".join(b"%d" % (i + j) for j in range(100)) + b"\n" for i in range(90)), ["test", "anova", "--cols", ",".join("c%d" % i for i in range(100)), "--group", "g", "--max-groups", "100", "f.csv"], "limit.too-many-groups", 8),
+    ("test: anova groups times columns exactly at the limit", b"g," + b",".join(b"c%d" % i for i in range(128)) + b"\n" + b"".join(b"g%d," % i + b",".join(b"%d" % (i * j % 17 + j) for j in range(128)) + b"\n" for i in range(64)) * 2, ["test", "anova", "--cols", ",".join("c%d" % i for i in range(128)), "--group", "g", "--max-groups", "64", "f.csv"], None, 0),
+    ("test: anova rows limit", b"v,g\n1,a\n2,b\n3,b\n", ["test", "anova", "--cols", "v", "--group", "g", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
+    ("test: anova ragged", b"v,g\n1,a\n2\n", ["test", "anova", "--cols", "v", "--group", "g", "f.csv"], "stats.csv-ragged", 8),
+    ("test: anova too many tests for a family", b"a,b,c,g\n1,5,3,u\n2,5,3,v\n", ["test", "anova", "--cols", "a,b,c", "--group", "g", "--correct", "holm", "--max-tests", "2", "f.csv"], "limit.too-many-tests", 8),
     # --correct and --max-tests (docs/test.md section 12)
     ("test: t1 holm", b"a,b,c\n1,5,3\n2,5,3\n4,1,3\n", ["test", "t1", "--cols", "a,b,c", "--correct", "holm", "f.csv"], None, 0),
     ("test: t1 bh with a constant column", b"a,b\n1,3\n2,3\n4,3\n", ["test", "t1", "--cols", "a,b", "--correct", "bh", "f.csv"], None, 0),
@@ -348,7 +377,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 33)
+            k = int(r.next() % 36)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -397,6 +426,12 @@ def main():
                 argv = ["test", "chisq", "--cols", "a,b", "--vs", "a", "--correct", "bh", "--max-tests", "1", "f.csv"]
             elif k == 32:
                 argv = ["test", "prop", "--cols", "b,a", "--success", "1", "--correct", "bonferroni", "f.csv"]
+            elif k == 33:
+                argv = ["test", "anova", "--cols", "a", "--group", "b", "f.csv"]
+            elif k == 34:
+                argv = ["test", "anova", "--cols", "a,b", "--group", "a", "--variance", "pooled", "--max-groups", "3", "f.csv"]
+            elif k == 35:
+                argv = ["test", "anova", "--cols", "b", "--group", "a", "--correct", "holm", "--max-rows", "6", "f.csv"]
             elif k == 27:
                 argv = ["test", "prop", "--cols", "a", "--success", "1", "f.csv"]
             elif k == 28:

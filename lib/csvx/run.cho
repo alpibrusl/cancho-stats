@@ -1,0 +1,292 @@
+edition 5;
+
+module csvx.run;
+
+import std.buffer;
+import std.bytes;
+import std.json;
+import std.map;
+import std.vec;
+import acc.psum;
+import csvx.pick;
+import csvx.rule;
+import csvx.scan;
+import flt;
+import stest.anova;
+import stest.answer5;
+import stest.welch;
+import stest.welchf;
+import toolbox.cli;
+import toolbox.fail;
+import toolbox.place;
+
+// The kinds of test that read one group of the file at a time (moved out of tools/stats/main.cho, which is limited to 2,000 lines): the reading of one group, and the analysis of variance of docs/rank.md section 3.
+
+// One group of the file: the file opened, read for the rows whose group cell is `key`, closed. On a failure the errors say so and the tables are empty.
+pub fn read_group[&h, &g, &p, &f, &r, &sh, &fu, &k](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], table: &static [byte], by: int, key: &k [byte], errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (buffer.Buffer, vec.Vec[int], scan.Cols, vec.Vec[int], scan.Scanned, fail.Errors) {
+    var names = buffer.empty(heap, 1);
+    var ends = vec.empty(heap, 1, 0);
+    var cols = scan.make_cols(heap, 1);
+    var store = vec.empty(heap, 1, 0);
+    var info = scan.Scanned { rows: 0, ncols: 0 };
+    var e = errs;
+    match place.open_operand(fs, root, rel, full) {
+        Opened::Failed(reason) => {
+            e = fail.io_error(heap, e, reason, false, rel);
+        }
+        Opened::Ok(opened) => {
+            var file = opened;
+            borrow mut file as &!handle in {
+                let (n2, ends2, cols2, store2, info2, e2) = scan.read_file(heap, cli.nat(args, parsed, table, "max-line-bytes"), int_of(cli.text(args, parsed, table, "delim")[0]), cli.nat(args, parsed, table, "max-rows"), cli.nat(args, parsed, table, "max-cols"), cli.nat(args, parsed, table, "max-cells"), handle, rel, by, key, false, e);
+                buffer.drop(heap, names);
+                vec.drop(heap, ends);
+                scan.drop_cols(heap, cols);
+                vec.drop(heap, store);
+                names = n2;
+                ends = ends2;
+                cols = cols2;
+                store = store2;
+                info = info2;
+                e = e2;
+            }
+            file_close(file);
+        }
+    }
+    return (names, ends, cols, store, info, e);
+}
+
+// the exact sums of the selected columns of one group into the accumulators: the column of rank si among the selected ones, group i of k, at (si * k + i) * g; the counts into ns at si * k + i; the cells that are numbers and that are not into the totals
+fn fold_group[&s, &c, &x, &a, &n, &tn, &tb, &w](store: &s vec.Vec[int], rows: int, cols: &c scan.Cols, nc: int, sel: &x [int], k: int, i: int, g: int, acc: &!a [int], ns: &!n [int], totnum: &!tn [int], totbad: &!tb [int], wk: &!w [int]) -> [] int {
+    var si = 0;
+    var j = 0;
+    while j < nc {
+        if sel[j] == 1 {
+            let at = (si * k + i) * g;
+            ns[si * k + i] = welch.fill(store, nc, j, rows, acc[at..at + g], wk);
+            totnum[j] = totnum[j] + contents(cols.numeric)[j];
+            totbad[j] = totbad[j] + contents(cols.bad)[j];
+            si = si + 1;
+        }
+        j = j + 1;
+    }
+    return si;
+}
+
+// The analysis of variance of the columns named by --cols over the groups (k >= 2 levels, at most --max-groups) of the column named by --group. Pass 0 finds the levels; then the file is read once for each level, in the order of the
+// bytes of the levels, and only the exact sums of each (group, column) are kept, never the rows of two groups at once.
+pub fn anova_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], table: &static [byte], w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
+    var w = w0;
+    var e = errs;
+    match place.open_operand(fs, root, rel, full) {
+        Opened::Failed(reason) => {
+            e = fail.io_error(heap, e, reason, false, rel);
+        }
+        Opened::Ok(opened) => {
+            var file = opened;
+            borrow mut file as &!handle in {
+                let (groups, by, e1) = scan.discover(heap, handle, rel, cli.text(args, parsed, table, "group"), int_of(cli.text(args, parsed, table, "delim")[0]), cli.nat(args, parsed, table, "max-line-bytes"), cli.nat(args, parsed, table, "max-rows"), cli.nat(args, parsed, table, "max-cols"), cli.nat(args, parsed, table, "max-groups"), e);
+                e = e1;
+                var clean = false;
+                borrow e as &er1 in {
+                    clean = fail.count(er1) == 0;
+                }
+                borrow groups as &gr in {
+                    let k = map.size(gr.m);
+                    if clean && k < 2 {
+                        clean = false;
+                        e = rule.refuse_int(heap, e, "stats.group-levels", "--group names a column that has fewer than two levels", "give --group a column with two or more levels", "levels", k, "missing", gr.nulls);
+                    }
+                    if clean {
+                        let g1 = psum.size(1) + psum.size(2);
+                        var names = buffer.empty(heap, 1);
+                        var ends = vec.empty(heap, 1, 0);
+                        var nc = 0;
+                        var nsel = 0;
+                        var rows_total = gr.nulls;
+                        var acc = box_slice(heap, 1, 0);
+                        var ns = box_slice(heap, 1, 0);
+                        var sel = box_slice(heap, 1, 0);
+                        var totnum = box_slice(heap, 1, 0);
+                        var totbad = box_slice(heap, 1, 0);
+                        let wkb = box_slice(heap, psum.scratch() + 1, 0);
+                        var i = 0;
+                        while i < k && clean {
+                            let key = map.key_at(gr.m, contents(gr.order)[i]);
+                            let (nm, en, cl, st, info, e2) = read_group(heap, args, parsed, fs, root, rel, full, table, by, key, e);
+                            e = e2;
+                            borrow e as &er2 in {
+                                clean = fail.count(er2) == 0;
+                            }
+                            if clean && i == 0 {
+                                nc = info.ncols;
+                                unbox_slice(heap, sel);
+                                sel = box_slice(heap, nc + 1, 0);
+                                unbox_slice(heap, totnum);
+                                totnum = box_slice(heap, nc + 1, 0);
+                                unbox_slice(heap, totbad);
+                                totbad = box_slice(heap, nc + 1, 0);
+                                var stt = 0;
+                                var item = 0;
+                                borrow nm as &nb0 in {
+                                    borrow en as &eb0 in {
+                                        borrow mut sel as &!sw0 in {
+                                            let (s1, i1) = pick.select(buffer.bytes(nb0), eb0, nc, cli.text(args, parsed, table, "cols"), contents(sw0));
+                                            stt = s1;
+                                            item = i1;
+                                            var j = 0;
+                                            while j < nc {
+                                                nsel = nsel + contents(sw0)[j];
+                                                j = j + 1;
+                                            }
+                                        }
+                                    }
+                                }
+                                if stt != 0 {
+                                    clean = false;
+                                    e = rule.refuse_pick(heap, e, stt, bytes.field(cli.text(args, parsed, table, "cols"), ',', item + 1), false);
+                                } else if k * nsel > 8192 {
+                                    clean = false;
+                                    e = rule.refuse_int(heap, e, "limit.too-many-groups", "the groups times the chosen columns are more than 8,192 (each pair keeps exact sums of 4 KB)", "name fewer columns or filter the file to fewer groups", "groups", k, "columns", nsel);
+                                } else {
+                                    unbox_slice(heap, acc);
+                                    acc = box_slice(heap, k * nsel * g1 + 1, 0);
+                                    unbox_slice(heap, ns);
+                                    ns = box_slice(heap, k * nsel + 1, 0);
+                                }
+                                buffer.drop(heap, names);
+                                vec.drop(heap, ends);
+                                names = nm;
+                                ends = en;
+                            } else {
+                                buffer.drop(heap, nm);
+                                vec.drop(heap, en);
+                            }
+                            if clean {
+                                borrow st as &sv in {
+                                    borrow cl as &cv in {
+                                        borrow sel as &sr in {
+                                            borrow mut acc as &!aw in {
+                                                borrow mut ns as &!nw in {
+                                                    borrow mut totnum as &!tnw in {
+                                                        borrow mut totbad as &!tbw in {
+                                                            borrow mut wkb as &!wkw in {
+                                                                fold_group(sv, info.rows, cv, nc, contents(sr), k, i, g1, contents(aw), contents(nw), contents(tnw), contents(tbw), contents(wkw));
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                rows_total = rows_total + info.rows;
+                            }
+                            scan.drop_cols(heap, cl);
+                            vec.drop(heap, st);
+                            i = i + 1;
+                        }
+                        if clean {
+                            var j = 0;
+                            while j < nc && clean {
+                                var numeric = false;
+                                var chosen = false;
+                                borrow sel as &sr2 in {
+                                    borrow totnum as &tn2 in {
+                                        borrow totbad as &tb2 in {
+                                            chosen = contents(sr2)[j] == 1;
+                                            numeric = contents(tn2)[j] > 0 && contents(tb2)[j] == 0;
+                                        }
+                                    }
+                                }
+                                if chosen && !numeric {
+                                    clean = false;
+                                    var from = 0;
+                                    if j > 0 {
+                                        borrow ends as &eb4 in {
+                                            from = vec.get(eb4, j - 1);
+                                        }
+                                    }
+                                    borrow names as &nb2 in {
+                                        borrow ends as &eb2 in {
+                                            e = rule.refuse(heap, e, "stats.non-numeric", "--cols names a column that has no numbers or has a cell that is not a number", "name numeric columns only", "column", buffer.bytes(nb2)[from..vec.get(eb2, j)]);
+                                        }
+                                    }
+                                }
+                                j = j + 1;
+                            }
+                        }
+                        if clean {
+                            let pooled = bytes.equal(cli.text(args, parsed, table, "variance"), "pooled");
+                            let gsb = box_slice(heap, 3 * k + 3, 0);
+                            w = json.put_key(heap, w, "test");
+                            w = json.put_string(heap, w, "anova");
+                            w = json.put_key(heap, w, "group");
+                            w = json.put_string(heap, w, cli.text(args, parsed, table, "group"));
+                            w = json.put_key(heap, w, "levels");
+                            w = json.begin_array(heap, w);
+                            var li = 0;
+                            while li < k {
+                                w = json.put_string(heap, w, map.key_at(gr.m, contents(gr.order)[li]));
+                                li = li + 1;
+                            }
+                            w = json.end_array(heap, w);
+                            w = json.put_key(heap, w, "rows");
+                            w = json.put_int(heap, w, rows_total);
+                            w = json.put_key(heap, w, "variance");
+                            if pooled {
+                                w = json.put_string(heap, w, "pooled");
+                            } else {
+                                w = json.put_string(heap, w, "welch");
+                            }
+                            w = json.put_key(heap, w, "adjustment");
+                            w = json.put_string(heap, w, cli.text(args, parsed, table, "correct"));
+                            w = json.put_key(heap, w, "tests");
+                            w = json.begin_array(heap, w);
+                            var si = 0;
+                            var cj = 0;
+                            while cj < nc {
+                                var chosen2 = false;
+                                borrow sel as &sr3 in {
+                                    chosen2 = contents(sr3)[cj] == 1;
+                                }
+                                if chosen2 {
+                                    borrow acc as &ar in {
+                                        borrow ns as &nr in {
+                                            borrow mut gsb as &!gw in {
+                                                borrow names as &nb3 in {
+                                                  borrow ends as &eb3 in {
+                                                    let an = anova.one_way(heap, contents(ar)[si * k * g1..(si + 1) * k * g1], contents(nr)[si * k..(si + 1) * k], k, g1, contents(gw));
+                                                    var wr = welchf.WelchF { status: 1, f: 0.0, df: 0.0 };
+                                                    if !pooled {
+                                                        wr = welchf.welch_f(heap, contents(ar)[si * k * g1..(si + 1) * k * g1], contents(nr)[si * k..(si + 1) * k], k, g1);
+                                                    }
+                                                    w = answer5.put_anova(heap, w, buffer.bytes(nb3), eb3, cj, an, wr, contents(nr)[si * k..(si + 1) * k], contents(gw), k, pooled);
+                                                  }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    si = si + 1;
+                                }
+                                cj = cj + 1;
+                            }
+                            w = json.end_array(heap, w);
+                            unbox_slice(heap, gsb);
+                        }
+                        buffer.drop(heap, names);
+                        vec.drop(heap, ends);
+                        unbox_slice(heap, acc);
+                        unbox_slice(heap, ns);
+                        unbox_slice(heap, sel);
+                        unbox_slice(heap, totnum);
+                        unbox_slice(heap, totbad);
+                        unbox_slice(heap, wkb);
+                    }
+                }
+                scan.drop_groups(heap, groups);
+            }
+            file_close(file);
+        }
+    }
+    return (w, e);
+}
