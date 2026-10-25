@@ -246,6 +246,8 @@ CASES = [
     ("test: kruskal groups limit", b"v,g\n1,a\n2,b\n3,c\n", ["test", "kruskal", "--cols", "v", "--group", "g", "--max-groups", "2", "f.csv"], "limit.too-many-groups", 8),
     ("test: kruskal wide file, many groups", b"g," + b",".join(b"c%d" % i for i in range(100)) + b"\n" + b"".join(b"g%d," % i + b",".join(b"%d" % (i + j) for j in range(100)) + b"\n" for i in range(90)), ["test", "kruskal", "--cols", ",".join("c%d" % i for i in range(100)), "--group", "g", "--max-groups", "100", "f.csv"], None, 0),
     ("test: kruskal many groups and columns", b"g," + b",".join(b"c%d" % i for i in range(128)) + b"\n" + b"".join(b"g%d," % i + b",".join(b"%d" % (i * j % 17 + j) for j in range(128)) + b"\n" for i in range(64)) * 2, ["test", "kruskal", "--cols", ",".join("c%d" % i for i in range(128)), "--group", "g", "--max-groups", "64", "f.csv"], None, 0),
+    ("test: kruskal held cells exactly at --max-cells", b"v,g\n1,a\n2,a\n3,b\n4,b\n", ["test", "kruskal", "--cols", "v", "--group", "g", "--max-cells", "4", "f.csv"], None, 0),
+    ("test: kruskal held cells above --max-cells", b"v,g\n1,a\n2,a\n3,b\n4,b\n5,c\n6,c\n", ["test", "kruskal", "--cols", "v", "--group", "g", "--max-cells", "4", "f.csv"], "limit.too-many-cells", 8),
     ("test: kruskal rows limit", b"v,g\n1,a\n2,b\n3,b\n", ["test", "kruskal", "--cols", "v", "--group", "g", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
     ("test: kruskal ragged", b"v,g\n1,a\n2\n", ["test", "kruskal", "--cols", "v", "--group", "g", "f.csv"], "stats.csv-ragged", 8),
     ("test: kruskal too many tests for a family", b"a,b,c,g\n1,5,3,u\n2,5,3,v\n", ["test", "kruskal", "--cols", "a,b,c", "--group", "g", "--correct", "holm", "--max-tests", "2", "f.csv"], "limit.too-many-tests", 8),
