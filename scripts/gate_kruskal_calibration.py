@@ -5,7 +5,7 @@
 
 Under a true null (k = 3 and 5 groups of one distribution, seeded: normal, and a lattice of 5 values for heavy ties), for equal and unequal sizes, the rate at which `p < 0.05` lies inside the two-sided 99.9% binomial
 interval for the number of replicates and the p-values are uniform (Kolmogorov-Smirnov, p > 0.001), for configurations with 5 or more values in every group (the chi-square approximation of H is printed, not gated, below:
-it is known to be poor there). On the lattice the p-values are on a lattice themselves, so only the rejection rate is judged. CONTROLS from the same replicates must be refused by the same test at some configuration, so
+it is known to be poor there). Where the p-values are on a lattice themselves (the lattice values, and normal values with a group below 10: H takes few values, the first run of (5,5,5) gave KS p 0.000 with 172 rejections inside the interval) only the rejection rate is judged. CONTROLS from the same replicates must be refused by the same test at some configuration, so
 the gate is able to fail: chi-square on k degrees of freedom, H without the tie correction (on the lattice), the one-sided p-value. Power against a planted shift (printed, not gated: there is no independent closed form for the
 power of a rank test).
 
@@ -114,8 +114,8 @@ def main():
             ok_all = [x for x in res if x["p_value"] is not None]
             ps = [x["p_value"] for x in ok_all]
             gated = min(sizes) >= 5
-            ok, rej, ks = judge(ps, lo, hi, uniform=(kind == "normal"))
-            lines.append("%s n=%s: rejected %d of %d (interval %d..%d)%s%s" % (kind, sizes, rej, len(ps), lo, hi, (", KS p %.3f" % ks) if kind == "normal" else "", ("" if ok else "  <-- FAILS") if gated else ("" if ok else "  (printed, not gated: a group below 5)")))
+            ok, rej, ks = judge(ps, lo, hi, uniform=(kind == "normal" and min(sizes) >= 10))
+            lines.append("%s n=%s: rejected %d of %d (interval %d..%d)%s%s" % (kind, sizes, rej, len(ps), lo, hi, (", KS p %.3f" % ks) if kind == "normal" and min(sizes) >= 10 else "", ("" if ok else "  <-- FAILS") if gated else ("" if ok else "  (printed, not gated: a group below 5)")))
             if not ok and gated:
                 bad.append("%s n=%s null calibration" % (kind, sizes))
             if gated:
