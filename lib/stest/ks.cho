@@ -1,0 +1,141 @@
+edition 5;
+
+module stest.ks;
+
+import std.vec;
+import acc.bigint;
+import acc.central;
+import metrics.rank;
+import stest.exact;
+import stest.mannwhitney;
+import stest.welch;
+import stest.wilcoxon;
+
+// The two-sample Kolmogorov-Smirnov test (docs/rank.md section 2). The m present values of a column come with the index of their group (0 is the group a). Merged in order of their keys (exact), the values of equal key
+// stepped together, the walk (i, j) counts the values of a and of b seen: d = max |i n_b - j n_a|, an integer, and D = d / (n_a n_b) (one division of two exact integers below 2^53, one rounding). The exact p-value, with no two
+// values equal and at most 60 values, is the proportion of the lattice paths that do NOT stay strictly inside the band |i n_b - j n_a| < d, an exact rational rounded once (stest.exact.ks_paths): P(D >= D_obs). Otherwise the
+// asymptotic p = Q_KS(lambda), lambda = sqrt(n_a n_b / N) D, lambda^2 = d^2 / (N n_a n_b) an exact rational whose root is one rounding, Q_KS = special.dist.ks_sf; no Stephens correction. D = 0 has p = 1.
+
+pub struct Ks {
+    na: int,
+    nb: int,
+    status: int,
+    ties: int,
+    d: int,
+    dstat: float,
+    lb: int,
+    lc: int,
+    exact: int,
+    pb: int,
+    pc: int,
+}
+
+// mode: 0 auto, 1 exact (the caller has refused it where it is not possible), 2 asymptotic
+pub fn run[&h, &a, &g](heap: &!h Heap, keys: &a [int], gid: &g [int], m: int, mode: int) -> [heap] Ks {
+    let c = central.cap();
+    let k2 = box_slice(heap, m + 1, 0);
+    let ix = box_slice(heap, m + 1, 0);
+    let tmp = box_slice(heap, m + 1, 0);
+    let fs = box_slice(heap, 8 * welch.slot() + 8, 0);
+    var na = 0;
+    var nb = 0;
+    var status = 0;
+    var ties = 0;
+    var d = 0;
+    var dstat = 0.0;
+    var lb = 0;
+    var lc = 1;
+    var used_exact = 0;
+    var pb = 0;
+    var pc = 1;
+    borrow mut k2 as &!k2w in {
+        borrow mut ix as &!ixw in {
+            borrow mut tmp as &!tmw in {
+                borrow mut fs as &!fw in {
+                    let z = contents(k2w);
+                    let o = contents(ixw);
+                    let f = contents(fw);
+                    var r = 0;
+                    while r < m {
+                        o[r] = r;
+                        if gid[r] == 0 {
+                            na = na + 1;
+                        } else {
+                            nb = nb + 1;
+                        }
+                        r = r + 1;
+                    }
+                    if na == 0 || nb == 0 {
+                        status = 1;
+                    } else {
+                        wilcoxon.sort_idx(keys, z, o, contents(tmw), m);
+                        var i = 0;
+                        var j = 0;
+                        var at = 0;
+                        while at < m {
+                            var end = at + 1;
+                            while end < m && keys[o[end]] == keys[o[at]] {
+                                end = end + 1;
+                            }
+                            if end - at > 1 {
+                                ties = ties + 1;
+                            }
+                            var q = at;
+                            while q < end {
+                                if gid[o[q]] == 0 {
+                                    i = i + 1;
+                                } else {
+                                    j = j + 1;
+                                }
+                                q = q + 1;
+                            }
+                            var dev = i * nb - j * na;
+                            if dev < 0 {
+                                dev = 0 - dev;
+                            }
+                            if dev > d {
+                                d = dev;
+                            }
+                            at = end;
+                        }
+                        dstat = float_of(d) / float_of(na * nb);
+                        // lambda^2 = d^2 / (N n_a n_b)
+                        central.limbs_of(d, f[0..3]);
+                        welch.smul(f, 1, 0, 3, 0, 3);
+                        central.limbs_of(m, f[2 * welch.slot()..2 * welch.slot() + 3]);
+                        central.limbs_of(na * nb, f[3 * welch.slot()..3 * welch.slot() + 3]);
+                        welch.smul(f, 4, 2, 3, 3, 3);
+                        let (b1, c1) = central.sqrt_ratio_bits(heap, f[welch.slot()..welch.slot() + 6], 6, f[4 * welch.slot()..4 * welch.slot() + 6], 6);
+                        lb = b1;
+                        lc = c1;
+                        var use_exact = false;
+                        if mode == 0 {
+                            use_exact = mannwhitney.possible(keys, m);
+                        } else if mode == 1 {
+                            use_exact = true;
+                        }
+                        if use_exact {
+                            used_exact = 1;
+                            if d == 0 {
+                                pb = bits_of(1.0);
+                                pc = 0;
+                            } else {
+                                let (inside, total) = exact.ks_paths(heap, na, nb, d);
+                                central.limbs_of(total - inside, f[5 * welch.slot()..5 * welch.slot() + 3]);
+                                central.limbs_of(total, f[6 * welch.slot()..6 * welch.slot() + 3]);
+                                let (b2, c2) = central.ratio_bits(heap, f[5 * welch.slot()..5 * welch.slot() + 3], 3, f[6 * welch.slot()..6 * welch.slot() + 3], 3, 0, false);
+                                pb = b2;
+                                pc = c2;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    unbox_slice(heap, k2);
+    unbox_slice(heap, ix);
+    unbox_slice(heap, tmp);
+    unbox_slice(heap, fs);
+    return Ks { na: na, nb: nb, status: status, ties: ties, d: d, dstat: dstat, lb: lb, lc: lc, exact: used_exact, pb: pb, pc: pc };
+}

@@ -24,7 +24,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from gate_special import SM64, hx, unhx, nb  # noqa: E402
 
-ARITY = {"lgamma": 1, "erf": 1, "erfc": 1, "gamma_p": 2, "gamma_q": 2, "beta_lo": 3, "beta_up": 3, "norm_cdf": 1, "norm_sf": 1, "qnorm": 1,
+ARITY = {"lgamma": 1, "erf": 1, "erfc": 1, "gamma_p": 2, "gamma_q": 2, "beta_lo": 3, "beta_up": 3, "norm_cdf": 1, "norm_sf": 1, "qnorm": 1, "ks_sf": 1,
          "t_cdf": 2, "t_sf": 2, "chi2_cdf": 2, "chi2_sf": 2, "f_cdf": 3, "f_sf": 3, "binom_cdf": 3, "binom_sf": 3}
 QUANT = {"gamma_quantile": 2, "gamma_quantile_upper": 2, "chi2_quantile": 2, "chi2_quantile_upper": 2, "beta_quantile": 3, "beta_quantile_comp": 3, "beta_quantile_upper": 3,
          "t_quantile": 2, "t_quantile_upper": 2, "f_quantile": 3, "f_quantile_upper": 3, "gamma_iterations": 2, "beta_iterations": 3}
@@ -33,7 +33,7 @@ ARITY.update(QUANT)
 NONNEG = {"gamma_quantile", "gamma_quantile_upper", "chi2_quantile", "chi2_quantile_upper", "f_quantile", "f_quantile_upper"}
 UNIT = {"beta_quantile", "beta_quantile_comp", "beta_quantile_upper"}
 PAIRS = [("gamma_p", "gamma_q"), ("beta_lo", "beta_up"), ("norm_cdf", "norm_sf"), ("t_cdf", "t_sf"), ("chi2_cdf", "chi2_sf"), ("f_cdf", "f_sf"), ("binom_cdf", "binom_sf")]
-PROB = {"gamma_p", "gamma_q", "beta_lo", "beta_up", "norm_cdf", "norm_sf", "t_cdf", "t_sf", "chi2_cdf", "chi2_sf", "f_cdf", "f_sf", "binom_cdf", "binom_sf"}
+PROB = {"gamma_p", "gamma_q", "beta_lo", "beta_up", "norm_cdf", "norm_sf", "ks_sf", "t_cdf", "t_sf", "chi2_cdf", "chi2_sf", "f_cdf", "f_sf", "binom_cdf", "binom_sf"}
 TAGS = {}
 PAIRSTAT = [0.0, 0]
 
@@ -109,6 +109,7 @@ EXPECT = [
     ("beta_lo", (1.0, 1.0, 0.0), "ok"), ("beta_lo", (0.0, 1.0, 0.5), "stats.domain-param"), ("beta_lo", (1.0, 1.0, 1.5), "stats.domain-param"), ("beta_lo", (1.0, 1.0, NAN), "stats.domain-nan"),
     ("beta_up", (2e8, 1.0, 0.5), "stats.domain-range"), ("beta_up", (1.0, -1.0, 0.5), "stats.domain-param"),
     ("norm_cdf", (NAN,), "stats.domain-nan"), ("norm_sf", (INF,), "ok"), ("norm_cdf", (-INF,), "ok"),
+    ("ks_sf", (NAN,), "stats.domain-nan"), ("ks_sf", (INF,), "ok"), ("ks_sf", (-INF,), "ok"), ("ks_sf", (0.0,), "ok"), ("ks_sf", (-1.0,), "ok"), ("ks_sf", (1.0,), "ok"), ("ks_sf", (5e-324,), "ok"),
     ("qnorm", (0.5,), "ok"), ("qnorm", (0.0,), "stats.domain-prob"), ("qnorm", (1.0,), "stats.domain-prob"), ("qnorm", (-0.5,), "stats.domain-prob"), ("qnorm", (NAN,), "stats.domain-nan"),
     ("t_cdf", (1.0, 3.0), "ok"), ("t_cdf", (1.0, 0.0), "stats.domain-param"), ("t_cdf", (1.0, 3e8), "stats.domain-range"), ("t_cdf", (NAN, 1.0), "stats.domain-nan"), ("t_sf", (INF, 3.0), "ok"),
     ("chi2_cdf", (-1.0, 3.0), "stats.domain-param"), ("chi2_sf", (1.0, 3e8), "stats.domain-range"), ("chi2_sf", (NAN, 3.0), "stats.domain-nan"), ("chi2_cdf", (0.0, 3.0), "ok"),

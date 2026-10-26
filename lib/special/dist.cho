@@ -425,3 +425,49 @@ pub fn binom_sf(k: float, n: float, p: float) -> [] (float, int) {
     let (c, s, code) = binom_both(k, n, p);
     return (s, code);
 }
+
+// The upper tail of the Kolmogorov distribution Q(x) = P(K > x) = 2 sum_{j >= 1} (-1)^(j-1) exp(-2 j^2 x^2) (docs/rank.md section 2): for x above 1 the alternating series itself (its terms fall like exp(-2 j^2),
+// the first dominates, nothing cancels); for x up to 1 the dual series by the theta-function identity, P(K <= x) = (sqrt(2 pi) / x) sum_{k >= 1} exp(-(2 k - 1)^2 pi^2 / (8 x^2)), whose terms fall faster as x falls, and Q is its
+// complement (the cdf is below 0.74 there, so the subtraction loses at most a bit). x <= 0 answers 1, a NaN is stats.domain-nan, +inf answers 0.
+pub fn ks_sf(x: float) -> [] (float, int) {
+    if is_nan(x) {
+        return (nan(), rules.domain_nan());
+    }
+    if x <= 0.0 {
+        return (1.0, 0);
+    }
+    if is_inf(x) {
+        return (0.0, 0);
+    }
+    if x < 0.04 {
+        // exp(-pi^2 / (8 x^2)) < 1e-335 here: the distribution function is below the spacing of the doubles at 1, and x^2 may underflow
+        return (1.0, 0);
+    }
+    if x > 1.0 {
+        var sum = 0.0;
+        var sign = 1.0;
+        var j = 1.0;
+        while j <= 12.0 {
+            let term = math.exp(0.0 - 2.0 * j * j * x * x);
+            sum = sum + sign * term;
+            if term < 1.0e-19 * sum {
+                j = 13.0;
+            }
+            sign = 0.0 - sign;
+            j = j + 1.0;
+        }
+        return (2.0 * sum, 0);
+    }
+    var cdf = 0.0;
+    var k = 1.0;
+    while k <= 12.0 {
+        let m = 2.0 * k - 1.0;
+        let term = math.exp(0.0 - m * m * 1.2337005501361697 / (x * x));
+        cdf = cdf + term;
+        if term < 1.0e-19 * cdf {
+            k = 13.0;
+        }
+        k = k + 1.0;
+    }
+    return (1.0 - 2.5066282746310002 / x * cdf, 0);
+}

@@ -79,3 +79,59 @@ pub fn signed_rank_counts[&h](heap: &!h Heap, n: int, w_obs: int) -> [heap] (int
     unbox_slice(heap, g);
     return (le, ge);
 }
+
+// The paths of the two-sample Kolmogorov-Smirnov walk (docs/rank.md section 2): from (0, 0) to (na, nb) by steps of one to the right (a value of the group a) or one up (of the group b), the points (i, j) with
+// |i nb - j na| < d being the ones strictly inside the band D < d / (na nb). Answers (inside, total): the paths that stay inside, and all of them, C(na + nb, na). na + nb is at most 60, so that both fit 63 bits.
+pub fn ks_paths[&h](heap: &!h Heap, na: int, nb: int, d: int) -> [heap] (int, int) {
+    let width = nb + 1;
+    let f = box_slice(heap, (na + 1) * width + 1, 0);
+    let g = box_slice(heap, (na + 1) * width + 1, 0);
+    var inside = 0;
+    var total = 0;
+    borrow mut f as &!fw in {
+        borrow mut g as &!gw in {
+            let a = contents(fw);
+            let b = contents(gw);
+            var i = 0;
+            while i <= na {
+                var j = 0;
+                while j <= nb {
+                    var dev = i * nb - j * na;
+                    if dev < 0 {
+                        dev = 0 - dev;
+                    }
+                    if i == 0 && j == 0 {
+                        b[0] = 1;
+                        if dev < d {
+                            a[0] = 1;
+                        }
+                    } else {
+                        var up = 0;
+                        var left = 0;
+                        var upb = 0;
+                        var leftb = 0;
+                        if i > 0 {
+                            left = a[(i - 1) * width + j];
+                            leftb = b[(i - 1) * width + j];
+                        }
+                        if j > 0 {
+                            up = a[i * width + j - 1];
+                            upb = b[i * width + j - 1];
+                        }
+                        b[i * width + j] = leftb + upb;
+                        if dev < d {
+                            a[i * width + j] = left + up;
+                        }
+                    }
+                    j = j + 1;
+                }
+                i = i + 1;
+            }
+            inside = a[na * width + nb];
+            total = b[na * width + nb];
+        }
+    }
+    unbox_slice(heap, f);
+    unbox_slice(heap, g);
+    return (inside, total);
+}
