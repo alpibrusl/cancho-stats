@@ -51,7 +51,7 @@ M = [
     ("main-vs-required", F, "\"fisher\") && !cli.has(parsed, table, \"vs\") {", "\"fisher\") && false {"),
     ("main-dispatch", F, "\"fisher\") {\n                        let (w2, e2) = fisher_one(", "\"fisherx\") {\n                        let (w2, e2) = fisher_one("),
     ("main-kind-accepted", F, "&& !bytes.equal(cli.operand(args, parsed, 1), \"fisher\") {", "&& false {"),
-    ("main-header", F, "w = json.put_string(heap, w, \"fisher\");\n        if fit {", "w = json.put_string(heap, w, \"chisq\");\n        if fit {"),
+    ("main-header", F, "w = json.put_string(heap, w, \"fisher\");\n        w = json.put_key(heap, w, \"vs\");", "w = json.put_string(heap, w, \"chisq\");\n        w = json.put_key(heap, w, \"vs\");"),
 ]
 
 EXPLAINED = {

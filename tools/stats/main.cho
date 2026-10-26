@@ -1344,7 +1344,6 @@ fn fisher_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parse
     let table = flag_table();
     var w = w0;
     var e = errs;
-    let fit = false;
     let list = cli.text(args, parsed, table, "cols");
     let ncols_named = bytes.count_byte(list, ',') + 1;
     var ok = no_empty_item(list);
@@ -1352,27 +1351,12 @@ fn fisher_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parse
     if !ok {
         e = rule.refuse(heap, e, "args.bad-value", "--cols has an empty item", "--cols name1,name2: no empty item, no leading or trailing comma", "flag", "--cols");
     }
-    let props = box_slice(heap, 1, 0);
-    let kprops = 0;
     let opened_header = ok;
     if ok {
         w = json.put_key(heap, w, "test");
         w = json.put_string(heap, w, "fisher");
-        if fit {
-            w = json.put_key(heap, w, "expected");
-            w = json.begin_array(heap, w);
-            borrow props as &pr0 in {
-                var k = 0;
-                while k < kprops {
-                    w = json.put_float(heap, w, float_of(contents(pr0)[k]) / 1000000000.0);
-                    k = k + 1;
-                }
-            }
-            w = json.end_array(heap, w);
-        } else {
-            w = json.put_key(heap, w, "vs");
-            w = json.put_string(heap, w, cli.text(args, parsed, table, "vs"));
-        }
+        w = json.put_key(heap, w, "vs");
+        w = json.put_string(heap, w, cli.text(args, parsed, table, "vs"));
         w = put_adjustment(heap, w, cli.text(args, parsed, table, "correct"));
         w = json.put_key(heap, w, "tests");
         w = json.begin_array(heap, w);
@@ -1387,14 +1371,14 @@ fn fisher_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parse
             Opened::Ok(opened) => {
                 var file = opened;
                 borrow mut file as &!handle in {
-                    let (x, e2) = cross.cross(heap, handle, rel, name, cli.text(args, parsed, table, "vs"), !fit, false, int_of(cli.text(args, parsed, table, "delim")[0]), cli.nat(args, parsed, table, "max-line-bytes"), cli.nat(args, parsed, table, "max-rows"), cli.nat(args, parsed, table, "max-cols"), cli.nat(args, parsed, table, "max-groups"), e);
+                    let (x, e2) = cross.cross(heap, handle, rel, name, cli.text(args, parsed, table, "vs"), true, false, int_of(cli.text(args, parsed, table, "delim")[0]), cli.nat(args, parsed, table, "max-line-bytes"), cli.nat(args, parsed, table, "max-rows"), cli.nat(args, parsed, table, "max-cols"), cli.nat(args, parsed, table, "max-groups"), e);
                     e = e2;
                     var clean = false;
                     borrow e as &er1 in {
                         clean = fail.count(er1) == 0;
                     }
                     if clean {
-                        let dn = cross.dense(heap, x, !fit);
+                        let dn = cross.dense(heap, x, true);
                         borrow dn as &dr in {
                             if dr.rows_ == 0 {
                                 w = answer10.put_fisher(heap, w, name, cli.text(args, parsed, table, "vs"), dr, fisher.run(heap, 0, 0, 0, 0), dr.total);
@@ -1427,7 +1411,6 @@ fn fisher_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parse
     if opened_header {
         w = json.end_array(heap, w);
     }
-    unbox_slice(heap, props);
     return (w, e);
 }
 
