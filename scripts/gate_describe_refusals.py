@@ -280,6 +280,35 @@ CASES = [
     ("test: mannwhitney rows limit", b"v,g\n1,a\n2,b\n3,b\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
     ("test: mannwhitney cells limit", b"v,g\n1,a\n2,a\n3,b\n4,b\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "--max-cells", "3", "f.csv"], "limit.too-many-cells", 8),
     ("test: mannwhitney ragged", b"v,g\n1,a\n2\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "f.csv"], "stats.csv-ragged", 8),
+    # test wilcoxon (docs/rank.md section 2)
+    ("test: wilcoxon pairs", b"a,b\n1.5,1.0\n2.1,2.5\n3.7,2.0\n0.3,1.1\n5.5,3.0\n", ["test", "wilcoxon", "--pairs", "a:b", "f.csv"], None, 0),
+    ("test: wilcoxon one sample against mu0", b"a,b\n1.5,1\n2.1,2\n3.7,2\n0.3,1\n", ["test", "wilcoxon", "--cols", "a,b", "--mu0", "2", "f.csv"], None, 0),
+    ("test: wilcoxon pratt", b"a,b\n1,1\n2,2\n3,2\n4,3\n5,5\n5,6\n", ["test", "wilcoxon", "--pairs", "a:b", "--zeros", "pratt", "f.csv"], None, 0),
+    ("test: wilcoxon zsplit", b"a,b\n1,1\n2,2\n3,2\n4,3\n5,5\n5,6\n", ["test", "wilcoxon", "--pairs", "a:b", "--zeros", "zsplit", "--continuity", "none", "f.csv"], None, 0),
+    ("test: wilcoxon every difference zero", b"a,b\n1,1\n2,2\n", ["test", "wilcoxon", "--pairs", "a:b", "f.csv"], None, 0),
+    ("test: wilcoxon every difference zero, zsplit", b"a,b\n1,1\n2,2\n", ["test", "wilcoxon", "--pairs", "a:b", "--zeros", "zsplit", "f.csv"], None, 0),
+    ("test: wilcoxon no complete row", b"a,b\n1,\n,2\n", ["test", "wilcoxon", "--pairs", "a:b", "f.csv"], None, 0),
+    ("test: wilcoxon one pair", b"a,b\n1,2\n", ["test", "wilcoxon", "--pairs", "a:b", "f.csv"], None, 0),
+    ("test: wilcoxon a difference beyond the double", b"a,b\n1e308,-1e308\n1,2\n", ["test", "wilcoxon", "--pairs", "a:b", "f.csv"], None, 0),
+    ("test: wilcoxon exact yes", b"a,b\n1.5,1.0\n2.1,2.5\n3.7,2.0\n0.3,1.1\n5.5,3.0\n", ["test", "wilcoxon", "--pairs", "a:b", "--exact", "yes", "f.csv"], None, 0),
+    ("test: wilcoxon exact no", b"a,b\n1.5,1.0\n2.1,2.5\n3.7,2.0\n0.3,1.1\n5.5,3.0\n", ["test", "wilcoxon", "--pairs", "a:b", "--exact", "no", "f.csv"], None, 0),
+    ("test: wilcoxon holm", b"a,b,c\n1.5,1.0,3\n2.1,2.5,1\n3.7,2.0,2\n0.3,1.1,0.5\n", ["test", "wilcoxon", "--pairs", "a:b,b:c", "--correct", "holm", "f.csv"], None, 0),
+    ("test: wilcoxon exact yes with ties", b"a,b\n1,0\n2,0\n3,1\n", ["test", "wilcoxon", "--pairs", "a:b", "--exact", "yes", "f.csv"], "stats.exact-unavailable", 2),
+    ("test: wilcoxon exact yes with a zero ranked", b"a,b\n1,1\n2,0.5\n3.5,1\n", ["test", "wilcoxon", "--pairs", "a:b", "--exact", "yes", "--zeros", "pratt", "f.csv"], "stats.exact-unavailable", 2),
+    ("test: wilcoxon exact yes with a zero dropped", b"a,b\n1,1\n2,0.5\n3.5,1\n", ["test", "wilcoxon", "--pairs", "a:b", "--exact", "yes", "f.csv"], None, 0),
+    ("test: wilcoxon exact yes, 51 differences", b"a,b\n" + b"".join(b"%d,0\n" % (i + 1) for i in range(51)), ["test", "wilcoxon", "--pairs", "a:b", "--exact", "yes", "f.csv"], "stats.exact-unavailable", 2),
+    ("test: wilcoxon exact yes, 50 differences", b"a,b\n" + b"".join(b"%d,0\n" % (i + 1) for i in range(50)), ["test", "wilcoxon", "--pairs", "a:b", "--exact", "yes", "f.csv"], None, 0),
+    ("test: wilcoxon zeros unknown", b"a,b\n1,2\n", ["test", "wilcoxon", "--pairs", "a:b", "--zeros", "drop", "f.csv"], "args.bad-value", 2),
+    ("test: wilcoxon exact unknown", b"a,b\n1,2\n", ["test", "wilcoxon", "--pairs", "a:b", "--exact", "maybe", "f.csv"], "args.bad-value", 2),
+    ("test: wilcoxon mu0 not a number", b"a,b\n1,2\n", ["test", "wilcoxon", "--cols", "a", "--mu0", "x", "f.csv"], "args.bad-value", 2),
+    ("test: wilcoxon neither pairs nor cols", b"a,b\n1,2\n", ["test", "wilcoxon", "f.csv"], "stats.test-columns", 2),
+    ("test: wilcoxon both pairs and cols", b"a,b\n1,2\n", ["test", "wilcoxon", "--pairs", "a:b", "--cols", "a", "f.csv"], "stats.test-columns", 2),
+    ("test: wilcoxon no such column", b"a,b\n1,2\n", ["test", "wilcoxon", "--pairs", "a:z", "f.csv"], "stats.no-such-column", 2),
+    ("test: wilcoxon pair without a colon", b"a,b\n1,2\n", ["test", "wilcoxon", "--pairs", "ab", "f.csv"], "args.bad-value", 2),
+    ("test: wilcoxon text column", b"a,b\n1,x\n2,y\n", ["test", "wilcoxon", "--pairs", "a:b", "f.csv"], "stats.non-numeric", 2),
+    ("test: wilcoxon rows limit", b"a,b\n1,2\n3,4\n5,6\n", ["test", "wilcoxon", "--pairs", "a:b", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
+    ("test: wilcoxon pairs limit", b"a,b\n1,2\n3,4\n", ["test", "wilcoxon", "--pairs", "a:b,b:a", "--max-pairs", "1", "f.csv"], "limit.too-many-pairs", 8),
+    ("test: wilcoxon ragged", b"a,b\n1,2\n3\n", ["test", "wilcoxon", "--pairs", "a:b", "f.csv"], "stats.csv-ragged", 8),
     # --correct and --max-tests (docs/test.md section 12)
     ("test: t1 holm", b"a,b,c\n1,5,3\n2,5,3\n4,1,3\n", ["test", "t1", "--cols", "a,b,c", "--correct", "holm", "f.csv"], None, 0),
     ("test: t1 bh with a constant column", b"a,b\n1,3\n2,3\n4,3\n", ["test", "t1", "--cols", "a,b", "--correct", "bh", "f.csv"], None, 0),
@@ -434,7 +463,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 41)
+            k = int(r.next() % 44)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -499,6 +528,12 @@ def main():
                 argv = ["test", "mannwhitney", "--cols", "b", "--group", "a", "--exact", "yes", "--max-groups", "3", "f.csv"]
             elif k == 40:
                 argv = ["test", "mannwhitney", "--cols", "a,b", "--group", "b", "--exact", "no", "--continuity", "none", "--correct", "bh", "f.csv"]
+            elif k == 41:
+                argv = ["test", "wilcoxon", "--pairs", "a:b", "f.csv"]
+            elif k == 42:
+                argv = ["test", "wilcoxon", "--cols", "a,b", "--mu0", "1", "--zeros", "zsplit", "--exact", "yes", "f.csv"]
+            elif k == 43:
+                argv = ["test", "wilcoxon", "--pairs", "b:a", "--zeros", "pratt", "--exact", "no", "--continuity", "none", "--correct", "bh", "--max-rows", "6", "f.csv"]
             elif k == 27:
                 argv = ["test", "prop", "--cols", "a", "--success", "1", "f.csv"]
             elif k == 28:

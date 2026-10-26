@@ -1,0 +1,165 @@
+edition 5;
+
+module stest.answer8;
+
+import std.json;
+import std.vec;
+import flt;
+import special.dist;
+import stest.answer;
+import stest.wilcoxon;
+
+// One test of the answer for the kind wilcoxon (docs/rank.md section 2): the signed-rank test of the differences of the columns `col` and `col2` (a pair), or of `col` against mu0 (col2 < 0). `statistic` is W+, the sum of the
+// ranks of the positive differences (`w` has both sums), `z` the normal score or null, `p_method` is "exact" or "normal" (tie-corrected, `continuity` printed), `effect_size` the matched-pairs rank-biserial correlation
+// (W+ - W-) / (W+ + W-). `n` counts the rows used, the nonzero differences and the zeros, and `zeros` names the method for them.
+fn float_of_bits(bits: int) -> [] float {
+    var key = bits;
+    if bits < 0 {
+        key = bits ^ 0x7fffffffffffffff;
+    }
+    return flt.float_of_key(key);
+}
+
+pub fn run_test[&h, &k](heap: &!h Heap, store: &k vec.Vec[int], ncols: int, col: int, col2: int, rows: int, mu0: float, zmode: int, mode: int, cont: int) -> [heap] wilcoxon.Wilcoxon {
+    return wilcoxon.run(heap, store, ncols, col, col2, rows, mu0, zmode, mode, cont);
+}
+
+// whether the exact p-value is available for the test (or the test has no p-value to be exact about)
+pub fn exact_ok[&h, &k](heap: &!h Heap, store: &k vec.Vec[int], ncols: int, col: int, col2: int, rows: int, mu0: float, zmode: int, cont: int) -> [heap] bool {
+    let r = wilcoxon.run(heap, store, ncols, col, col2, rows, mu0, zmode, 0, cont);
+    return r.status != 0 || r.exact == 1;
+}
+
+pub fn put_wilcoxon[&h, &n, &en, &k](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], store: &k vec.Vec[int], ncols: int, col: int, col2: int, rows: int, mu0: float, zmode: int, mode: int, cont: int) -> [heap] json.Writer {
+    var w = w0;
+    let r = wilcoxon.run(heap, store, ncols, col, col2, rows, mu0, zmode, mode, cont);
+    w = json.begin_object(heap, w);
+    if col2 < 0 {
+        w = json.put_key(heap, w, "column");
+        w = answer.put_name(heap, w, names, ends, col);
+    } else {
+        w = json.put_key(heap, w, "pair");
+        w = json.begin_array(heap, w);
+        w = answer.put_name(heap, w, names, ends, col);
+        w = answer.put_name(heap, w, names, ends, col2);
+        w = json.end_array(heap, w);
+    }
+    var reason = "";
+    var have_z = false;
+    var have_p = false;
+    var p = 0.0;
+    var method = "normal";
+    if r.status == 1 {
+        reason = "too-few-rows";
+    } else if r.status == 2 {
+        reason = "variance-zero";
+    } else if r.status == 3 {
+        reason = "difference-beyond-double";
+    } else if r.zc != 0 {
+        reason = "statistic-beyond-double";
+    } else {
+        have_z = true;
+    }
+    if r.status == 0 || r.status == 2 {
+        if r.exact == 1 {
+            method = "exact";
+            if r.pc == 0 {
+                have_p = true;
+                p = float_of_bits(r.pb);
+            } else {
+                reason = "p-not-computed";
+            }
+        } else if have_z {
+            var az = float_of_bits(r.zb);
+            if az < 0.0 {
+                az = 0.0 - az;
+            }
+            let (sf, code) = dist.norm_sf(az);
+            if code == 0 {
+                have_p = true;
+                p = 2.0 * sf;
+                if p > 1.0 {
+                    p = 1.0;
+                }
+            } else {
+                reason = "p-not-computed";
+            }
+        }
+    }
+    let answered = r.status == 0 || r.status == 2;
+    w = json.put_key(heap, w, "statistic");
+    if answered {
+        w = json.put_float(heap, w, float_of(r.dp) / 2.0);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "w");
+    if answered {
+        w = json.begin_object(heap, w);
+        w = json.put_key(heap, w, "plus");
+        w = json.put_float(heap, w, float_of(r.dp) / 2.0);
+        w = json.put_key(heap, w, "minus");
+        w = json.put_float(heap, w, float_of(r.dm) / 2.0);
+        w = json.end_object(heap, w);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "z");
+    if have_z {
+        w = json.put_float(heap, w, float_of_bits(r.zb));
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_value");
+    if have_p {
+        w = json.put_float(heap, w, p);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_method");
+    if have_p {
+        w = json.put_string(heap, w, method);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "continuity");
+    w = json.put_bool(heap, w, cont == 1);
+    w = json.put_key(heap, w, "effect_size");
+    if answered && r.dp + r.dm > 0 {
+        w = json.begin_object(heap, w);
+        w = json.put_key(heap, w, "name");
+        w = json.put_string(heap, w, "rank_biserial");
+        w = json.put_key(heap, w, "value");
+        w = json.put_float(heap, w, r.rb);
+        w = json.end_object(heap, w);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "n");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "used");
+    w = json.put_int(heap, w, r.n);
+    w = json.put_key(heap, w, "nonzero");
+    w = json.put_int(heap, w, r.nz);
+    w = json.put_key(heap, w, "zeros");
+    w = json.put_int(heap, w, r.zeros);
+    w = json.end_object(heap, w);
+    w = json.put_key(heap, w, "ties");
+    w = json.put_int(heap, w, r.ties);
+    w = json.put_key(heap, w, "zero_method");
+    if zmode == 0 {
+        w = json.put_string(heap, w, "wilcox");
+    } else if zmode == 1 {
+        w = json.put_string(heap, w, "pratt");
+    } else {
+        w = json.put_string(heap, w, "zsplit");
+    }
+    w = json.put_key(heap, w, "method");
+    w = json.put_string(heap, w, "wilcoxon");
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}
