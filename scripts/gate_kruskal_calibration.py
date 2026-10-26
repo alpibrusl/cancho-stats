@@ -3,10 +3,10 @@
 
     python3 scripts/gate_kruskal_calibration.py [--bin build/stats] [--replicates 4000] [--seed 1] [--workers 8]
 
-Under a true null (k = 3 and 5 groups of one distribution, seeded: normal, and a lattice of 5 values for heavy ties), for equal and unequal sizes, the rate at which `p < 0.05` lies inside the two-sided 99.9% binomial
+Under a true null (k = 3 and 5 groups of one distribution, seeded: normal, and a lattice of 5 values and a binary one for heavy ties), for equal and unequal sizes, the rate at which `p < 0.05` lies inside the two-sided 99.9% binomial
 interval for the number of replicates and the p-values are uniform (Kolmogorov-Smirnov, p > 0.001), for configurations with 5 or more values in every group (the chi-square approximation of H is printed, not gated, below:
 it is known to be poor there). Where the p-values are on a lattice themselves (the lattice values, and normal values with a group below 10: H takes few values, the first run of (5,5,5) gave KS p 0.000 with 172 rejections inside the interval) only the rejection rate is judged. CONTROLS from the same replicates must be refused by the same test at some configuration, so
-the gate is able to fail: chi-square on k degrees of freedom, H without the tie correction (on the lattice), the one-sided p-value. Power against a planted shift (printed, not gated: there is no independent closed form for the
+the gate is able to fail: chi-square on k degrees of freedom, H without the tie correction (on the lattices; the binary one is where it matters most, a tenth of the variation of a 5-value lattice: 2,000 replicates on the 5-value lattice did not refuse it, CI run of the first push), the one-sided p-value. Power against a planted shift (printed, not gated: there is no independent closed form for the
 power of a rank test).
 
 Exit 0: every test passes and every control is refused. Exit 1: a test fails. Exit 2: the harness failed.
@@ -37,6 +37,8 @@ CONFIGS = [
     ((20, 20, 20), "lattice"),
     ((10, 30, 50), "lattice"),
     ((8, 8, 8, 8, 8), "lattice"),
+    ((20, 20, 20), "binary"),
+    ((12, 24, 36), "binary"),
 ]
 
 
@@ -108,7 +110,8 @@ def main():
             if kind == "normal":
                 jobs = [[[normal(r) for _ in range(n)] for n in sizes] for _ in range(reps)]
             else:
-                jobs = [[[float(int(r.next() % 5)) for _ in range(n)] for n in sizes] for _ in range(reps)]
+                top = 5 if kind == "lattice" else 2
+                jobs = [[[float(int(r.next() % top)) for _ in range(n)] for n in sizes] for _ in range(reps)]
             res = run_many(a.bin, jobs, a.workers)
             k = len(sizes)
             ok_all = [x for x in res if x["p_value"] is not None]
@@ -126,7 +129,7 @@ def main():
                 okn, _, _ = judge([p / 2.0 for p in ps], lo, hi, uniform=(kind == "normal"))
                 if not okn:
                     refused["one-sided"] = True
-                if kind == "lattice":
+                if kind != "normal":
                     h0 = [h * tie_term(g) for h, g in zip(hs, [jobs[i] for i, x in enumerate(res) if x["p_value"] is not None])]
                     oku, _, _ = judge([float(ss.chi2.sf(h, k - 1)) for h in h0], lo, hi, uniform=False)
                     if not oku:
