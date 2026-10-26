@@ -28,7 +28,7 @@ pub struct Kruskal {
 
 // the counts into ns and the doubled rank sums into ds (both `groups` ints, zero) from the m keys and their group indices; the tie groups (more than one value) add t^3 into region 6 of t as a big integer;
 // answers (the number of tie groups, the sum of their sizes)
-fn gather[&h, &a, &g, &d, &n, &t, &f](heap: &!h Heap, keys: &a [int], gid: &g [int], m: int, ds: &!d [int], ns: &!n [int], t: &!t [int], f: &!f [int]) -> [heap] (int, int) {
+pub fn gather[&h, &a, &g, &d, &n, &t, &f](heap: &!h Heap, keys: &a [int], gid: &g [int], m: int, ds: &!d [int], ns: &!n [int], t: &!t [int], f: &!f [int]) -> [heap] (int, int) {
     let c = central.cap();
     let sorted = box_slice(heap, m + 1, 0);
     let scratch = box_slice(heap, m + 1, 0);

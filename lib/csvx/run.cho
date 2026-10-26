@@ -14,6 +14,8 @@ import csvx.scan;
 import flt;
 import metrics.rank;
 import stest.kruskal;
+import stest.mannwhitney;
+import stest.answer7;
 import stest.answer6;
 import stest.anova;
 import stest.answer5;
@@ -143,7 +145,83 @@ fn put_kruskal_tests[&h, &n, &en, &x, &a, &b](heap: &!h Heap, w0: json.Writer, n
     return w;
 }
 
-// The analysis of variance (kind 0) or the Kruskal-Wallis test (kind 1) of the columns named by --cols over the groups (k >= 2 levels, at most --max-groups) of the column named by --group. Pass 0 finds the levels; then the file is read once for each level, in the order of the
+// the tests of kind mannwhitney for the selected columns (the group index 0 is the group a); the exact mode and the continuity correction as the flags say
+fn put_mw_tests[&h, &n, &en, &x, &a, &b, &t1, &t2](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], sel: &x [int], nc: int, nsel: int, gk: &a vec.Vec[int], gi: &b vec.Vec[int], total: int, exact_text: &t1 [byte], cont_text: &t2 [byte]) -> [heap] json.Writer {
+    var w = w0;
+    let pk = box_slice(heap, total + 1, 0);
+    let pg = box_slice(heap, total + 1, 0);
+    var mode = 0;
+    if bytes.equal(exact_text, "yes") {
+        mode = 1;
+    } else if bytes.equal(exact_text, "no") {
+        mode = 2;
+    }
+    var cont = 1;
+    if bytes.equal(cont_text, "none") {
+        cont = 0;
+    }
+    var si = 0;
+    var cj = 0;
+    while cj < nc {
+        if sel[cj] == 1 {
+            borrow mut pk as &!pkw in {
+                borrow mut pg as &!pgw in {
+                    var m = 0;
+                    var r = 0;
+                    while r < total {
+                        let key = vec.get(gk, r * nsel + si);
+                        if key != rank.min_int() {
+                            contents(pkw)[m] = key;
+                            contents(pgw)[m] = vec.get(gi, r);
+                            m = m + 1;
+                        }
+                        r = r + 1;
+                    }
+                    let mr = mannwhitney.run(heap, contents(pkw), contents(pgw), m, mode, cont);
+                    w = answer7.put_mannwhitney(heap, w, names, ends, cj, mr, cont == 1);
+                }
+            }
+            si = si + 1;
+        }
+        cj = cj + 1;
+    }
+    unbox_slice(heap, pk);
+    unbox_slice(heap, pg);
+    return w;
+}
+
+// the first selected column (its index in the file) for which the exact p-value is not available, or -1
+fn first_without_exact[&h, &x, &a](heap: &!h Heap, sel: &x [int], nc: int, nsel: int, gk: &a vec.Vec[int], total: int) -> [heap] int {
+    let pk = box_slice(heap, total + 1, 0);
+    var found = 0 - 1;
+    var si = 0;
+    var cj = 0;
+    while cj < nc && found < 0 {
+        if sel[cj] == 1 {
+            borrow mut pk as &!pkw in {
+                var m = 0;
+                var r = 0;
+                while r < total {
+                    let key = vec.get(gk, r * nsel + si);
+                    if key != rank.min_int() {
+                        contents(pkw)[m] = key;
+                        m = m + 1;
+                    }
+                    r = r + 1;
+                }
+                if !mannwhitney.possible(contents(pkw), m) {
+                    found = cj;
+                }
+            }
+            si = si + 1;
+        }
+        cj = cj + 1;
+    }
+    unbox_slice(heap, pk);
+    return found;
+}
+
+// The analysis of variance (kind 0), the Kruskal-Wallis test (kind 1) or the Mann-Whitney test (kind 2) of the columns named by --cols over the groups (k >= 2 levels, at most --max-groups) of the column named by --group. Pass 0 finds the levels; then the file is read once for each level, in the order of the
 // bytes of the levels, and only the exact sums of each (group, column) are kept, never the rows of two groups at once.
 pub fn groups_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], table: &static [byte], kind: int, w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
     var w = w0;
@@ -166,6 +244,10 @@ pub fn groups_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, p
                     if clean && k < 2 {
                         clean = false;
                         e = rule.refuse_int(heap, e, "stats.group-levels", "--group names a column that has fewer than two levels", "give --group a column with two or more levels", "levels", k, "missing", gr.nulls);
+                    }
+                    if clean && kind == 2 && k != 2 {
+                        clean = false;
+                        e = rule.refuse_int(heap, e, "stats.group-levels", "--group names a column that does not have exactly two levels", "give --group a column with two levels, or filter the file to two of them", "levels", k, "missing", gr.nulls);
                     }
                     if clean {
                         let g1 = psum.size(1) + psum.size(2);
@@ -234,7 +316,7 @@ pub fn groups_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, p
                                 buffer.drop(heap, nm);
                                 vec.drop(heap, en);
                             }
-                            if clean && kind == 1 {
+                            if clean && kind >= 1 {
                                 borrow st as &sv in {
                                     borrow sel as &sr in {
                                         let (gk2, gi2) = collect_group(heap, sv, info.rows, nc, contents(sr), i, gkeys, gids);
@@ -320,6 +402,28 @@ pub fn groups_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, p
                                 j = j + 1;
                             }
                         }
+                        if clean && kind == 2 && bytes.equal(cli.text(args, parsed, table, "exact"), "yes") {
+                            var bad_col = 0 - 1;
+                            borrow sel as &sr6 in {
+                                borrow gkeys as &gkr3 in {
+                                    bad_col = first_without_exact(heap, contents(sr6), nc, nsel, gkr3, vec.size(gkr3) / nsel);
+                                }
+                            }
+                            if bad_col >= 0 {
+                                clean = false;
+                                var from = 0;
+                                if bad_col > 0 {
+                                    borrow ends as &eb7 in {
+                                        from = vec.get(eb7, bad_col - 1);
+                                    }
+                                }
+                                borrow names as &nb6 in {
+                                    borrow ends as &eb8 in {
+                                        e = rule.refuse(heap, e, "stats.exact-unavailable", "--exact yes, but the exact p-value is available only without ties and for at most 60 values", "use --exact auto, or --exact no for the normal approximation", "column", buffer.bytes(nb6)[from..vec.get(eb8, bad_col)]);
+                                    }
+                                }
+                            }
+                        }
                         if clean {
                             let pooled = bytes.equal(cli.text(args, parsed, table, "variance"), "pooled");
                             let gsb = box_slice(heap, 3 * k + 3, 0);
@@ -327,7 +431,11 @@ pub fn groups_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, p
                             if kind == 0 {
                                 w = json.put_string(heap, w, "anova");
                             } else {
+                                if kind == 1 {
                                 w = json.put_string(heap, w, "kruskal");
+                                } else {
+                                w = json.put_string(heap, w, "mannwhitney");
+                                }
                             }
                             w = json.put_key(heap, w, "group");
                             w = json.put_string(heap, w, cli.text(args, parsed, table, "group"));
@@ -353,6 +461,19 @@ pub fn groups_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, p
                             w = json.put_string(heap, w, cli.text(args, parsed, table, "correct"));
                             w = json.put_key(heap, w, "tests");
                             w = json.begin_array(heap, w);
+                            if kind == 2 {
+                                borrow sel as &sr5 in {
+                                    borrow names as &nb5 in {
+                                        borrow ends as &eb6 in {
+                                            borrow gkeys as &gkr2 in {
+                                                borrow gids as &gir2 in {
+                                                    w = put_mw_tests(heap, w, buffer.bytes(nb5), eb6, contents(sr5), nc, nsel, gkr2, gir2, vec.size(gir2), cli.text(args, parsed, table, "exact"), cli.text(args, parsed, table, "continuity"));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             if kind == 1 {
                                 borrow sel as &sr4 in {
                                     borrow names as &nb4 in {
