@@ -12,6 +12,9 @@ import csvx.pick;
 import csvx.rule;
 import csvx.scan;
 import flt;
+import metrics.rank;
+import stest.kruskal;
+import stest.answer6;
 import stest.anova;
 import stest.answer5;
 import stest.welch;
@@ -72,9 +75,77 @@ fn fold_group[&s, &c, &x, &a, &n, &tn, &tb, &w](store: &s vec.Vec[int], rows: in
     return si;
 }
 
-// The analysis of variance of the columns named by --cols over the groups (k >= 2 levels, at most --max-groups) of the column named by --group. Pass 0 finds the levels; then the file is read once for each level, in the order of the
+// the cells of the selected columns of one group, row by row (nsel keys for each row), and the group's index for each row, appended to the stores of all the groups
+fn collect_group[&h, &s, &x](heap: &!h Heap, store: &s vec.Vec[int], rows: int, nc: int, sel: &x [int], i: int, gk0: vec.Vec[int], gi0: vec.Vec[int]) -> [heap] (vec.Vec[int], vec.Vec[int]) {
+    var gk = gk0;
+    var gi = gi0;
+    var r = 0;
+    while r < rows {
+        var j = 0;
+        while j < nc {
+            if sel[j] == 1 {
+                gk = vec.push(heap, gk, vec.get(store, r * nc + j));
+            }
+            j = j + 1;
+        }
+        gi = vec.push(heap, gi, i);
+        r = r + 1;
+    }
+    return (gk, gi);
+}
+
+// the tests of kind kruskal for the selected columns: for each, the present values with their group index go to stest.kruskal
+fn put_kruskal_tests[&h, &n, &en, &x, &a, &b](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], sel: &x [int], nc: int, nsel: int, gk: &a vec.Vec[int], gi: &b vec.Vec[int], total: int, k: int) -> [heap] json.Writer {
+    var w = w0;
+    let pk = box_slice(heap, total + 1, 0);
+    let pg = box_slice(heap, total + 1, 0);
+    let ds = box_slice(heap, k + 1, 0);
+    let ns = box_slice(heap, k + 1, 0);
+    var si = 0;
+    var cj = 0;
+    while cj < nc {
+        if sel[cj] == 1 {
+            borrow mut pk as &!pkw in {
+                borrow mut pg as &!pgw in {
+                    borrow mut ds as &!dsw in {
+                        borrow mut ns as &!nsw in {
+                            var m = 0;
+                            var r = 0;
+                            while r < total {
+                                let key = vec.get(gk, r * nsel + si);
+                                if key != rank.min_int() {
+                                    contents(pkw)[m] = key;
+                                    contents(pgw)[m] = vec.get(gi, r);
+                                    m = m + 1;
+                                }
+                                r = r + 1;
+                            }
+                            var z = 0;
+                            while z < k {
+                                contents(dsw)[z] = 0;
+                                contents(nsw)[z] = 0;
+                                z = z + 1;
+                            }
+                            let kr = kruskal.run(heap, contents(pkw), contents(pgw), m, k, contents(dsw), contents(nsw));
+                            w = answer6.put_kruskal(heap, w, names, ends, cj, kr, contents(nsw), contents(dsw), k);
+                        }
+                    }
+                }
+            }
+            si = si + 1;
+        }
+        cj = cj + 1;
+    }
+    unbox_slice(heap, pk);
+    unbox_slice(heap, pg);
+    unbox_slice(heap, ds);
+    unbox_slice(heap, ns);
+    return w;
+}
+
+// The analysis of variance (kind 0) or the Kruskal-Wallis test (kind 1) of the columns named by --cols over the groups (k >= 2 levels, at most --max-groups) of the column named by --group. Pass 0 finds the levels; then the file is read once for each level, in the order of the
 // bytes of the levels, and only the exact sums of each (group, column) are kept, never the rows of two groups at once.
-pub fn anova_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], table: &static [byte], w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
+pub fn groups_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], table: &static [byte], kind: int, w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
     var w = w0;
     var e = errs;
     match place.open_operand(fs, root, rel, full) {
@@ -109,6 +180,8 @@ pub fn anova_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, pa
                         var totnum = box_slice(heap, 1, 0);
                         var totbad = box_slice(heap, 1, 0);
                         let wkb = box_slice(heap, psum.scratch() + 1, 0);
+                        var gkeys = vec.empty(heap, 1, 0);
+                        var gids = vec.empty(heap, 1, 0);
                         var i = 0;
                         while i < k && clean {
                             let key = map.key_at(gr.m, contents(gr.order)[i]);
@@ -144,10 +217,10 @@ pub fn anova_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, pa
                                 if stt != 0 {
                                     clean = false;
                                     e = rule.refuse_pick(heap, e, stt, bytes.field(cli.text(args, parsed, table, "cols"), ',', item + 1), false);
-                                } else if k * nsel > 8192 {
+                                } else if kind == 0 && k * nsel > 8192 {
                                     clean = false;
                                     e = rule.refuse_int(heap, e, "limit.too-many-groups", "the groups times the chosen columns are more than 8,192 (each pair keeps exact sums of 4 KB)", "name fewer columns or filter the file to fewer groups", "groups", k, "columns", nsel);
-                                } else {
+                                } else if kind == 0 {
                                     unbox_slice(heap, acc);
                                     acc = box_slice(heap, k * nsel * g1 + 1, 0);
                                     unbox_slice(heap, ns);
@@ -161,7 +234,25 @@ pub fn anova_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, pa
                                 buffer.drop(heap, nm);
                                 vec.drop(heap, en);
                             }
+                            if clean && kind == 1 {
+                                borrow st as &sv in {
+                                    borrow sel as &sr in {
+                                        let (gk2, gi2) = collect_group(heap, sv, info.rows, nc, contents(sr), i, gkeys, gids);
+                                        gkeys = gk2;
+                                        gids = gi2;
+                                    }
+                                }
+                                var held = 0;
+                                borrow gkeys as &gk3 in {
+                                    held = vec.size(gk3);
+                                }
+                                if held > cli.nat(args, parsed, table, "max-cells") {
+                                    clean = false;
+                                    e = rule.refuse(heap, e, "limit.too-many-cells", "the cells of the chosen columns held for the ranks are more than --max-cells", "name fewer columns or raise --max-cells", "", "");
+                                }
+                            }
                             if clean {
+                                if kind == 0 {
                                 borrow st as &sv in {
                                     borrow cl as &cv in {
                                         borrow sel as &sr in {
@@ -174,6 +265,20 @@ pub fn anova_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, pa
                                                             }
                                                         }
                                                     }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                } else {
+                                    borrow cl as &cv in {
+                                        borrow mut totnum as &!tnw in {
+                                            borrow mut totbad as &!tbw in {
+                                                var jj = 0;
+                                                while jj < nc {
+                                                    contents(tnw)[jj] = contents(tnw)[jj] + contents(cv.numeric)[jj];
+                                                    contents(tbw)[jj] = contents(tbw)[jj] + contents(cv.bad)[jj];
+                                                    jj = jj + 1;
                                                 }
                                             }
                                         }
@@ -219,7 +324,11 @@ pub fn anova_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, pa
                             let pooled = bytes.equal(cli.text(args, parsed, table, "variance"), "pooled");
                             let gsb = box_slice(heap, 3 * k + 3, 0);
                             w = json.put_key(heap, w, "test");
-                            w = json.put_string(heap, w, "anova");
+                            if kind == 0 {
+                                w = json.put_string(heap, w, "anova");
+                            } else {
+                                w = json.put_string(heap, w, "kruskal");
+                            }
                             w = json.put_key(heap, w, "group");
                             w = json.put_string(heap, w, cli.text(args, parsed, table, "group"));
                             w = json.put_key(heap, w, "levels");
@@ -232,19 +341,34 @@ pub fn anova_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, pa
                             w = json.end_array(heap, w);
                             w = json.put_key(heap, w, "rows");
                             w = json.put_int(heap, w, rows_total);
-                            w = json.put_key(heap, w, "variance");
-                            if pooled {
-                                w = json.put_string(heap, w, "pooled");
-                            } else {
-                                w = json.put_string(heap, w, "welch");
+                            if kind == 0 {
+                                w = json.put_key(heap, w, "variance");
+                                if pooled {
+                                    w = json.put_string(heap, w, "pooled");
+                                } else {
+                                    w = json.put_string(heap, w, "welch");
+                                }
                             }
                             w = json.put_key(heap, w, "adjustment");
                             w = json.put_string(heap, w, cli.text(args, parsed, table, "correct"));
                             w = json.put_key(heap, w, "tests");
                             w = json.begin_array(heap, w);
+                            if kind == 1 {
+                                borrow sel as &sr4 in {
+                                    borrow names as &nb4 in {
+                                        borrow ends as &eb5 in {
+                                            borrow gkeys as &gkr in {
+                                                borrow gids as &gir in {
+                                                    w = put_kruskal_tests(heap, w, buffer.bytes(nb4), eb5, contents(sr4), nc, nsel, gkr, gir, vec.size(gir), k);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             var si = 0;
                             var cj = 0;
-                            while cj < nc {
+                            while cj < nc && kind == 0 {
                                 var chosen2 = false;
                                 borrow sel as &sr3 in {
                                     chosen2 = contents(sr3)[cj] == 1;
@@ -281,6 +405,8 @@ pub fn anova_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, pa
                         unbox_slice(heap, totnum);
                         unbox_slice(heap, totbad);
                         unbox_slice(heap, wkb);
+                        vec.drop(heap, gkeys);
+                        vec.drop(heap, gids);
                     }
                 }
                 scan.drop_groups(heap, groups);

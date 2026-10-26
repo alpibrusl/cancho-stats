@@ -1,0 +1,110 @@
+edition 5;
+
+module stest.answer6;
+
+import std.json;
+import std.vec;
+import flt;
+import special.dist;
+import stest.answer;
+import stest.kruskal;
+
+// One test of the answer for the kind kruskal (docs/rank.md section 2): the Kruskal-Wallis H of the column `col` over the groups whose counts and doubled rank sums are `ns` and `ds`. The groups are named once, in the header,
+// in the order of their levels by bytes; "n" and "mean_rank" list them in that order (a group with no value has n 0 and a null mean rank).
+fn float_of_bits(bits: int) -> [] float {
+    var key = bits;
+    if bits < 0 {
+        key = bits ^ 0x7fffffffffffffff;
+    }
+    return flt.float_of_key(key);
+}
+
+pub fn put_kruskal[&h, &n, &en, &c, &d](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], col: int, r: kruskal.Kruskal, ns: &c [int], ds: &d [int], groups: int) -> [heap] json.Writer {
+    var w = w0;
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "column");
+    w = answer.put_name(heap, w, names, ends, col);
+    var reason = "";
+    var have = false;
+    if r.status == 1 {
+        reason = "too-few-rows";
+    } else if r.status == 2 {
+        reason = "variance-zero";
+    } else if r.hc != 0 {
+        reason = "statistic-beyond-double";
+    } else {
+        have = true;
+    }
+    var p = 0.0;
+    var have_p = false;
+    if have {
+        let (pv, code) = dist.chi2_sf(float_of_bits(r.hb), float_of(r.k - 1));
+        if code == 0 {
+            have_p = true;
+            p = pv;
+        } else {
+            reason = "p-not-computed";
+        }
+    }
+    w = json.put_key(heap, w, "statistic");
+    if have {
+        w = json.put_float(heap, w, float_of_bits(r.hb));
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "df");
+    if r.status != 1 {
+        w = json.put_int(heap, w, r.k - 1);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_value");
+    if have_p {
+        w = json.put_float(heap, w, p);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_method");
+    w = json.put_string(heap, w, "chi2");
+    w = json.put_key(heap, w, "effect_size");
+    if have && r.ec == 0 {
+        w = json.begin_object(heap, w);
+        w = json.put_key(heap, w, "name");
+        w = json.put_string(heap, w, "epsilon_squared");
+        w = json.put_key(heap, w, "value");
+        w = json.put_float(heap, w, float_of_bits(r.eb));
+        w = json.end_object(heap, w);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "n");
+    w = json.begin_array(heap, w);
+    var i = 0;
+    while i < groups {
+        w = json.put_int(heap, w, ns[i]);
+        i = i + 1;
+    }
+    w = json.end_array(heap, w);
+    w = json.put_key(heap, w, "mean_rank");
+    w = json.begin_array(heap, w);
+    i = 0;
+    while i < groups {
+        if ns[i] > 0 {
+            w = json.put_float(heap, w, float_of(ds[i]) / (2.0 * float_of(ns[i])));
+        } else {
+            w = json.put_null(heap, w);
+        }
+        i = i + 1;
+    }
+    w = json.end_array(heap, w);
+    w = json.put_key(heap, w, "ties");
+    w = json.put_int(heap, w, r.ties);
+    w = json.put_key(heap, w, "method");
+    w = json.put_string(heap, w, "kruskal");
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}

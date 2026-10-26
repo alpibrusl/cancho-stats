@@ -1,0 +1,163 @@
+edition 5;
+
+module stest.kruskal;
+
+import std.vec;
+import acc.bigint;
+import acc.central;
+import corr.ranks;
+import metrics.rank;
+import stest.welch;
+
+// The Kruskal-Wallis statistic (docs/rank.md section 2). The m present values of one column come with the index of their group; their order keys are exact, so the doubled average ranks are small integers: a value whose
+// equal group has `lo` values below it and `hi` at most it has the doubled rank lo + hi + 1. D_i is the sum of those for group i (twice its rank sum R_i). With N values, k groups, the tie groups of sizes t (more than one value),
+// T3 = sum (t^3 - t) and the fraction  Sn / Dn = sum D_i^2 / n_i  folded group by group (Dn = prod n_i),
+//     X = Sn - N (N + 1)^2 Dn          (>= 0: the Cauchy-Schwarz bound)         E = N^3 - N - T3          H* = 3 (N - 1) X / (Dn E)          epsilon^2 = H* / (N - 1) = 3 X / (Dn E)
+// the tie-corrected H of the design, each ONE rounding of a quotient of exact integers. E = 0 (every value equal) is the status 2. The sizes are small: D_i < 2^49, t^3 < 2^72, N^3 < 2^72.
+
+pub struct Kruskal {
+    k: int,
+    nn: int,
+    status: int,
+    hb: int,
+    hc: int,
+    eb: int,
+    ec: int,
+    ties: int,
+}
+
+// the counts into ns and the doubled rank sums into ds (both `groups` ints, zero) from the m keys and their group indices; the tie groups (more than one value) add t^3 into region 6 of t as a big integer;
+// answers (the number of tie groups, the sum of their sizes)
+fn gather[&h, &a, &g, &d, &n, &t, &f](heap: &!h Heap, keys: &a [int], gid: &g [int], m: int, ds: &!d [int], ns: &!n [int], t: &!t [int], f: &!f [int]) -> [heap] (int, int) {
+    let c = central.cap();
+    let sorted = box_slice(heap, m + 1, 0);
+    let scratch = box_slice(heap, m + 1, 0);
+    let counts = box_slice(heap, 256, 0);
+    var ties = 0;
+    var sum_t = 0;
+    borrow mut sorted as &!sw in {
+        borrow mut scratch as &!tw in {
+            borrow mut counts as &!cw in {
+                var i = 0;
+                while i < m {
+                    contents(sw)[i] = keys[i];
+                    i = i + 1;
+                }
+                rank.sort_range(contents(sw), contents(tw), contents(cw), 0, m);
+                i = 0;
+                while i < m {
+                    let lo = ranks.lower(contents(sw), m, keys[i]);
+                    let hi = ranks.upper(contents(sw), m, keys[i]);
+                    ds[gid[i]] = ds[gid[i]] + lo + hi + 1;
+                    ns[gid[i]] = ns[gid[i]] + 1;
+                    i = i + 1;
+                }
+                var at = 0;
+                while at < m {
+                    var end = at + 1;
+                    while end < m && contents(sw)[end] == contents(sw)[at] {
+                        end = end + 1;
+                    }
+                    let tt = end - at;
+                    if tt > 1 {
+                        ties = ties + 1;
+                        sum_t = sum_t + tt;
+                        central.limbs_of(tt, f[0..3]);
+                        welch.smul(f, 1, 0, 3, 0, 3);
+                        welch.smul(f, 2, 1, 6, 0, 3);
+                        bigint.add_in(t[6 * c..7 * c], c, f[2 * welch.slot()..2 * welch.slot() + 9], 9);
+                    }
+                    at = end;
+                }
+            }
+        }
+    }
+    unbox_slice(heap, sorted);
+    unbox_slice(heap, scratch);
+    unbox_slice(heap, counts);
+    return (ties, sum_t);
+}
+
+// The statistic of the m values (keys, group indices in 0..groups); `ds` and `ns` (groups ints each) receive the doubled rank sums and the counts.
+pub fn run[&h, &a, &g, &d, &n](heap: &!h Heap, keys: &a [int], gid: &g [int], m: int, groups: int, ds: &!d [int], ns: &!n [int]) -> [heap] Kruskal {
+    let c = central.cap();
+    let tmp = box_slice(heap, 14 * c + 1, 0);
+    let fs = box_slice(heap, 16 * welch.slot() + 8, 0);
+    var k = 0;
+    var status = 0;
+    var hb = 0;
+    var hc = 0;
+    var eb = 0;
+    var ec = 0;
+    var ties = 0;
+    borrow mut tmp as &!tw in {
+        borrow mut fs as &!fw in {
+                    let t = contents(tw);
+                    let f = contents(fw);
+                    let (tg, sum_t) = gather(heap, keys, gid, m, ds, ns, t, f);
+                    ties = tg;
+                    // Dn = 1 (region 1), Sn = 0 (region 0)
+                    t[c] = 1;
+                    var i = 0;
+                    while i < groups {
+                        if ns[i] > 0 {
+                            k = k + 1;
+                            central.limbs_of(ns[i], f[0..3]);
+                            central.limbs_of(ds[i], f[welch.slot()..welch.slot() + 3]);
+                            welch.smul(f, 2, 1, 3, 1, 3);
+                            // Sn = Sn n + D^2 Dn, Dn = Dn n
+                            welch.mulf(t, 2, 0, welch.len_of(t, 0), f, 0, 3);
+                            welch.mulf(t, 3, 1, welch.len_of(t, 1), f, 2, 6);
+                            welch.sumr(t, 4, 2, 3);
+                            bigint.copy(t[0..c], t[4 * c..5 * c], c);
+                            welch.mulf(t, 2, 1, welch.len_of(t, 1), f, 0, 3);
+                            bigint.copy(t[c..2 * c], t[2 * c..3 * c], c);
+                        }
+                        i = i + 1;
+                    }
+                    if k < 2 {
+                        status = 1;
+                    } else {
+                        let nn = m;
+                        // the small factors, slots: 3 N, 4 N + 1, 5 (N + 1)^2, 6 N (N + 1)^2, 7 N^2, 8 N^3, 9 3 (N - 1), 10 3, 11 sum t, 12 N + 0
+                        central.limbs_of(nn, f[3 * welch.slot()..3 * welch.slot() + 3]);
+                        central.limbs_of(nn + 1, f[4 * welch.slot()..4 * welch.slot() + 3]);
+                        welch.smul(f, 5, 4, 3, 4, 3);
+                        welch.smul(f, 6, 5, 6, 3, 3);
+                        welch.smul(f, 7, 3, 3, 3, 3);
+                        welch.smul(f, 8, 7, 6, 3, 3);
+                        central.limbs_of(3 * (nn - 1), f[9 * welch.slot()..9 * welch.slot() + 3]);
+                        central.limbs_of(3, f[10 * welch.slot()..10 * welch.slot() + 3]);
+                        central.limbs_of(sum_t, f[11 * welch.slot()..11 * welch.slot() + 3]);
+                        // X = Sn - N (N + 1)^2 Dn (region 5)
+                        welch.mulf(t, 5, 1, welch.len_of(t, 1), f, 6, 9);
+                        bigint.copy(t[7 * c..8 * c], t[0..c], c);
+                        bigint.sub_in(t[7 * c..8 * c], c, t[5 * c..6 * c], c);
+                        // E = (N^3 + sum t) - (N + sum t^3) (region 9)
+                        bigint.clear(t[8 * c..9 * c], c);
+                        bigint.copy(t[8 * c..8 * c + 9], f[8 * welch.slot()..8 * welch.slot() + 9], 9);
+                        bigint.add_in(t[8 * c..9 * c], c, f[11 * welch.slot()..11 * welch.slot() + 3], 3);
+                        bigint.copy(t[9 * c..10 * c], t[6 * c..7 * c], c);
+                        bigint.add_in(t[9 * c..10 * c], c, f[3 * welch.slot()..3 * welch.slot() + 3], 3);
+                        bigint.sub_in(t[8 * c..9 * c], c, t[9 * c..10 * c], c);
+                        if bigint.is_zero(t[8 * c..9 * c], c) {
+                            status = 2;
+                        } else {
+                            // H* = 3 (N - 1) X / (Dn E), epsilon^2 = 3 X / (Dn E)
+                            welch.mulr(t, 10, 1, welch.len_of(t, 1), 8, welch.len_of(t, 8));
+                            welch.mulf(t, 11, 7, welch.len_of(t, 7), f, 9, 3);
+                            let (h1, h2) = central.ratio_bits(heap, t[11 * c..12 * c], welch.len_of(t, 11), t[10 * c..11 * c], welch.len_of(t, 10), 0, false);
+                            hb = h1;
+                            hc = h2;
+                            welch.mulf(t, 11, 7, welch.len_of(t, 7), f, 10, 3);
+                            let (e1, e2) = central.ratio_bits(heap, t[11 * c..12 * c], welch.len_of(t, 11), t[10 * c..11 * c], welch.len_of(t, 10), 0, false);
+                            eb = e1;
+                            ec = e2;
+                        }
+                    }
+        }
+    }
+    unbox_slice(heap, tmp);
+    unbox_slice(heap, fs);
+    return Kruskal { k: k, nn: m, status: status, hb: hb, hc: hc, eb: eb, ec: ec, ties: ties };
+}

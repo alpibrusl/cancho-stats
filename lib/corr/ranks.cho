@@ -12,7 +12,7 @@ import flt;
 // corr.pearson.pair on this table gives Spearman's coefficient exactly (the doubled ranks are small integers, exact as doubles, and go through the same exact sums).
 
 // the number of keys below `key` in a[0..n) sorted
-fn lower[&a](a: &a [int], n: int, key: int) -> [] int {
+pub fn lower[&a](a: &a [int], n: int, key: int) -> [] int {
     var lo = 0;
     var hi = n;
     while lo < hi {
@@ -27,7 +27,7 @@ fn lower[&a](a: &a [int], n: int, key: int) -> [] int {
 }
 
 // the number of keys at most `key` in a[0..n) sorted
-fn upper[&a](a: &a [int], n: int, key: int) -> [] int {
+pub fn upper[&a](a: &a [int], n: int, key: int) -> [] int {
     var lo = 0;
     var hi = n;
     while lo < hi {
