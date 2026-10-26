@@ -163,6 +163,7 @@ The open point of `docs/corr.md` (section 8: "whether S4 adds `--exact` to `corr
 
 * **Statistics and p-values** (`scripts/gate_corr_exact.py`, seed 2, 300 files): 989 pairs compared, 490 of them exact, **0 differ** from the oracle's rational rounded once (bit for bit), 154 refusals expected and seen (`--exact yes` with a pair that has a tie or more than 60 rows). The oracle's counts were first checked against the enumeration of every permutation for `n <= 8`. Controls outside the bound: the normal-approximation p-value 457 of 490, half the exact p-value 490 of 490. scipy's `kendalltau(variant="b", method="exact")` on the 490 exact pairs: largest relative difference of the p-value **1.03e-15**.
 * **Refusals.** 406 table cases (30 rule tags) and 1,000 fuzz files: no trap, no hang, every refusal tagged.
+* **Mutants.** `scripts/mutants_corrx.py`: 23, 21 killed and 2 explained in the script as equivalent (the starting count doubled, which doubles every count and the total; the cap when twice the lower tail equals the total, which is exactly 1.0 either way). Fingerprint: the 8 lines `corr-kendall-exact`; no earlier line moved.
 
 ## 16. S4 closed: what each kind gives, and what was measured (one table)
 
@@ -176,7 +177,7 @@ Every number below is the one printed in the section named, by the script named 
 | `wilcoxon` | #43 | `W+`, `W-`, rank-biserial; differences exact by two-sum | exact (no ties, no zero ranked, n <= 50) bit for bit; normal otherwise | `ot.wilcoxon` (`Fraction` differences) | `wilcoxon` where every difference is exact in floating point: statistic and exact p equal, normal p 2.8e-14 | 75 (71 + 4) | 12 |
 | `ks` (with `special.dist.ks_sf`) | #44 | `D` and `d = D n_a n_b`, `lambda`, exact | exact (no two values equal, N <= 60) bit for bit, 190 of 190; `Q_KS` otherwise (6.7e-15 against `mpmath`) | `ot.ks` (distribution functions as Fractions; paths that left the band) | `ks_2samp` exact: D 2.8e-16, p 4.3e-16; scipy's asymptotic p is a different approximation | 47 (45 + 2) + 14 of `ks_sf` | 13 |
 | `fisher` | #45 | odds ratio, one rounding | exact, **no tolerance**, 521 of 521 bit for bit; differs from R and scipy on the three tolerance tables | `ot.fisher` (`math.comb` weights) | `fisher_exact`: odds 0, p 1.7e-15 where the tolerance does not matter | 42 (38 + 4) | 14 |
-| `corr --method kendall --exact` | S4.7 | as in S2 (`tau`, `z`, `s`) | exact permutation p-value (no ties, 3 to 60 rows), 490 of 490 bit for bit | `ot.kendall_exact` (the product of `1 + q + .. + q^(i-1)`) | `kendalltau` exact: p 1.03e-15 | MUTANTS_CORRX | 15 |
+| `corr --method kendall --exact` | S4.7 | as in S2 (`tau`, `z`, `s`) | exact permutation p-value (no ties, 3 to 60 rows), 490 of 490 bit for bit | `ot.kendall_exact` (the product of `1 + q + .. + q^(i-1)`) | `kendalltau` exact: p 1.03e-15 | 23 (21 + 2) | 15 |
 
 New rule tags of S4: `stats.exact-unavailable` (S4.3, reused by S4.4 to S4.7) and `limit.exact-too-large` (S4.6). New flags: `--exact`, `--continuity`, `--zeros`, and `--variance` for `anova`. The fingerprint `docs/xplat_fp.txt` holds the lines `test-anova`, `test-kruskal`, `test-mannwhitney`, `test-wilcoxon`, `test-ks`, `test-fisher` and `corr-kendall-exact`, and the special-function sweeps now include `ks_sf`.
 
