@@ -61,7 +61,7 @@ M = [
     ("run-collect-group", R, "gi = vec.push(heap, gi, i);", "gi = vec.push(heap, gi, 0);"),
     ("run-collect-column", R, "gk = vec.push(heap, gk, vec.get(store, r * nc + j));", "gk = vec.push(heap, gk, vec.get(store, r * nc));"),
     ("run-present", R, "if key != rank.min_int() {\n                                    contents(pkw)[m] = key;", "if key == rank.min_int() {\n                                    contents(pkw)[m] = key;"),
-    ("run-stride", R, "let key = vec.get(gk, r * nsel + si);", "let key = vec.get(gk, r * nsel);"),
+    ("run-stride", R, "                                let key = vec.get(gk, r * nsel + si);", "                                let key = vec.get(gk, r * nsel);"),
     ("run-cell-limit", R, "if held > cli.nat(args, parsed, table, \"max-cells\") {", "if held >= cli.nat(args, parsed, table, \"max-cells\") {"),
     ("run-numeric-total", R, "contents(tnw)[jj] = contents(tnw)[jj] + contents(cv.numeric)[jj];", "contents(tnw)[jj] = contents(tnw)[jj] + 0;"),
     ("run-bad-total", R, "contents(tbw)[jj] = contents(tbw)[jj] + contents(cv.bad)[jj];", "contents(tbw)[jj] = contents(tbw)[jj] + 0;"),

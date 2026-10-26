@@ -7,7 +7,7 @@ Under a true null (two groups of one distribution, seeded: normal values, a latt
 interval for the number of replicates. WHERE THE P-VALUE IS EXACT (no ties, at most 60 values) the interval is around the EXACT SIZE OF THE TEST AS DEFINED, the sum of the probabilities of the values of U whose
 two-sided p is below 0.05, computed by the oracle's counts (the exact test is conservative: its size is below 0.05, said and printed); where it is the normal approximation the interval is around 0.05 and the configurations
 are those with 10 or more values in both groups (the others are printed). The p-values are uniform (Kolmogorov-Smirnov) only for the normal approximation without ties. CONTROLS from the same replicates must be refused by
-the same test at some configuration, so the gate is able to fail: the normal p-value where the exact one is the answer (compared with the exact size), the normal p-value without the continuity correction, the one-sided
+the same test at some configuration, so the gate is able to fail: the normal p-value without the continuity correction where the exact one is the answer (compared with the exact size), the one-sided
 p-value, and 0.05 as the size of an exact test. Power against a planted shift: printed.
 
 Exit 0: every test passes and every control is refused. Exit 1: a test fails. Exit 2: the harness failed.
@@ -33,6 +33,7 @@ import oracle_test as ot  # noqa: E402
 CONFIGS = [
     ((5, 5), "normal"),
     ((8, 12), "normal"),
+    ((10, 10), "normal"),
     ((20, 20), "normal"),
     ((30, 30), "normal"),
     ((31, 30), "normal"),
@@ -111,7 +112,7 @@ def main():
     reps = a.replicates
     bad = []
     lines = []
-    refused = {"normal-for-exact": False, "no-continuity-correction": False, "one-sided": False, "nominal-size-for-exact": False}
+    refused = {"no-continuity-correction": False, "one-sided": False, "nominal-size-for-exact": False}
     try:
         for ci, (sizes, kind) in enumerate(CONFIGS):
             r = SM64(a.seed * 1000 + ci)
@@ -132,10 +133,12 @@ def main():
                 if not ok:
                     bad.append("exact n=%s calibration" % (sizes,))
                 # controls where they differ from the exact size
-                nrm = [x[1]["p_value"] for x in res]
+                # the normal p-value WITHOUT the continuity correction against the exact size (with the correction its rejection region is the same as the exact test's at these sizes, 0.03175 at (5,5): only the p-values tell
+                # them apart, and gate_mannwhitney.py does: the control normal-for-exact there)
+                nrm = [x[2]["p_value"] for x in res]
                 okn, _, _ = inside(sum(1 for p in nrm if p < 0.05), reps, size)
                 if not okn:
-                    refused["normal-for-exact"] = True
+                    refused["no-continuity-correction"] = True
                 okf, _, _ = inside(rej, reps, 0.05)
                 if not okf:
                     refused["nominal-size-for-exact"] = True
@@ -151,10 +154,6 @@ def main():
                 if not ok and gated:
                     bad.append("normal n=%s %s calibration" % (sizes, kind))
                 if gated:
-                    nc = [x[2]["p_value"] for x in res]
-                    okc, _, _ = inside(sum(1 for p in nc if p < 0.05), reps, 0.05)
-                    if not okc or ss.kstest(nc, "uniform").pvalue <= ALPHA_TEST and kind == "normal":
-                        refused["no-continuity-correction"] = True
                     oko, _, _ = inside(sum(1 for p in ps if p / 2 < 0.05), len(ps), 0.05)
                     if not oko:
                         refused["one-sided"] = True
