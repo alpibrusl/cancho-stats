@@ -839,3 +839,37 @@ def fisher(a, b, c, d):
     out["p_double"] = min(Fraction(1), 2 * min(lo, hi))
     out["p_less"] = lo
     return out
+
+
+def mahonian(n):
+    """the number of permutations of n items with k inversions, k = 0 .. n (n - 1) / 2: the coefficients of prod_{i = 1..n} (1 + q + .. + q^(i - 1)), Python integers, by multiplying the polynomials"""
+    poly = [1]
+    for i in range(2, n + 1):
+        out = [0] * (len(poly) + i - 1)
+        for k, c in enumerate(poly):
+            for j in range(i):
+                out[k + j] += c
+        poly = out
+    return poly
+
+
+def kendall_exact(n, s):
+    """the exact two-sided permutation p-value of Kendall's S for n rows with no ties (docs/rank.md section 15): d = (n0 - S) / 2 discordant pairs; p = min(1, 2 min(P(D <= d), P(D >= d))), a Fraction"""
+    n0 = n * (n - 1) // 2
+    assert (n0 - s) % 2 == 0
+    d = (n0 - s) // 2
+    t = mahonian(n)
+    total = math.factorial(n)
+    assert sum(t) == total
+    le = sum(t[:d + 1])
+    ge = sum(t[d:])
+    return min(Fraction(1), Fraction(2 * min(le, ge), total))
+
+
+def kendall_brute(n):
+    """the same counts by listing every permutation (n <= 8)"""
+    import itertools
+    counts = [0] * (n * (n - 1) // 2 + 1)
+    for perm in itertools.permutations(range(n)):
+        counts[sum(1 for i in range(n) for j in range(i + 1, n) if perm[i] > perm[j])] += 1
+    return counts

@@ -2,6 +2,9 @@ edition 5;
 
 module stest.exact;
 
+import acc.bigint;
+import acc.central;
+
 // The exact distributions of the rank tests, by counting in 64-bit integers (docs/rank.md section 4). The counts never exceed C(60, 30) = 1.18e17, below 2^63 = 9.22e18, which is the whole reason for the limits.
 
 // The number of ways to choose na of the ranks 1 .. nn with a rank sum s, summed for s up to r_obs (answered le), for s from r_obs up (ge), and over all s (total = C(nn, na)); by the table g[k][s] of the ways to
@@ -134,4 +137,72 @@ pub fn ks_paths[&h](heap: &!h Heap, na: int, nb: int, d: int) -> [heap] (int, in
     unbox_slice(heap, f);
     unbox_slice(heap, g);
     return (inside, total);
+}
+
+// The exact two-sided permutation p-value of Kendall's S for n rows with no ties (docs/rank.md section 15): d = (n0 - S) / 2 discordant pairs, n0 = n (n - 1) / 2, the number of permutations with k inversions T(n, k) by
+// T(m, k) = T(m, k - 1) + T(m - 1, k) - T(m - 1, k - m), in big integers of 12 limbs (60! < 2^273) with additions and subtractions only; p = min(1, 2 P(D <= min(d, n0 - d))) by the symmetry T(n, k) = T(n, n0 - k), an exact
+// rational rounded once. Answers (bits of p, code). n is 3 to 60.
+pub fn kendall_p[&h](heap: &!h Heap, n: int, s: int) -> [heap] (int, int) {
+    let l = 12;
+    let n0 = n * (n - 1) / 2;
+    var d = (n0 - s) / 2;
+    if n0 - d < d {
+        d = n0 - d;
+    }
+    let w = n0 + 1;
+    let half = w * l;
+    let ab = box_slice(heap, 2 * half + 1, 0);
+    let sums = box_slice(heap, 3 * l + 1, 0);
+    var pb = 0;
+    var pc = 1;
+    var po = 0;
+    borrow mut ab as &!abw in {
+        borrow mut sums as &!sw in {
+            let t = contents(abw);
+            t[0] = 1;
+            var m = 2;
+            while m <= n {
+                let co = half - po;
+                bigint.clear(t[co..co + half], half);
+                let kmax = m * (m - 1) / 2;
+                var k = 0;
+                while k <= kmax {
+                    if k > 0 {
+                        bigint.add_in(t[co + k * l..co + k * l + l], l, t[co + (k - 1) * l..co + (k - 1) * l + l], l);
+                    }
+                    bigint.add_in(t[co + k * l..co + k * l + l], l, t[po + k * l..po + k * l + l], l);
+                    if k >= m {
+                        bigint.sub_in(t[co + k * l..co + k * l + l], l, t[po + (k - m) * l..po + (k - m) * l + l], l);
+                    }
+                    k = k + 1;
+                }
+                po = co;
+                m = m + 1;
+            }
+            // t[po ..] holds T(n, k)
+            let sm = contents(sw);
+            var k2 = 0;
+            while k2 <= n0 {
+                bigint.add_in(sm[l..2 * l], l, t[po + k2 * l..po + k2 * l + l], l);
+                if k2 <= d {
+                    bigint.add_in(sm[0..l], l, t[po + k2 * l..po + k2 * l + l], l);
+                }
+                k2 = k2 + 1;
+            }
+            // twice the lower tail
+            bigint.add_in(sm[2 * l..3 * l], l, sm[0..l], l);
+            bigint.add_in(sm[2 * l..3 * l], l, sm[0..l], l);
+            if bigint.compare(sm[2 * l..3 * l], l, sm[l..2 * l], l) >= 0 {
+                pb = 4607182418800017408;
+                pc = 0;
+            } else {
+                let (b2, c2) = central.ratio_bits(heap, sm[2 * l..3 * l], l, sm[l..2 * l], l, 0, false);
+                pb = b2;
+                pc = c2;
+            }
+        }
+    }
+    unbox_slice(heap, ab);
+    unbox_slice(heap, sums);
+    return (pb, pc);
 }

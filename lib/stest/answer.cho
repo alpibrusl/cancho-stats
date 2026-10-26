@@ -9,6 +9,7 @@ import corr.pearson;
 import corr.ranks;
 import flt;
 import special.dist;
+import stest.exact;
 import stest.ttest;
 
 // The pieces of the answers of `stats corr` and `stats test` that write one pair or one test (docs/corr.md section 4, docs/test.md section 1), moved out of tools/stats/main.cho (2,000 lines is the limit).
@@ -50,9 +51,21 @@ pub fn p_two_sided_real(t: float, df: float) -> [] (float, int) {
 
 // One pair of columns of the answer (docs/corr.md section 4): n, r, statistic (t with the sign of r), df, p_value, p_method, p_exact_zero when |r| = 1, reason when something is null.
 // One pair of the answer for Kendall's tau-b (docs/corr.md section 4): n, tau, statistic (z, with the sign of tau), df (null), p_value, p_method, s (concordant minus discordant), ties, reason.
-pub fn put_pair_kendall[&h, &n, &en, &k, &m](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], store: &k vec.Vec[int], ncols: int, ja: int, jb: int, rows: int, mask: &m [int]) -> [heap] json.Writer {
+pub fn put_pair_kendall[&h, &n, &en, &k, &m](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], store: &k vec.Vec[int], ncols: int, ja: int, jb: int, rows: int, mask: &m [int], exact_mode: int) -> [heap] (json.Writer, bool) {
     var w = w0;
     let (n, status, tb, tc, zb, zc, sv, gx, gy) = kendall.pair(heap, store, ncols, ja, jb, rows, mask);
+    // the exact permutation p-value (docs/rank.md section 15): no ties in either column and at most 60 rows; `exact_mode` 0 no, 1 auto, 2 yes (the caller refuses where it is not available)
+    let exact_data = gx == 0 && gy == 0 && n <= 60;
+    let unavailable = exact_mode == 2 && !exact_data;
+    var use_exact = false;
+    var xb = 0;
+    var xc = 1;
+    if exact_mode >= 1 && exact_data && status == 0 && n >= 3 {
+        let (b1, c1) = exact.kendall_p(heap, n, sv);
+        xb = b1;
+        xc = c1;
+        use_exact = xc == 0;
+    }
     w = json.begin_object(heap, w);
     w = json.put_key(heap, w, "x");
     w = put_name(heap, w, names, ends, ja);
@@ -78,15 +91,20 @@ pub fn put_pair_kendall[&h, &n, &en, &k, &m](heap: &!h Heap, w0: json.Writer, na
             reason = "statistic-beyond-double";
         } else {
             have_z = true;
-            let (sf, code) = dist.norm_sf(float_of_bits(zb & 9223372036854775807));
-            if code == 0 {
+            if use_exact {
                 have_p = true;
-                p = 2.0 * sf;
-                if p > 1.0 {
-                    p = 1.0;
-                }
+                p = float_of_bits(xb);
             } else {
-                reason = "p-not-computed";
+                let (sf, code) = dist.norm_sf(float_of_bits(zb & 9223372036854775807));
+                if code == 0 {
+                    have_p = true;
+                    p = 2.0 * sf;
+                    if p > 1.0 {
+                        p = 1.0;
+                    }
+                } else {
+                    reason = "p-not-computed";
+                }
             }
         }
     }
@@ -105,7 +123,11 @@ pub fn put_pair_kendall[&h, &n, &en, &k, &m](heap: &!h Heap, w0: json.Writer, na
         w = json.put_null(heap, w);
     }
     w = json.put_key(heap, w, "p_method");
-    w = json.put_string(heap, w, "normal-approximation");
+    if use_exact {
+        w = json.put_string(heap, w, "exact");
+    } else {
+        w = json.put_string(heap, w, "normal-approximation");
+    }
     w = json.put_key(heap, w, "s");
     w = json.put_int(heap, w, sv);
     w = json.put_key(heap, w, "ties");
@@ -122,7 +144,7 @@ pub fn put_pair_kendall[&h, &n, &en, &k, &m](heap: &!h Heap, w0: json.Writer, na
         w = json.put_string(heap, w, reason);
     }
     w = json.end_object(heap, w);
-    return w;
+    return (w, unavailable);
 }
 
 pub fn put_pair[&h, &n, &en, &k, &m](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], store: &k vec.Vec[int], ncols: int, ja: int, jb: int, rows: int, mask: &m [int], method: int) -> [heap] json.Writer {

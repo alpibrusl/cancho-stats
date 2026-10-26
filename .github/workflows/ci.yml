@@ -268,6 +268,11 @@ jobs:
         run: |
           python3 scripts/gate_fisher.py --files 300 --scipy
 
+      - name: stats corr --exact (Kendall) against Fractions, the exact p-values bit for bit
+        if: steps.stores.outputs.fetchable == 'yes'
+        run: |
+          python3 scripts/gate_corr_exact.py --files 300 --scipy
+
       - name: stats test wilcoxon against Fractions and mpmath, the exact p-values bit for bit, and the size of its test
         if: steps.stores.outputs.fetchable == 'yes'
         run: |
@@ -298,6 +303,7 @@ jobs:
           python3 scripts/mutants_wilcoxon.py --check
           python3 scripts/mutants_ks.py --check
           python3 scripts/mutants_fisher.py --check
+          python3 scripts/mutants_corrx.py --check
           python3 scripts/mutants_special.py --check
 
       - name: Quantiles (nine definitions) against an independent exact reference
@@ -438,3 +444,4 @@ jobs:
           python3 scripts/mutants_wilcoxon.py
           python3 scripts/mutants_ks.py
           python3 scripts/mutants_fisher.py
+          python3 scripts/mutants_corrx.py
