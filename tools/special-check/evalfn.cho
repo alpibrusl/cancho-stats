@@ -123,6 +123,9 @@ pub fn which[&s](name: &s [byte]) -> [] int {
     if same(name, "beta_iterations") {
         return 32;
     }
+    if same(name, "ks_sf") {
+        return 33;
+    }
     return 0;
 }
 
@@ -251,6 +254,9 @@ pub fn eval(f: int, x: float, y: float, z: float) -> [] (float, int) {
     }
     if f == 32 {
         return quantile.beta_iterations(x, y, z);
+    }
+    if f == 33 {
+        return dist.ks_sf(x);
     }
     return dist.binom_sf(x, y, z);
 }

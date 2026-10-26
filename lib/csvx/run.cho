@@ -16,6 +16,8 @@ import metrics.rank;
 import stest.kruskal;
 import stest.mannwhitney;
 import stest.answer7;
+import stest.answer9;
+import stest.ks;
 import stest.answer6;
 import stest.anova;
 import stest.answer5;
@@ -190,6 +192,47 @@ fn put_mw_tests[&h, &n, &en, &x, &a, &b, &t1, &t2](heap: &!h Heap, w0: json.Writ
     return w;
 }
 
+// the tests of kind ks for the selected columns (the group index 0 is the group a); the exact mode as the flag says
+fn put_ks_tests[&h, &n, &en, &x, &a, &b, &t1](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], sel: &x [int], nc: int, nsel: int, gk: &a vec.Vec[int], gi: &b vec.Vec[int], total: int, exact_text: &t1 [byte]) -> [heap] json.Writer {
+    var w = w0;
+    let pk = box_slice(heap, total + 1, 0);
+    let pg = box_slice(heap, total + 1, 0);
+    var mode = 0;
+    if bytes.equal(exact_text, "yes") {
+        mode = 1;
+    } else if bytes.equal(exact_text, "no") {
+        mode = 2;
+    }
+    var si = 0;
+    var cj = 0;
+    while cj < nc {
+        if sel[cj] == 1 {
+            borrow mut pk as &!pkw in {
+                borrow mut pg as &!pgw in {
+                    var m = 0;
+                    var r = 0;
+                    while r < total {
+                        let key = vec.get(gk, r * nsel + si);
+                        if key != rank.min_int() {
+                            contents(pkw)[m] = key;
+                            contents(pgw)[m] = vec.get(gi, r);
+                            m = m + 1;
+                        }
+                        r = r + 1;
+                    }
+                    let kr = ks.run(heap, contents(pkw), contents(pgw), m, mode);
+                    w = answer9.put_ks(heap, w, names, ends, cj, kr);
+                }
+            }
+            si = si + 1;
+        }
+        cj = cj + 1;
+    }
+    unbox_slice(heap, pk);
+    unbox_slice(heap, pg);
+    return w;
+}
+
 // the first selected column (its index in the file) for which the exact p-value is not available, or -1
 fn first_without_exact[&h, &x, &a](heap: &!h Heap, sel: &x [int], nc: int, nsel: int, gk: &a vec.Vec[int], total: int) -> [heap] int {
     let pk = box_slice(heap, total + 1, 0);
@@ -245,7 +288,7 @@ pub fn groups_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, p
                         clean = false;
                         e = rule.refuse_int(heap, e, "stats.group-levels", "--group names a column that has fewer than two levels", "give --group a column with two or more levels", "levels", k, "missing", gr.nulls);
                     }
-                    if clean && kind == 2 && k != 2 {
+                    if clean && kind >= 2 && k != 2 {
                         clean = false;
                         e = rule.refuse_int(heap, e, "stats.group-levels", "--group names a column that does not have exactly two levels", "give --group a column with two levels, or filter the file to two of them", "levels", k, "missing", gr.nulls);
                     }
@@ -402,7 +445,7 @@ pub fn groups_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, p
                                 j = j + 1;
                             }
                         }
-                        if clean && kind == 2 && bytes.equal(cli.text(args, parsed, table, "exact"), "yes") {
+                        if clean && kind >= 2 && bytes.equal(cli.text(args, parsed, table, "exact"), "yes") {
                             var bad_col = 0 - 1;
                             borrow sel as &sr6 in {
                                 borrow gkeys as &gkr3 in {
@@ -433,8 +476,10 @@ pub fn groups_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, p
                             } else {
                                 if kind == 1 {
                                 w = json.put_string(heap, w, "kruskal");
-                                } else {
+                                } else if kind == 2 {
                                 w = json.put_string(heap, w, "mannwhitney");
+                                } else {
+                                w = json.put_string(heap, w, "ks");
                                 }
                             }
                             w = json.put_key(heap, w, "group");
@@ -461,6 +506,19 @@ pub fn groups_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, p
                             w = json.put_string(heap, w, cli.text(args, parsed, table, "correct"));
                             w = json.put_key(heap, w, "tests");
                             w = json.begin_array(heap, w);
+                            if kind == 3 {
+                                borrow sel as &sr8 in {
+                                    borrow names as &nb8 in {
+                                        borrow ends as &eb9 in {
+                                            borrow gkeys as &gkr4 in {
+                                                borrow gids as &gir4 in {
+                                                    w = put_ks_tests(heap, w, buffer.bytes(nb8), eb9, contents(sr8), nc, nsel, gkr4, gir4, vec.size(gir4), cli.text(args, parsed, table, "exact"));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             if kind == 2 {
                                 borrow sel as &sr5 in {
                                     borrow names as &nb5 in {

@@ -1,0 +1,99 @@
+edition 5;
+
+module stest.answer9;
+
+import std.json;
+import std.vec;
+import flt;
+import special.dist;
+import stest.answer;
+import stest.ks;
+
+// One test of the answer for the kind ks (docs/rank.md section 2): the largest distance D between the empirical distribution functions of the groups a and b over the column `col`, as D (`statistic`) and as the integer
+// d = D n_a n_b (`distance`), the Kolmogorov score lambda = sqrt(n_a n_b / N) D, the p-value (`p_method` "exact" or "asymptotic": Q_KS(lambda) with no Stephens correction), the group sizes and the number of tie groups.
+fn float_of_bits(bits: int) -> [] float {
+    var key = bits;
+    if bits < 0 {
+        key = bits ^ 0x7fffffffffffffff;
+    }
+    return flt.float_of_key(key);
+}
+
+pub fn put_ks[&h, &n, &en](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], col: int, r: ks.Ks) -> [heap] json.Writer {
+    var w = w0;
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "column");
+    w = answer.put_name(heap, w, names, ends, col);
+    var reason = "";
+    var have_p = false;
+    var p = 0.0;
+    var method = "asymptotic";
+    if r.status == 1 {
+        reason = "too-few-rows";
+    } else if r.exact == 1 {
+        method = "exact";
+        if r.pc == 0 {
+            have_p = true;
+            p = float_of_bits(r.pb);
+        } else {
+            reason = "p-not-computed";
+        }
+    } else if r.lc == 0 {
+        let (q, code) = dist.ks_sf(float_of_bits(r.lb));
+        if code == 0 {
+            have_p = true;
+            p = q;
+        } else {
+            reason = "p-not-computed";
+        }
+    } else {
+        reason = "statistic-beyond-double";
+    }
+    w = json.put_key(heap, w, "statistic");
+    if r.status != 1 {
+        w = json.put_float(heap, w, r.dstat);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "distance");
+    if r.status != 1 {
+        w = json.put_int(heap, w, r.d);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "lambda");
+    if r.status != 1 && r.lc == 0 {
+        w = json.put_float(heap, w, float_of_bits(r.lb));
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_value");
+    if have_p {
+        w = json.put_float(heap, w, p);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_method");
+    if have_p {
+        w = json.put_string(heap, w, method);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "n");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "a");
+    w = json.put_int(heap, w, r.na);
+    w = json.put_key(heap, w, "b");
+    w = json.put_int(heap, w, r.nb);
+    w = json.end_object(heap, w);
+    w = json.put_key(heap, w, "ties");
+    w = json.put_int(heap, w, r.ties);
+    w = json.put_key(heap, w, "method");
+    w = json.put_string(heap, w, "ks");
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}

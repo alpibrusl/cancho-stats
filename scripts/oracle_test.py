@@ -706,3 +706,97 @@ def wilcoxon(pairs, zeros, exact, continuity):
         out["p"] = min(mpmath.mpf(1), norm_sf_exact(z2))
         out["p_method"] = "normal"
     return out
+
+
+def ks_brute(na, nb, d):
+    """the number of arrangements of na labels among na + nb distinct values whose largest distance between the empirical distribution functions is at least d / (na nb), by listing every choice (small sizes only), the
+    distance taken from the two distribution functions as Fractions at every value"""
+    import itertools
+    n = na + nb
+    hit = 0
+    for combo in itertools.combinations(range(n), na):
+        s = set(combo)
+        fa = fb = 0
+        top = Fraction(0)
+        for pos in range(n):
+            if pos in s:
+                fa += 1
+            else:
+                fb += 1
+            top = max(top, abs(Fraction(fa, na) - Fraction(fb, nb)))
+        if top * na * nb >= d:
+            hit += 1
+    return hit
+
+
+def ks_exceed(na, nb, d):
+    """the same count by a recurrence over the lattice that keeps, for each point, the number of paths that have already left the band |i nb - j na| < d (a different organisation from the program's count of the paths inside)"""
+    out = {(0, 0): (1, 0)}   # (paths still inside, paths that have left)
+    for s in range(1, na + nb + 1):
+        nxt = {}
+        for (i, j), (ins, left) in out.items():
+            for (i2, j2) in ((i + 1, j), (i, j + 1)):
+                if i2 > na or j2 > nb:
+                    continue
+                inside_here = abs(i2 * nb - j2 * na) < d
+                a, b = nxt.get((i2, j2), (0, 0))
+                if inside_here:
+                    a += ins
+                    b += left
+                else:
+                    b += ins + left
+                nxt[(i2, j2)] = (a, b)
+        out = nxt
+    return out[(na, nb)][1]
+
+
+def ks(a_vals, b_vals, exact):
+    """the two-sample Kolmogorov-Smirnov test of the present values of the groups a and b (docs/rank.md section 2): D from the two empirical distribution functions at every distinct value (Fractions), d = D na nb, lambda^2 = d^2 / (N na nb),
+    the exact p-value as the proportion of the arrangements with a distance of at least d (no two values equal, N <= 60), the asymptotic p = Q_KS(lambda) by the alternating series at the exact lambda in mpmath. A dict: na, nb, d, statistic
+    (double), lam (double), p (mpf), p_exact (Fraction or None), p_method, ties (tie groups over both groups), reason, exact_available."""
+    na, nb = len(a_vals), len(b_vals)
+    out = {"na": na, "nb": nb, "d": None, "statistic": None, "lam": None, "p": None, "p_exact": None, "p_method": None, "ties": 0, "reason": None, "exact_available": False}
+    fa = [Fraction(v) for v in a_vals]
+    fb = [Fraction(v) for v in b_vals]
+    if na == 0 or nb == 0:
+        out["reason"] = "too-few-rows"
+        return out
+    allv = fa + fb
+    nn = na + nb
+    top = Fraction(0)
+    for v in sorted(set(allv)):
+        top = max(top, abs(Fraction(sum(1 for x in fa if x <= v), na) - Fraction(sum(1 for x in fb if x <= v), nb)))
+        if allv.count(v) > 1:
+            out["ties"] += 1
+    d = int(top * na * nb)
+    assert top * na * nb == d
+    out["d"] = d
+    out["statistic"] = rounded(top)
+    lam2 = Fraction(d * d, nn * na * nb)
+    out["lam2"] = lam2
+    out["lam"] = gd.sqrt_round(lam2) if d else 0.0
+    out["exact_available"] = (len(set(allv)) == nn and nn <= 60)
+    use_exact = out["exact_available"] if exact == "auto" else (exact == "yes")
+    if use_exact:
+        total = math.comb(nn, na)
+        out["p_exact"] = Fraction(1) if d == 0 else Fraction(ks_exceed(na, nb, d), total)
+        out["p"] = frac_mpf(out["p_exact"])
+        out["p_method"] = "exact"
+    else:
+        x = mpmath.sqrt(frac_mpf(lam2))
+        if d == 0:
+            out["p"] = mpmath.mpf(1)
+        else:
+            with mpmath.workdps(160):
+                tot = mpmath.mpf(0)
+                j = 1
+                while True:
+                    term = mpmath.exp(-2 * j * j * x * x)
+                    tot += term if j % 2 else -term
+                    if term < mpmath.mpf(10) ** -170:
+                        break
+                    j += 1
+                out["p"] = +(2 * tot)
+            out["p"] = min(mpmath.mpf(1), out["p"])
+        out["p_method"] = "asymptotic"
+    return out

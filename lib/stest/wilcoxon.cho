@@ -44,7 +44,7 @@ fn less[&a, &b](k1: &a [int], k2: &b [int], x: int, y: int) -> [] bool {
 }
 
 // idx[0..m) sorted by (k1, k2), a bottom-up merge sort (stable)
-fn sort_idx[&a, &b, &i, &t](k1: &a [int], k2: &b [int], idx: &!i [int], tmp: &!t [int], m: int) -> [] int {
+pub fn sort_idx[&a, &b, &i, &t](k1: &a [int], k2: &b [int], idx: &!i [int], tmp: &!t [int], m: int) -> [] int {
     var width = 1;
     while width < m {
         var lo = 0;

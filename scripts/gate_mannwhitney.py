@@ -123,6 +123,11 @@ def gen(r, fi):
     return names, rows, gcol, labels, vidx, sh
 
 
+def pooled_ok(groups):
+    v = [x for g in groups for x in g]
+    return len(v) <= 60 and len(set(v)) == len(v)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bin", default=str(ROOT / "build" / "stats"))
@@ -167,7 +172,8 @@ def main():
             except subprocess.TimeoutExpired:
                 print("gate_mannwhitney: the program did not finish (hang)")
                 return 2
-            want_refusal = exact == "yes" and any(not ora[j]["exact_available"] and ora[j]["u_a"] is not None for j in chosen)
+            # the refusal is a property of the pooled values of the column (any two equal, or more than 60), whether or not a group is empty (measured by gate_ks.py: file 271 of seed 1)
+            want_refusal = exact == "yes" and any(not pooled_ok(gvs[j]) for j in chosen)
             # a refusal also when a column has no value in one group? no: that is too-few-rows, a null; the exact check is on the columns with both groups
             if want_refusal:
                 st.refused += 1

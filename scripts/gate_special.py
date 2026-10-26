@@ -223,6 +223,21 @@ def g_norm(r, i):
     return (r.uni(-38.0, -5.0) * (1.0 if r.u() < 0.5 else -1.0),)
 
 
+def g_ks(r, i):
+    """the Kolmogorov tail: x from 0.003 to 9, in four ways -- log-uniform, uniform around the switch of the two series at 1, the small values where Q is 1 to the last bit, and the large where it is a tiny number"""
+    edge = (0.0, -1.0, float("inf"), 1e-300, 5e-324, 0.04, 1.0, 3.0)
+    if i < len(edge):
+        return (edge[i],)
+    m = i % 4
+    if m == 0:
+        return (r.logu(0.003, 9.0),)
+    if m == 1:
+        return (r.uni(0.5, 1.6),)
+    if m == 2:
+        return (r.uni(0.02, 0.6),)
+    return (r.uni(2.0, 9.0),)
+
+
 def g_qnorm(r, i):
     m = i % 5
     if m == 0:
@@ -382,6 +397,7 @@ RANGES = [
     ("norm_cdf", "norm_cdf", 20000, g_norm, "rel", 2e-13, False),
     ("norm_sf", "norm_sf", 20000, g_norm, "rel", 2e-13, False),
     ("qnorm", "qnorm", 20000, g_qnorm, "qnorm", 0.0, False),
+    ("ks_sf", "ks_sf", 20000, g_ks, "rel", 2e-13, False),
     ("t_cdf", "t_cdf", 20000, g_t, "rel", 1e-12, False),
     ("t_sf", "t_sf", 20000, g_t, "rel", 1e-12, False),
     ("t_sf_huge", "t_sf", 4000, g_t_huge, "rel", 1e-12, False),

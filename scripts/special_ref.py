@@ -191,6 +191,29 @@ def norm_sf(z):
     return +(mp.erfc(mpf(z) / mp.sqrt(2)) / 2)
 
 
+def ks_sf(x):
+    """the upper tail of the Kolmogorov distribution, Q(x) = 2 sum_{j >= 1} (-1)^(j-1) exp(-2 j^2 x^2), by the alternating series itself at 160 digits (it cancels hard for small x, and the working precision pays for it: terms
+    up to exp(-2 j^2 x^2) < 10^-170); 1 for x <= 0 and 0 for +inf. Independent of the program, which uses the dual (theta) series below x = 1."""
+    x = mpf(x)
+    if x <= 0:
+        return mpf(1)
+    if x == mp.inf:
+        return mpf(0)
+    if x < mpf("0.003"):
+        # 1 - Q < exp(-pi^2 / (8 x^2)) < 1e-4700 here, and the alternating series would need 1e300 terms
+        return mpf(1)
+    with mp.workdps(160):
+        total = mpf(0)
+        j = 1
+        while True:
+            term = mp.exp(-2 * j * j * x * x)
+            total += term if j % 2 == 1 else -term
+            if term < mpf(10) ** -170:
+                break
+            j += 1
+        return +(2 * total)
+
+
 def qnorm(p):
     """the z with Phi(z) = p, p an exact double in (0, 1); p > 1/2 by symmetry (1 - p is exact)."""
     p = mpf(p)
@@ -473,6 +496,8 @@ def ref(fn, args):
         return norm_sf(a[0])
     if fn == "qnorm":
         return qnorm(a[0])
+    if fn == "ks_sf":
+        return ks_sf(a[0])
     if fn == "t_cdf":
         return t_tails(a[0], a[1])[0]
     if fn == "t_sf":
@@ -514,7 +539,7 @@ def ref(fn, args):
     raise KeyError(fn)
 
 
-ARITY = {"lgamma1p": 1, "lgamma": 1, "erf": 1, "erfc": 1, "gamma_p": 2, "gamma_q": 2, "beta_lo": 3, "beta_up": 3, "norm_cdf": 1, "norm_sf": 1, "qnorm": 1,
+ARITY = {"lgamma1p": 1, "lgamma": 1, "erf": 1, "erfc": 1, "gamma_p": 2, "gamma_q": 2, "beta_lo": 3, "beta_up": 3, "norm_cdf": 1, "norm_sf": 1, "qnorm": 1, "ks_sf": 1,
          "t_cdf": 2, "t_sf": 2, "chi2_cdf": 2, "chi2_sf": 2, "f_cdf": 3, "f_sf": 3, "binom_cdf": 3, "binom_sf": 3,
          "gamma_quantile": 2, "gamma_quantile_upper": 2, "chi2_quantile": 2, "chi2_quantile_upper": 2, "beta_quantile": 3, "beta_quantile_comp": 3, "beta_quantile_upper": 3,
          "t_quantile": 2, "t_quantile_upper": 2, "f_quantile": 3, "f_quantile_upper": 3}
@@ -571,6 +596,23 @@ def selfcheck(n=300, seed=1):
                 if nat > mpf(10) ** -20:
                     worst["beta"] = max(worst["beta"], abs(r - nat) / abs(nat))
         done["beta"] += 1
+    # the Kolmogorov tail: the alternating series of the reference against the dual (theta) series, a different identity, at 80 digits
+    worst["ks"] = mpf(0)
+    done["ks"] = 0
+    with mp.workdps(100):
+        for _ in range(n):
+            x = mpf(rnd.uniform(0.15, 6.0))
+            cdf = mpf(0)
+            for k in range(1, 400):
+                t = mp.exp(-(2 * k - 1) ** 2 * mp.pi ** 2 / (8 * x * x))
+                cdf += t
+                if t < mpf(10) ** -110:
+                    break
+            dual = 1 - mp.sqrt(2 * mp.pi) / x * cdf
+            ref = ks_sf(x)
+            if dual > mpf(10) ** -20:
+                worst["ks"] = max(worst["ks"], abs(ref - dual) / dual)
+            done["ks"] += 1
     ok = True
     for k in worst:
         print("selfcheck %s: %d points where mpmath finished, worst relative disagreement %s" % (k, done[k], mp.nstr(worst[k], 3)))
