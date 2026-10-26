@@ -594,3 +594,115 @@ def mannwhitney(a_vals, b_vals, exact, continuity):
         out["p"] = min(mpmath.mpf(1), norm_sf_exact(z2))
         out["p_method"] = "normal"
     return out
+
+
+def wx_counts(n):
+    """the number of subsets of {1 .. n} for each sum 0 .. n (n + 1) / 2: the coefficients of prod (1 + q^i), Python integers"""
+    poly = [1]
+    for i in range(1, n + 1):
+        out = poly + [0] * i
+        for k, c in enumerate(poly):
+            out[k + i] += c
+        poly = out
+    return poly
+
+
+def wx_brute(n):
+    import itertools
+    counts = [0] * (n * (n + 1) // 2 + 1)
+    for r in range(n + 1):
+        for combo in itertools.combinations(range(1, n + 1), r):
+            counts[sum(combo)] += 1
+    return counts
+
+
+def wilcoxon(pairs, zeros, exact, continuity):
+    """Wilcoxon signed-rank test of the differences d = a - b of the pairs of doubles (b may be a constant for the one-sample test), docs/rank.md section 2, from the definitions on Fractions: the differences are EXACT
+    (not rounded), the ranks are those of |d| found by comparing them, zeros: 'wilcox' (dropped), 'pratt' (ranked with the others, dropped from the sums) or 'zsplit' (ranked, their ranks shared between W+ and W-).
+    W+ and W- as Fractions; the normal score with mean and variance of the method (wilcox: n(n+1)/4 and n(n+1)(2n+1)/24 - T/48; pratt: (N(N+1) - Z(Z+1))/4 and [N(N+1)(2N+1) - Z(Z+1)(2Z+1)]/24 - T/48 over the
+    ties of the nonzero differences; zsplit: N(N+1)/4 and N(N+1)(2N+1)/24 - T/48 over all the ties, the zeros among them); exact p for no ties and no zeros dropped from a ranking and n <= 50.
+    A dict: n (rows used), nz (nonzero), zeros (count), wplus, wminus (doubles), rb (double), z (double), p, p_method, ties, reason, exact_available."""
+    d = [Fraction(a) - Fraction(b) for a, b in pairs]
+    out = {"n": len(d), "nz": 0, "zeros": 0, "wplus": None, "wminus": None, "rb": None, "z": None, "p": None, "p_method": None, "ties": 0, "reason": None, "exact_available": False, "p_exact": None, "z2": None}
+    if not d:
+        out["reason"] = "too-few-rows"
+        return out
+    if any(abs(x) >= Fraction(2) ** 1024 - Fraction(2) ** 970 for x in d):
+        out["reason"] = "difference-beyond-double"   # a - b rounds beyond the largest double
+        return out
+    nzs = [x for x in d if x != 0]
+    nzc = len(d) - len(nzs)
+    out["nz"], out["zeros"] = len(nzs), nzc
+    ranked = list(d) if zeros in ("pratt", "zsplit") else list(nzs)
+    mags = sorted(abs(x) for x in ranked)
+
+    def rank2(x):
+        below = sum(1 for m in mags if m < abs(x))
+        equal = sum(1 for m in mags if m == abs(x))
+        return 2 * below + equal + 1   # the doubled average rank
+    dplus = sum(rank2(x) for x in ranked if x > 0)
+    dminus = sum(rank2(x) for x in ranked if x < 0)
+    dzero = sum(rank2(x) for x in ranked if x == 0)
+    if zeros == "zsplit":
+        dplus2, dminus2 = 2 * dplus + dzero, 2 * dminus + dzero   # doubled again to stay in integers
+        wplus, wminus = Fraction(dplus2, 4), Fraction(dminus2, 4)
+    else:
+        wplus, wminus = Fraction(dplus, 2), Fraction(dminus, 2)
+    if len(nzs) == 0 and zeros == "wilcox":
+        out["reason"] = "variance-zero"
+        return out
+    out["wplus"], out["wminus"] = rounded(wplus), rounded(wminus)
+    if wplus + wminus != 0:
+        out["rb"] = rounded((wplus - wminus) / (wplus + wminus))
+    # ties
+    tie_src = ranked if zeros == "zsplit" else nzs
+    t3 = 0
+    seen = set()
+    for x in tie_src:
+        k = abs(x) if zeros != "zsplit" else abs(x)
+        if k in seen:
+            continue
+        seen.add(k)
+        t = sum(1 for y in tie_src if abs(y) == k)
+        if t > 1:
+            out["ties"] += 1
+            t3 += t ** 3 - t
+    nn = len(d)
+    if zeros == "wilcox":
+        n_eff = len(nzs)
+        mean = Fraction(n_eff * (n_eff + 1), 4)
+        var = Fraction(n_eff * (n_eff + 1) * (2 * n_eff + 1), 24) - Fraction(t3, 48)
+    elif zeros == "pratt":
+        mean = Fraction(nn * (nn + 1) - nzc * (nzc + 1), 4)
+        var = Fraction(nn * (nn + 1) * (2 * nn + 1) - nzc * (nzc + 1) * (2 * nzc + 1), 24) - Fraction(t3, 48)
+    else:
+        mean = Fraction(nn * (nn + 1), 4)
+        var = Fraction(nn * (nn + 1) * (2 * nn + 1), 24) - Fraction(t3, 48)
+    out["exact_available"] = (nzc == 0 or zeros == "wilcox") and out["ties"] == 0 and len(nzs) <= 50 and len(nzs) > 0 and (zeros == "wilcox" or nzc == 0)
+    use_exact = out["exact_available"] if exact == "auto" else (exact == "yes")
+    if use_exact and len(nzs) == 0:
+        use_exact = False   # no nonzero difference: nothing to test, no p-value
+    if use_exact:
+        n = len(nzs)
+        counts = wx_counts(n)
+        total = 2 ** n
+        w = int(wplus)
+        le = sum(counts[:w + 1])
+        ge = sum(counts[w:])
+        out["p_exact"] = min(Fraction(1), Fraction(2 * min(le, ge), total))
+        out["p"] = frac_mpf(out["p_exact"])
+        out["p_method"] = "exact"
+    if var == 0:
+        out["reason"] = "variance-zero"
+        return out
+    diff = wplus - mean
+    mm = abs(diff) * 2     # doubled
+    cc = Fraction(1) if (continuity and diff != 0) else Fraction(0)
+    num = (mm - cc) / 2
+    z2 = num * num / var
+    out["z2"] = z2
+    out["z"] = gd.sqrt_round(z2) * (-1 if diff < 0 else 1) if z2 != 0 else 0.0
+    if not use_exact:
+        out["p"] = min(mpmath.mpf(1), norm_sf_exact(z2))
+        out["p_method"] = "normal"
+    return out

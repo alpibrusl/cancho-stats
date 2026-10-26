@@ -1,0 +1,330 @@
+edition 5;
+
+module stest.wilcoxon;
+
+import std.vec;
+import acc.bigint;
+import acc.central;
+import flt;
+import metrics.rank;
+import special.dd;
+import stest.exact;
+import stest.welch;
+
+// The Wilcoxon signed-rank test (docs/rank.md section 2). The differences d = a - b of the rows where both cells are present (b is the constant mu0 for the one-sample test) are EXACT: Knuth's two-sum of a and -b gives
+// s = fl(a - b) and the rounding error e, with d = s + e, no bit lost (a difference whose s is beyond the largest double is the status 3). Rounding is monotone, so |d| orders as the pair (|s|, sign(s) e): two order keys
+// compared one after the other; d = 0 exactly when s = 0. The |d| are ranked (average ranks, kept DOUBLED: lo + hi + 1), by the method for zeros:
+//     wilcox  zeros dropped before ranking         pratt  zeros ranked with the others, dropped from the sums         zsplit  zeros ranked, their ranks shared between W+ and W-
+// With dp = 2 W+ and dm = 2 W- (integers: for zsplit D+ + Z (Z + 1) / 2), the matched-pairs rank-biserial correlation is (dp - dm) / (dp + dm) (one division of exact integers). The normal score has the mean M2 / 4 (M2 = 2 * mean * 2 below)
+//     z^2 = 12 (|dp - mean2| - c)^2 / Vnum        mean2 = 2 mean:  n (n + 1) / 2 (wilcox), (N (N + 1) - Z (Z + 1)) / 2 (pratt), N (N + 1) / 2 (zsplit)        c = 1 with the continuity correction (and dp != mean2), else 0
+//     Vnum = 2 S - T3          S = n (n + 1) (2 n + 1) (wilcox), N (N + 1) (2 N + 1) - Z (Z + 1) (2 Z + 1) (pratt), N (N + 1) (2 N + 1) (zsplit)          T3 = sum (t^3 - t) over the tie groups (of the nonzero differences; zsplit: of all)
+// z is one rounding of an exact rational; Vnum = 0 is the status 2. The exact p-value (no ties, no zero ranked, at most 50 nonzero differences) is the count of the subsets of the ranks over 2^n (stest.exact).
+
+pub struct Wilcoxon {
+    n: int,
+    nz: int,
+    zeros: int,
+    status: int,
+    dp: int,
+    dm: int,
+    rb: float,
+    zb: int,
+    zc: int,
+    exact: int,
+    pb: int,
+    pc: int,
+    ties: int,
+}
+
+fn less[&a, &b](k1: &a [int], k2: &b [int], x: int, y: int) -> [] bool {
+    if k1[x] != k1[y] {
+        return k1[x] < k1[y];
+    }
+    return k2[x] < k2[y];
+}
+
+// idx[0..m) sorted by (k1, k2), a bottom-up merge sort (stable)
+fn sort_idx[&a, &b, &i, &t](k1: &a [int], k2: &b [int], idx: &!i [int], tmp: &!t [int], m: int) -> [] int {
+    var width = 1;
+    while width < m {
+        var lo = 0;
+        while lo < m {
+            var mid = lo + width;
+            if mid > m {
+                mid = m;
+            }
+            var hi = lo + 2 * width;
+            if hi > m {
+                hi = m;
+            }
+            var x = lo;
+            var y = mid;
+            var o = lo;
+            while x < mid && y < hi {
+                if less(k1, k2, idx[y], idx[x]) {
+                    tmp[o] = idx[y];
+                    y = y + 1;
+                } else {
+                    tmp[o] = idx[x];
+                    x = x + 1;
+                }
+                o = o + 1;
+            }
+            while x < mid {
+                tmp[o] = idx[x];
+                x = x + 1;
+                o = o + 1;
+            }
+            while y < hi {
+                tmp[o] = idx[y];
+                y = y + 1;
+                o = o + 1;
+            }
+            lo = lo + 2 * width;
+        }
+        var c = 0;
+        while c < m {
+            idx[c] = tmp[c];
+            c = c + 1;
+        }
+        width = width * 2;
+    }
+    return 0;
+}
+
+// zmode: 0 wilcox, 1 pratt, 2 zsplit; mode: 0 auto, 1 exact, 2 normal; cont: 1 with the continuity correction. The columns ja and jb of the table of order keys (ncols wide, rows rows); jb < 0: the constant mu0.
+pub fn run[&h, &k](heap: &!h Heap, store: &k vec.Vec[int], ncols: int, ja: int, jb: int, rows: int, mu0: float, zmode: int, mode: int, cont: int) -> [heap] Wilcoxon {
+    let c = central.cap();
+    let k1 = box_slice(heap, rows + 1, 0);
+    let k2 = box_slice(heap, rows + 1, 0);
+    let sg = box_slice(heap, rows + 1, 0);
+    let idx = box_slice(heap, rows + 1, 0);
+    let tmp = box_slice(heap, rows + 1, 0);
+    let tt = box_slice(heap, 12 * c + 1, 0);
+    let fs = box_slice(heap, 16 * welch.slot() + 8, 0);
+    var used = 0;
+    var nz = 0;
+    var zeros = 0;
+    var status = 0;
+    var dp = 0;
+    var dm = 0;
+    var rb = 0.0;
+    var zb = 0;
+    var zc = 1;
+    var used_exact = 0;
+    var pb = 0;
+    var pc = 1;
+    var ties = 0;
+    var overflow = false;
+    borrow mut k1 as &!k1w in {
+        borrow mut k2 as &!k2w in {
+            borrow mut sg as &!sgw in {
+                borrow mut idx as &!idw in {
+                    borrow mut tmp as &!tmw in {
+                        borrow mut tt as &!ttw in {
+                            borrow mut fs as &!fw in {
+                                let a1 = contents(k1w);
+                                let a2 = contents(k2w);
+                                let sgn = contents(sgw);
+                                let ix = contents(idw);
+                                let t = contents(ttw);
+                                let f = contents(fw);
+                                var m = 0;
+                                var r = 0;
+                                while r < rows {
+                                    let ka = vec.get(store, r * ncols + ja);
+                                    var kb = 0;
+                                    if jb >= 0 {
+                                        kb = vec.get(store, r * ncols + jb);
+                                    }
+                                    if ka != rank.min_int() && kb != rank.min_int() {
+                                        var b = mu0;
+                                        if jb >= 0 {
+                                            b = flt.float_of_key(kb);
+                                        }
+                                        let (s0, e0) = dd.two_sum(flt.float_of_key(ka), 0.0 - b);
+                                        if s0 > 1.7976931348623157e308 || s0 < 0.0 - 1.7976931348623157e308 {
+                                            overflow = true;
+                                        }
+                                        used = used + 1;
+                                        var s = s0;
+                                        var e = e0;
+                                        if s == 0.0 {
+                                            s = 0.0;
+                                            e = 0.0;
+                                        }
+                                        if e == 0.0 {
+                                            e = 0.0;
+                                        }
+                                        if s == 0.0 {
+                                            zeros = zeros + 1;
+                                            if zmode >= 1 {
+                                                a1[m] = 0;
+                                                a2[m] = 0;
+                                                sgn[m] = 0;
+                                                ix[m] = m;
+                                                m = m + 1;
+                                            }
+                                        } else {
+                                            nz = nz + 1;
+                                            if s > 0.0 {
+                                                a1[m] = rank.key_of(s);
+                                                a2[m] = rank.key_of(e);
+                                                sgn[m] = 1;
+                                            } else {
+                                                a1[m] = rank.key_of(0.0 - s);
+                                                a2[m] = rank.key_of(0.0 - e);
+                                                sgn[m] = 0 - 1;
+                                            }
+                                            ix[m] = m;
+                                            m = m + 1;
+                                        }
+                                    }
+                                    r = r + 1;
+                                }
+                                if used == 0 {
+                                    status = 1;
+                                } else if overflow {
+                                    status = 3;
+                                } else {
+                                    sort_idx(a1, a2, ix, contents(tmw), m);
+                                    // the doubled ranks and the sums by sign; the tie groups
+                                    var sum_t = 0;
+                                    var at = 0;
+                                    while at < m {
+                                        var end = at + 1;
+                                        while end < m && a1[ix[end]] == a1[ix[at]] && a2[ix[end]] == a2[ix[at]] {
+                                            end = end + 1;
+                                        }
+                                        let size = end - at;
+                                        let rk = at + end + 1;
+                                        var q = at;
+                                        while q < end {
+                                            if sgn[ix[q]] > 0 {
+                                                dp = dp + rk;
+                                            } else if sgn[ix[q]] < 0 {
+                                                dm = dm + rk;
+                                            }
+                                            q = q + 1;
+                                        }
+                                        var counts_tie = size > 1;
+                                        if sgn[ix[at]] == 0 && zmode != 2 {
+                                            counts_tie = false;
+                                        }
+                                        if counts_tie {
+                                            ties = ties + 1;
+                                            sum_t = sum_t + size;
+                                            central.limbs_of(size, f[0..3]);
+                                            welch.smul(f, 1, 0, 3, 0, 3);
+                                            welch.smul(f, 2, 1, 6, 0, 3);
+                                            bigint.add_in(t[6 * c..7 * c], c, f[2 * welch.slot()..2 * welch.slot() + 9], 9);
+                                        }
+                                        at = end;
+                                    }
+                                    if zmode == 2 {
+                                        dp = dp + zeros * (zeros + 1) / 2;
+                                        dm = dm + zeros * (zeros + 1) / 2;
+                                    }
+                                    // N, Z for the normal score
+                                    var nn = nz;
+                                    if zmode >= 1 {
+                                        nn = used;
+                                    }
+                                    var mean2 = nn * (nn + 1) / 2;
+                                    if zmode == 1 {
+                                        mean2 = (nn * (nn + 1) - zeros * (zeros + 1)) / 2;
+                                    }
+                                    if nz == 0 && zmode == 0 {
+                                        status = 2;
+                                    }
+                                    if dp + dm > 0 {
+                                        rb = float_of(dp - dm) / float_of(dp + dm);
+                                    }
+                                    // Vnum = 2 S + sum t - sum t^3 (the cube sums are in region 6)
+                                    central.limbs_of(nn, f[3 * welch.slot()..3 * welch.slot() + 3]);
+                                    central.limbs_of(nn + 1, f[4 * welch.slot()..4 * welch.slot() + 3]);
+                                    central.limbs_of(2 * nn + 1, f[5 * welch.slot()..5 * welch.slot() + 3]);
+                                    welch.smul(f, 6, 3, 3, 4, 3);
+                                    welch.smul(f, 7, 6, 6, 5, 3);
+                                    bigint.clear(t[0..c], c);
+                                    bigint.copy(t[0..9], f[7 * welch.slot()..7 * welch.slot() + 9], 9);
+                                    if zmode == 1 {
+                                        central.limbs_of(zeros, f[8 * welch.slot()..8 * welch.slot() + 3]);
+                                        central.limbs_of(zeros + 1, f[9 * welch.slot()..9 * welch.slot() + 3]);
+                                        central.limbs_of(2 * zeros + 1, f[10 * welch.slot()..10 * welch.slot() + 3]);
+                                        welch.smul(f, 11, 8, 3, 9, 3);
+                                        welch.smul(f, 12, 11, 6, 10, 3);
+                                        bigint.sub_in(t[0..c], c, f[12 * welch.slot()..12 * welch.slot() + 9], 9);
+                                    }
+                                    // t[1] = 2 S + sum t
+                                    bigint.clear(t[c..2 * c], c);
+                                    bigint.copy(t[c..2 * c], t[0..c], c);
+                                    bigint.add_in(t[c..2 * c], c, t[0..c], c);
+                                    central.limbs_of(sum_t, f[13 * welch.slot()..13 * welch.slot() + 3]);
+                                    bigint.add_in(t[c..2 * c], c, f[13 * welch.slot()..13 * welch.slot() + 3], 3);
+                                    bigint.sub_in(t[c..2 * c], c, t[6 * c..7 * c], c);
+                                    if status == 0 && bigint.is_zero(t[c..2 * c], c) {
+                                        status = 2;
+                                    }
+                                    if status == 0 {
+                                        var am = dp - mean2;
+                                        if am < 0 {
+                                            am = 0 - am;
+                                        }
+                                        if cont == 1 && am > 0 {
+                                            am = am - 1;
+                                        }
+                                        central.limbs_of(am, f[0..3]);
+                                        welch.smul(f, 1, 0, 3, 0, 3);
+                                        central.limbs_of(12, f[2 * welch.slot()..2 * welch.slot() + 3]);
+                                        welch.smul(f, 3, 1, 6, 2, 3);
+                                        let (b1, c1) = central.sqrt_ratio_bits(heap, f[3 * welch.slot()..3 * welch.slot() + 9], 9, t[c..2 * c], welch.len_of(t, 1));
+                                        zb = b1;
+                                        zc = c1;
+                                        if dp < mean2 && zc == 0 && zb != 0 {
+                                            zb = zb | 0 - 9223372036854775807 - 1;
+                                        }
+                                    }
+                                    var use_exact = false;
+                                    let eligible = (zeros == 0 || zmode == 0) && ties == 0 && nz <= 50 && nz > 0 && (zmode == 0 || zeros == 0);
+                                    if mode == 0 {
+                                        use_exact = eligible;
+                                    } else if mode == 1 {
+                                        use_exact = true;
+                                    }
+                                    if use_exact && nz > 0 && status != 3 {
+                                        used_exact = 1;
+                                        let (le, ge) = exact.signed_rank_counts(heap, nz, dp / 2);
+                                        var lo = le;
+                                        if ge < lo {
+                                            lo = ge;
+                                        }
+                                        let total = 1 << nz;
+                                        if 2 * lo >= total {
+                                            pb = bits_of(1.0);
+                                            pc = 0;
+                                        } else {
+                                            central.limbs_of(2 * lo, f[0..3]);
+                                            central.limbs_of(total, f[welch.slot()..welch.slot() + 3]);
+                                            let (b2, c2) = central.ratio_bits(heap, f[0..3], 3, f[welch.slot()..welch.slot() + 3], 3, 0, false);
+                                            pb = b2;
+                                            pc = c2;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    unbox_slice(heap, k1);
+    unbox_slice(heap, k2);
+    unbox_slice(heap, sg);
+    unbox_slice(heap, idx);
+    unbox_slice(heap, tmp);
+    unbox_slice(heap, tt);
+    unbox_slice(heap, fs);
+    return Wilcoxon { n: used, nz: nz, zeros: zeros, status: status, dp: dp, dm: dm, rb: rb, zb: zb, zc: zc, exact: used_exact, pb: pb, pc: pc, ties: ties };
+}

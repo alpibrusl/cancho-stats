@@ -45,3 +45,37 @@ pub fn rank_sum_counts[&h](heap: &!h Heap, na: int, nn: int, r_obs: int) -> [hea
     unbox_slice(heap, g);
     return (le, ge, total);
 }
+
+// The number of subsets of the ranks 1 .. n with sum s, summed for s up to w_obs (le), from w_obs up (ge); the total is 2^n. n is at most 50, so that every count and the total stay below 2^50. By the table g[s] of the
+// ways to make the sum s from the ranks met so far, ranks in turn, sums downwards so that each rank is used once.
+pub fn signed_rank_counts[&h](heap: &!h Heap, n: int, w_obs: int) -> [heap] (int, int) {
+    let smax = n * (n + 1) / 2;
+    let g = box_slice(heap, smax + 2, 0);
+    var le = 0;
+    var ge = 0;
+    borrow mut g as &!gw in {
+        let t = contents(gw);
+        t[0] = 1;
+        var r = 1;
+        while r <= n {
+            var s = smax;
+            while s >= r {
+                t[s] = t[s] + t[s - r];
+                s = s - 1;
+            }
+            r = r + 1;
+        }
+        var s = 0;
+        while s <= smax {
+            if s <= w_obs {
+                le = le + t[s];
+            }
+            if s >= w_obs {
+                ge = ge + t[s];
+            }
+            s = s + 1;
+        }
+    }
+    unbox_slice(heap, g);
+    return (le, ge);
+}
