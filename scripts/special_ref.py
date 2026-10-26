@@ -199,6 +199,9 @@ def ks_sf(x):
         return mpf(1)
     if x == mp.inf:
         return mpf(0)
+    if x < mpf("0.003"):
+        # 1 - Q < exp(-pi^2 / (8 x^2)) < 1e-4700 here, and the alternating series would need 1e300 terms
+        return mpf(1)
     with mp.workdps(160):
         total = mpf(0)
         j = 1

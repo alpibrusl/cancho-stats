@@ -68,6 +68,8 @@ M = [
 ]
 
 EXPLAINED = {
+    "d-zero": "equivalent: d = 0 has no arrangement outside the band |i nb - j na| < 0, so the general count already gives p = (total - 0) / total = 1; and d = 1 happens only for coprime sizes, where every arrangement has a distance of at least 1 (the walk leaves the origin and the end only through points with a nonzero deviation), so p = 1 there too",
+    "paths-band-start": "equivalent: the origin has deviation 0 and the band is entered only with d >= 1 (d = 0 is answered before the count), so 0 < d and 0 <= d agree",
 }
 
 
