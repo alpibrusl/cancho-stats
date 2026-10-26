@@ -34,6 +34,7 @@ import gate_anova  # noqa: E402
 import gate_kruskal  # noqa: E402
 import gate_mannwhitney  # noqa: E402
 import gate_ks  # noqa: E402
+import gate_fisher  # noqa: E402
 import gate_wilcoxon  # noqa: E402
 import tempfile  # noqa: E402
 
@@ -372,6 +373,27 @@ def ks_lines(stats):
     return out
 
 
+def fisher_lines(stats):
+    """`stats test fisher` on 8 seeded CSV files (two to five categorical columns of two levels, up to 3,000 rows, missing cells, the generator of scripts/gate_fisher.py) and the 25 fixed tables of the gate (the tolerance tables, the margins of 0, N = 10,000
+    and 10,001): the hash of the bytes of the answers. The p-value is an exact rational rounded once, so it is the same bytes on every platform."""
+    out = []
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        r = gate_special.SM64(97)
+        h = hashlib.sha256()
+        for fi in range(len(gate_fisher.FIXED)):
+            names, rows, vidx = gate_fisher.gen(r, fi)
+            p = gate_fisher.run(stats, tmp, names, rows, ["--cols", names[vidx[0]], "--vs", "y"])
+            h.update(("exit %d %s" % (p.returncode, p.stdout)).encode())
+        out.append("test-fisher\tfixed\t%d\t%s" % (len(gate_fisher.FIXED), h.hexdigest()))
+        for done in range(8):
+            fi = len(gate_fisher.FIXED) + done
+            names, rows, vidx = gate_fisher.gen(r, fi)
+            p = gate_fisher.run(stats, tmp, names, rows, ["--cols", ",".join(names[j] for j in vidx), "--vs", "y"])
+            out.append("test-fisher\tfile%02d\t%d\t%s" % (done, len(rows), hashlib.sha256(("exit %d %s" % (p.returncode, p.stdout)).encode()).hexdigest()))
+    return out
+
+
 def wilcoxon_lines(stats):
     """`stats test wilcoxon` on 8 seeded CSV files (pairs of columns with zero differences and heavy ties, sizes up to 200, the shapes of scripts/gate_wilcoxon.py), with the three methods for zeros, `--exact no` and
     `--continuity none`, and the one-sample form: the hash of the bytes of the answers."""
@@ -430,6 +452,7 @@ def fingerprint(driver, acc, threads_check=True, stats=None):
         lines += mannwhitney_lines(stats)
         lines += wilcoxon_lines(stats)
         lines += ks_lines(stats)
+        lines += fisher_lines(stats)
     return lines, bad
 
 

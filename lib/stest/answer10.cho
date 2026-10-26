@@ -1,0 +1,122 @@
+edition 5;
+
+module stest.answer10;
+
+import std.json;
+import std.map;
+import flt;
+import csvx.cross;
+import stest.fisher;
+
+// One test of the answer for the kind fisher (docs/rank.md section 14): the sample odds ratio a d / (b c) as `statistic` and as the effect size, the exact two-sided p-value (the probabilities not larger than the observed
+// one, no tolerance; `p_method` says so), the table with its levels, and `n`. An undefined odds ratio (a d = b c = 0) or an infinite one (b c = 0 < a d) is null with a `reason`; the p-value is answered all the same.
+fn float_of_bits(bits: int) -> [] float {
+    var key = bits;
+    if bits < 0 {
+        key = bits ^ 0x7fffffffffffffff;
+    }
+    return flt.float_of_key(key);
+}
+
+pub fn put_fisher[&h, &a, &b, &x](heap: &!h Heap, w0: json.Writer, name: &a [byte], vs: &b [byte], d: &x cross.Dense, r: fisher.Fisher, rows: int) -> [heap] json.Writer {
+    var w = w0;
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "column");
+    w = json.put_string(heap, w, name);
+    w = json.put_key(heap, w, "vs");
+    w = json.put_string(heap, w, vs);
+    var reason = "";
+    var have_p = false;
+    var have_or = false;
+    if r.status == 1 {
+        reason = "too-few-rows";
+    } else {
+        if r.pc == 0 {
+            have_p = true;
+        } else {
+            reason = "p-not-computed";
+        }
+        if r.orkind == 0 {
+            have_or = true;
+        } else if len(reason) == 0 {
+            if r.orkind == 1 {
+                reason = "odds-ratio-undefined";
+            } else {
+                reason = "odds-ratio-infinite";
+            }
+        }
+    }
+    w = json.put_key(heap, w, "statistic");
+    if have_or {
+        w = json.put_float(heap, w, float_of_bits(r.orb));
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "df");
+    w = json.put_null(heap, w);
+    w = json.put_key(heap, w, "p_value");
+    if have_p {
+        w = json.put_float(heap, w, float_of_bits(r.pb));
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_method");
+    if have_p {
+        w = json.put_string(heap, w, "exact, probabilities not larger than the observed");
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "effect_size");
+    if have_or {
+        w = json.begin_object(heap, w);
+        w = json.put_key(heap, w, "name");
+        w = json.put_string(heap, w, "odds_ratio");
+        w = json.put_key(heap, w, "value");
+        w = json.put_float(heap, w, float_of_bits(r.orb));
+        w = json.end_object(heap, w);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "interval");
+    w = json.put_null(heap, w);
+    w = json.put_key(heap, w, "n");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "n");
+    w = json.put_int(heap, w, r.n);
+    w = json.put_key(heap, w, "missing");
+    w = json.put_int(heap, w, rows - r.n);
+    w = json.end_object(heap, w);
+    w = json.put_key(heap, w, "method");
+    w = json.put_string(heap, w, "fisher");
+    w = json.put_key(heap, w, "assumptions");
+    w = json.begin_object(heap, w);
+    if r.status != 1 {
+        w = json.put_key(heap, w, "levels");
+        w = json.begin_object(heap, w);
+        w = json.put_key(heap, w, "column");
+        w = json.begin_array(heap, w);
+        w = json.put_string(heap, w, map.key_at(d.cross.la, contents(d.order_a)[0]));
+        w = json.put_string(heap, w, map.key_at(d.cross.la, contents(d.order_a)[1]));
+        w = json.end_array(heap, w);
+        w = json.put_key(heap, w, "vs");
+        w = json.begin_array(heap, w);
+        w = json.put_string(heap, w, map.key_at(d.cross.lb, contents(d.order_b)[0]));
+        w = json.put_string(heap, w, map.key_at(d.cross.lb, contents(d.order_b)[1]));
+        w = json.end_array(heap, w);
+        w = json.end_object(heap, w);
+        w = json.put_key(heap, w, "table");
+        w = json.begin_array(heap, w);
+        w = json.put_int(heap, w, r.a);
+        w = json.put_int(heap, w, r.b);
+        w = json.put_int(heap, w, r.c);
+        w = json.put_int(heap, w, r.d);
+        w = json.end_array(heap, w);
+    }
+    w = json.end_object(heap, w);
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}
