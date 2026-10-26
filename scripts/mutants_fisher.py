@@ -55,6 +55,10 @@ M = [
 ]
 
 EXPLAINED = {
+    "binomial-symmetry": "equivalent in the answer: C(n, k) = C(n, n - k), so the loop over k instead of min(k, n - k) gives the same integer; only the number of steps changes",
+    "first-weight-branch": "equivalent: at c1 = r2 the two branches are C(r2, c1) = 1 and C(r1, 0) = 1",
+    "xmax": "equivalent: beyond min(r1, c1) the factor r1 - x or c1 - x of the step is 0, so every later weight is 0 and adds nothing to either sum",
+    "second-pass-start": "equivalent: after the first pass the weight slot holds w(xmax), but the binomial writes limb 0 and the multiplication writes a new limb only where it extends the length, and every later operation reads only the limbs in use, so the limbs above are never read",
 }
 
 
