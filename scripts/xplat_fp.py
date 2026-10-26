@@ -33,6 +33,7 @@ import gate_test5  # noqa: E402
 import gate_anova  # noqa: E402
 import gate_kruskal  # noqa: E402
 import gate_mannwhitney  # noqa: E402
+import gate_wilcoxon  # noqa: E402
 import tempfile  # noqa: E402
 
 GOLDEN = ROOT / "docs" / "xplat_fp.txt"
@@ -346,6 +347,30 @@ def mannwhitney_lines(stats):
     return out
 
 
+def wilcoxon_lines(stats):
+    """`stats test wilcoxon` on 8 seeded CSV files (pairs of columns with zero differences and heavy ties, sizes up to 200, the shapes of scripts/gate_wilcoxon.py), with the three methods for zeros, `--exact no` and
+    `--continuity none`, and the one-sample form: the hash of the bytes of the answers."""
+    out = []
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        r = gate_special.SM64(73)
+        done = 0
+        fi = 9 * len(gate_wilcoxon.FIXED)
+        while done < 8:
+            names, rows, shapes = gate_wilcoxon.gen(r, fi)
+            fi += 1
+            if not gate_wilcoxon.column_numeric(rows, 0) or not gate_wilcoxon.column_numeric(rows, 1):
+                continue
+            h = hashlib.sha256()
+            pairs = ["--pairs", "%s:%s" % (names[0], names[1])]
+            for extra in (pairs, pairs + ["--zeros", "pratt"], pairs + ["--zeros", "zsplit"], pairs + ["--exact", "no", "--continuity", "none"], ["--cols", names[0], "--mu0", "1"]):
+                p = gate_wilcoxon.run(stats, tmp, names, rows, extra)
+                h.update(("exit %d %s" % (p.returncode, p.stdout)).encode())
+            out.append("test-wilcoxon\tfile%02d\t%d\t%s" % (done, len(rows), h.hexdigest()))
+            done += 1
+    return out
+
+
 def fingerprint(driver, acc, threads_check=True, stats=None):
     lines = []
     bad = []
@@ -378,6 +403,7 @@ def fingerprint(driver, acc, threads_check=True, stats=None):
         lines += anova_lines(stats)
         lines += kruskal_lines(stats)
         lines += mannwhitney_lines(stats)
+        lines += wilcoxon_lines(stats)
     return lines, bad
 
 

@@ -48,6 +48,7 @@ FIXED = [
     [(1.0, 0.0), (2.0, 0.0), (3.0, 0.0), (4.0, 0.0)],
     [(5e-324, 0.0), (1e-323, 5e-324), (0.0, 0.0), (2e-323, 5e-324)],
     [(1e308, -1e308), (1.0, 2.0)],
+    [(-1e308, 1e308), (1.0, 2.0)],
     [(1e300, 1e299), (-1e300, 3e299), (2e300, 1.0)],
     [(1.0, 1.0000000000000002), (2.0, 2.0000000000000004), (3.0, 2.9999999999999996), (4.0, 4.0)],
     [(float(i), float(i % 7)) for i in range(1, 52)],
@@ -152,14 +153,17 @@ def main():
     files = 0
     with tempfile.TemporaryDirectory() as t:
         tmp = pathlib.Path(t)
+        nf = len(FIXED)
         for fi in range(a.files):
-            names, rows, shapes = gen(r, fi)
+            names, rows, shapes = gen(r, fi % nf if fi < 9 * nf else fi)
             n = len(rows)
             if not column_numeric(rows, 0) or not column_numeric(rows, 1):
                 continue
-            onesample = r.next() % 3 == 0 and fi >= len(FIXED)
-            zeros = r.pick(["wilcox", "wilcox", "pratt", "zsplit"])
-            exact = r.pick(["auto", "auto", "no", "yes"])
+            fixed = fi < 9 * nf
+            onesample = r.next() % 3 == 0 and not fixed
+            # the hand cases run under all three methods for zeros and all three exact modes
+            zeros = ["wilcox", "pratt", "zsplit"][(fi // nf) % 3] if fixed else r.pick(["wilcox", "wilcox", "pratt", "zsplit"])
+            exact = ["auto", "yes", "no"][(fi // (3 * nf)) % 3] if fixed else r.pick(["auto", "auto", "no", "yes"])
             cont = r.pick(["auto", "auto", "none"])
             mu0 = r.pick(MU0S)
             if onesample:
@@ -204,6 +208,10 @@ def main():
                     bad.append((fi, "the family: want %s %r got %r" % (correction, want_adj, fam)))
             if g.get("reason") != w["reason"]:
                 bad.append((fi, "%s reason: want %r got %r" % (tag, w["reason"], g.get("reason"))))
+            if (g.get("column") != names[0]) if onesample else (g.get("pair") != [names[0], names[1]]):
+                bad.append((fi, "%s: the test names %r" % (tag, g.get("column", g.get("pair")))))
+            if "level" in doc or (doc.get("mu0") is None) != (not onesample) or (onesample and not gd.same(doc.get("mu0"), float(mu0))):
+                bad.append((fi, "%s: the header has level %r mu0 %r" % (tag, doc.get("level"), doc.get("mu0"))))
             if g["zero_method"] != zeros or g.get("continuity") != (cont == "auto") or g.get("method") != "wilcoxon":
                 bad.append((fi, "%s echo: %r" % (tag, {k: g.get(k) for k in ("zero_method", "continuity", "method")})))
             if w["reason"] in ("too-few-rows", "difference-beyond-double"):
@@ -214,10 +222,7 @@ def main():
                 continue
             if g["n"] != {"used": w["n"], "nonzero": w["nz"], "zeros": w["zeros"]}:
                 bad.append((fi, "%s n: want %r got %r" % (tag, {"used": w["n"], "nonzero": w["nz"], "zeros": w["zeros"]}, g["n"])))
-            if w["wplus"] is None:
-                # nothing ranked (wilcox with only zero differences): the sums are not answered... the program prints 0 and 0
-                pass
-            else:
+            if True:
                 if not gd.same(g["statistic"], w["wplus"]) or not gd.same(g["w"]["plus"], w["wplus"]) or not gd.same(g["w"]["minus"], w["wminus"]):
                     bad.append((fi, "%s W: want %r %r got %r %r" % (tag, w["wplus"], w["wminus"], g.get("statistic"), g.get("w"))))
                 if g["ties"] != w["ties"]:

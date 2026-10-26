@@ -648,10 +648,10 @@ def wilcoxon(pairs, zeros, exact, continuity):
         wplus, wminus = Fraction(dplus2, 4), Fraction(dminus2, 4)
     else:
         wplus, wminus = Fraction(dplus, 2), Fraction(dminus, 2)
-    if len(nzs) == 0 and zeros == "wilcox":
-        out["reason"] = "variance-zero"
-        return out
     out["wplus"], out["wminus"] = rounded(wplus), rounded(wminus)
+    if len(nzs) == 0 and zeros == "wilcox":
+        out["reason"] = "variance-zero"   # W+ = W- = 0 is answered, the score and the p-value are not
+        return out
     if wplus + wminus != 0:
         out["rb"] = rounded((wplus - wminus) / (wplus + wminus))
     # ties

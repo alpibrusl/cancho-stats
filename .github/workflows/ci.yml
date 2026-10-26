@@ -257,6 +257,12 @@ jobs:
           python3 scripts/gate_mannwhitney.py --files 300 --scipy
           python3 scripts/gate_mannwhitney_calibration.py --replicates 2000
 
+      - name: stats test wilcoxon against Fractions and mpmath, the exact p-values bit for bit, and the size of its test
+        if: steps.stores.outputs.fetchable == 'yes'
+        run: |
+          python3 scripts/gate_wilcoxon.py --files 400 --scipy
+          python3 scripts/gate_wilcoxon_calibration.py --replicates 2000
+
       - name: Every mutant pattern still applies exactly once (a pattern that drifted would be a mutant that tests nothing)
         run: |
           python3 scripts/mutants_bigint.py --check
@@ -278,6 +284,7 @@ jobs:
           python3 scripts/mutants_anova.py --check
           python3 scripts/mutants_kruskal.py --check
           python3 scripts/mutants_mannwhitney.py --check
+          python3 scripts/mutants_wilcoxon.py --check
           python3 scripts/mutants_special.py --check
 
       - name: Quantiles (nine definitions) against an independent exact reference
@@ -415,3 +422,4 @@ jobs:
           python3 scripts/mutants_anova.py
           python3 scripts/mutants_kruskal.py
           python3 scripts/mutants_mannwhitney.py
+          python3 scripts/mutants_wilcoxon.py

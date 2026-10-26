@@ -96,7 +96,12 @@ M = [
     ("main-level-hidden", F, "                                                if !wil {\n                                                    w = json.put_key(heap, w, \"level\");", "                                                if wil {\n                                                    w = json.put_key(heap, w, \"level\");"),
 ]
 
-EXPLAINED = {}
+EXPLAINED = {
+    "variance-zero": "equivalent: Vnum = 2 S + sum t - sum t^3 is zero only when S is (S = 0 is the one case, `pratt` with only zero differences; with a nonzero difference Vnum is positive, as the variance of the signed ranks is)",
+    "order-stable": "equivalent: equal keys are one tie group, ranked alike whichever way they were ordered among themselves",
+    "exact-cap": "equivalent: when 2 min(le, ge) = total the quotient is exactly 1.0, the value the cap writes",
+    "entry-exact-p": "equivalent: a variance of zero (status 2) comes only with no nonzero difference, and then no exact p-value is computed (nz > 0 is a condition of it)",
+}
 
 
 def gates(binary, files):
