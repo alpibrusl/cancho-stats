@@ -35,6 +35,7 @@ import gate_kruskal  # noqa: E402
 import gate_mannwhitney  # noqa: E402
 import gate_ks  # noqa: E402
 import gate_fisher  # noqa: E402
+import gate_corr_exact  # noqa: E402
 import gate_wilcoxon  # noqa: E402
 import tempfile  # noqa: E402
 
@@ -394,6 +395,23 @@ def fisher_lines(stats):
     return out
 
 
+def corr_exact_lines(stats):
+    """`stats corr --method kendall --exact auto` and `--exact yes` on 8 seeded CSV files (permutations with a planted dependence, columns with ties, missing cells, 2 to 80 rows, the generator of scripts/gate_corr_exact.py): the hash
+    of the bytes of the answers. The exact p-value is an exact rational rounded once, so it is the same bytes on every platform."""
+    out = []
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        r = gate_special.SM64(101)
+        for k in range(8):
+            names, rows = gate_corr_exact.gen(r, len(gate_corr_exact.FIXED_N) + k)
+            h = hashlib.sha256()
+            for mode in ("auto", "yes"):
+                p = gate_corr_exact.run(stats, tmp, names, rows, ["--exact", mode])
+                h.update(("exit %d %s" % (p.returncode, p.stdout)).encode())
+            out.append("corr-kendall-exact\tfile%02d\t%d\t%s" % (k, len(rows), h.hexdigest()))
+    return out
+
+
 def wilcoxon_lines(stats):
     """`stats test wilcoxon` on 8 seeded CSV files (pairs of columns with zero differences and heavy ties, sizes up to 200, the shapes of scripts/gate_wilcoxon.py), with the three methods for zeros, `--exact no` and
     `--continuity none`, and the one-sample form: the hash of the bytes of the answers."""
@@ -453,6 +471,7 @@ def fingerprint(driver, acc, threads_check=True, stats=None):
         lines += wilcoxon_lines(stats)
         lines += ks_lines(stats)
         lines += fisher_lines(stats)
+        lines += corr_exact_lines(stats)
     return lines, bad
 
 

@@ -357,6 +357,19 @@ CASES = [
     ('test: fisher no such --vs', b'x,y\na,u\na,u\na,u\na,v\nb,u\nb,v\nb,v\nb,v\nb,v\n', ['test', 'fisher', '--cols', 'x', '--vs', 'z', 'f.csv'], 'stats.no-such-column', 2),
     ('test: fisher rows limit', b'x,y\na,u\na,u\na,u\na,v\nb,u\nb,v\nb,v\nb,v\nb,v\n', ['test', 'fisher', '--cols', 'x', '--vs', 'y', '--max-rows', '3', 'f.csv'], 'limit.too-many-rows', 8),
     ('test: fisher ragged', b'x,y\na,u\nb\n', ['test', 'fisher', '--cols', 'x', '--vs', 'y', 'f.csv'], 'stats.csv-ragged', 8),
+    # corr --exact (docs/rank.md section 15)
+    ('corr: kendall exact auto', b'a,b\n1,3\n2,1\n3,2\n4,5\n5,4\n', ['corr', '--method', 'kendall', '--exact', 'auto', 'f.csv'], None, 0),
+    ('corr: kendall exact yes', b'a,b\n1,3\n2,1\n3,2\n4,5\n5,4\n', ['corr', '--method', 'kendall', '--exact', 'yes', 'f.csv'], None, 0),
+    ('corr: kendall exact no', b'a,b\n1,3\n2,1\n3,2\n4,5\n5,4\n', ['corr', '--method', 'kendall', '--exact', 'no', 'f.csv'], None, 0),
+    ('corr: kendall exact yes with a tie', b'a,b\n1,3\n1,1\n3,2\n4,5\n', ['corr', '--method', 'kendall', '--exact', 'yes', 'f.csv'], 'stats.exact-unavailable', 2),
+    ('corr: kendall exact yes, 61 rows', b'a,b\n0,0\n1,7\n2,14\n3,21\n4,28\n5,35\n6,42\n7,49\n8,56\n9,2\n10,9\n11,16\n12,23\n13,30\n14,37\n15,44\n16,51\n17,58\n18,4\n19,11\n20,18\n21,25\n22,32\n23,39\n24,46\n25,53\n26,60\n27,6\n28,13\n29,20\n30,27\n31,34\n32,41\n33,48\n34,55\n35,1\n36,8\n37,15\n38,22\n39,29\n40,36\n41,43\n42,50\n43,57\n44,3\n45,10\n46,17\n47,24\n48,31\n49,38\n50,45\n51,52\n52,59\n53,5\n54,12\n55,19\n56,26\n57,33\n58,40\n59,47\n60,54\n', ['corr', '--method', 'kendall', '--exact', 'yes', 'f.csv'], 'stats.exact-unavailable', 2),
+    ('corr: kendall exact yes, 60 rows', b'a,b\n0,0\n1,7\n2,14\n3,21\n4,28\n5,35\n6,42\n7,49\n8,56\n9,3\n10,10\n11,17\n12,24\n13,31\n14,38\n15,45\n16,52\n17,59\n18,6\n19,13\n20,20\n21,27\n22,34\n23,41\n24,48\n25,55\n26,2\n27,9\n28,16\n29,23\n30,30\n31,37\n32,44\n33,51\n34,58\n35,5\n36,12\n37,19\n38,26\n39,33\n40,40\n41,47\n42,54\n43,1\n44,8\n45,15\n46,22\n47,29\n48,36\n49,43\n50,50\n51,57\n52,4\n53,11\n54,18\n55,25\n56,32\n57,39\n58,46\n59,53\n', ['corr', '--method', 'kendall', '--exact', 'yes', 'f.csv'], None, 0),
+    ('corr: kendall exact auto with ties', b'a,b\n1,3\n1,1\n3,2\n4,5\n', ['corr', '--method', 'kendall', '--exact', 'auto', 'f.csv'], None, 0),
+    ('corr: kendall exact yes, two rows', b'a,b\n1,3\n2,1\n', ['corr', '--method', 'kendall', '--exact', 'yes', 'f.csv'], None, 0),
+    ('corr: pearson exact yes', b'a,b\n1,3\n2,1\n3,2\n4,5\n5,4\n', ['corr', '--exact', 'yes', 'f.csv'], 'stats.exact-unavailable', 2),
+    ('corr: spearman exact yes', b'a,b\n1,3\n2,1\n3,2\n4,5\n5,4\n', ['corr', '--method', 'spearman', '--exact', 'yes', 'f.csv'], 'stats.exact-unavailable', 2),
+    ('corr: spearman exact auto', b'a,b\n1,3\n2,1\n3,2\n4,5\n5,4\n', ['corr', '--method', 'spearman', '--exact', 'auto', 'f.csv'], None, 0),
+    ('corr: exact unknown', b'a,b\n1,3\n2,1\n3,2\n4,5\n5,4\n', ['corr', '--method', 'kendall', '--exact', 'maybe', 'f.csv'], 'args.bad-value', 2),
     # --correct and --max-tests (docs/test.md section 12)
     ("test: t1 holm", b"a,b,c\n1,5,3\n2,5,3\n4,1,3\n", ["test", "t1", "--cols", "a,b,c", "--correct", "holm", "f.csv"], None, 0),
     ("test: t1 bh with a constant column", b"a,b\n1,3\n2,3\n4,3\n", ["test", "t1", "--cols", "a,b", "--correct", "bh", "f.csv"], None, 0),
@@ -511,7 +524,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 50)
+            k = int(r.next() % 53)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -594,6 +607,12 @@ def main():
                 argv = ["test", "fisher", "--cols", "b", "--vs", "a", "--max-rows", "6", "f.csv"]
             elif k == 49:
                 argv = ["test", "fisher", "--cols", "a,b", "--vs", "b", "--correct", "bh", "f.csv"]
+            elif k == 50:
+                argv = ["corr", "--method", "kendall", "--exact", "yes", "f.csv"]
+            elif k == 51:
+                argv = ["corr", "--method", "kendall", "--exact", "auto", "--missing", "listwise", "f.csv"]
+            elif k == 52:
+                argv = ["corr", "--method", "spearman", "--exact", "yes", "f.csv"]
             elif k == 27:
                 argv = ["test", "prop", "--cols", "a", "--success", "1", "f.csv"]
             elif k == 28:

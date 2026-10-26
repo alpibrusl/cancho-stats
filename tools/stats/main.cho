@@ -909,12 +909,23 @@ fn corr_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed:
                                             } else if bytes.equal(cli.text(args, parsed, table, "method"), "kendall") {
                                                 method = 2;
                                             }
+                                            var exact_mode = 0;
+                                            if bytes.equal(cli.text(args, parsed, table, "exact"), "yes") {
+                                                exact_mode = 2;
+                                            } else if bytes.equal(cli.text(args, parsed, table, "exact"), "auto") && cli.has(parsed, table, "exact") {
+                                                exact_mode = 1;
+                                            }
+                                            var unavailable_pairs = 0;
                                             var ia = 0;
                                             while ia < m {
                                                 var ib = ia + 1;
                                                 while ib < m {
                                                     if method == 2 {
-                                                        w = answer.put_pair_kendall(heap, w, buffer.bytes(nb), eb, sb, nc, contents(ir)[ia], contents(ir)[ib], info.rows, contents(mr));
+                                                        let (w3, no_exact) = answer.put_pair_kendall(heap, w, buffer.bytes(nb), eb, sb, nc, contents(ir)[ia], contents(ir)[ib], info.rows, contents(mr), exact_mode);
+                                                        w = w3;
+                                                        if no_exact {
+                                                            unavailable_pairs = unavailable_pairs + 1;
+                                                        }
                                                     } else {
                                                         w = answer.put_pair(heap, w, buffer.bytes(nb), eb, sb, nc, contents(ir)[ia], contents(ir)[ib], info.rows, contents(mr), method);
                                                     }
@@ -923,6 +934,9 @@ fn corr_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed:
                                                 ia = ia + 1;
                                             }
                                             w = json.end_array(heap, w);
+                                            if unavailable_pairs > 0 {
+                                                e = rule.refuse_int(heap, e, "stats.exact-unavailable", "--exact yes, but the exact p-value of Kendall's tau is available only with no ties in either column and for at most 60 rows", "use --exact auto, or --exact no for the normal approximation", "pairs", unavailable_pairs, "limit", 60);
+                                            }
                                         }
                                     }
                                 }
@@ -1747,6 +1761,9 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
     }
     if cli.has(parsed, table, "correct") && !is_test {
         e = rule.refuse(heap, e, "args.bad-value", "--correct is for stats test: the p-values of describe and corr are not a family of tests of one question", "drop --correct", "flag", "--correct");
+    }
+    if cli.operand_count(parsed) >= 1 && bytes.equal(cli.operand(args, parsed, 0), "corr") && bytes.equal(cli.text(args, parsed, table, "exact"), "yes") && !bytes.equal(cli.text(args, parsed, table, "method"), "kendall") {
+        e = rule.refuse(heap, e, "stats.exact-unavailable", "--exact yes, but corr has an exact p-value only for --method kendall", "use --method kendall, or drop --exact", "method", cli.text(args, parsed, table, "method"));
     }
     if cli.nat(args, parsed, table, "max-tests") > 32640 || cli.nat(args, parsed, table, "max-tests") < 1 {
         e = rule.refuse(heap, e, "args.bad-value", "--max-tests is outside 1 to 32640", "32640 is the pairs of 256 columns", "flag", "--max-tests");
