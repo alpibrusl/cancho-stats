@@ -74,7 +74,11 @@ M = [
     ("main-dispatch", F, "} else if bytes.equal(cli.operand(args, parsed, 1), \"mannwhitney\") {\n                            kind_of_groups = 2;", "} else if bytes.equal(cli.operand(args, parsed, 1), \"mannwhitneyx\") {\n                            kind_of_groups = 2;"),
 ]
 
-EXPLAINED = {}
+EXPLAINED = {
+    "counts-start": "equivalent: every count is doubled, and so is the total; the quotient 2 min(le, ge) / total is the same (the counts stay below 2^63: 2 C(60, 30) = 2.4e17)",
+    "p-cap": "equivalent: when 2 min(le, ge) = total the quotient is exactly 1.0, the value the cap writes",
+    "entry-normal-cap": "unreachable (argument, with z = 0 measured): 2 norm_sf(|z|) exceeds 1 only if norm_sf(|z|) exceeds 0.5, and norm_sf is decreasing from 0.5 at 0 (the gate meets z = 0, a p-value of exactly 1); the clamp stays as a guard of the contract p <= 1",
+}
 
 
 def gates(binary, files):
