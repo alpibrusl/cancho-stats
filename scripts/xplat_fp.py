@@ -33,6 +33,7 @@ import gate_test5  # noqa: E402
 import gate_anova  # noqa: E402
 import gate_kruskal  # noqa: E402
 import gate_mannwhitney  # noqa: E402
+import gate_ks  # noqa: E402
 import gate_wilcoxon  # noqa: E402
 import tempfile  # noqa: E402
 
@@ -347,6 +348,30 @@ def mannwhitney_lines(stats):
     return out
 
 
+def ks_lines(stats):
+    """`stats test ks` on 8 seeded CSV files (the files of mannwhitney_lines, a different seed), with `--exact auto` and `--exact no`: the hash of the bytes of the two answers (the exact p-value for up to 60 distinct values, the
+    asymptotic one above)."""
+    out = []
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        r = gate_special.SM64(83)
+        done = 0
+        fi = len(gate_mannwhitney.FIXED)
+        while done < 8:
+            names, rows, gcol, labels, vidx, shapes = gate_mannwhitney.gen(r, fi)
+            fi += 1
+            num = [j for j in vidx if gate_mannwhitney.column_numeric(rows, j)]
+            if not num or len(set(rw[gcol] for rw in rows if rw[gcol] != "")) != 2:
+                continue
+            h = hashlib.sha256()
+            for extra in ([], ["--exact", "no"]):
+                p = gate_ks.run(stats, tmp, names, rows, ["--cols", ",".join(names[j] for j in num), "--group", "g"] + extra)
+                h.update(("exit %d %s" % (p.returncode, p.stdout)).encode())
+            out.append("test-ks\tfile%02d\t%d\t%s" % (done, len(rows), h.hexdigest()))
+            done += 1
+    return out
+
+
 def wilcoxon_lines(stats):
     """`stats test wilcoxon` on 8 seeded CSV files (pairs of columns with zero differences and heavy ties, sizes up to 200, the shapes of scripts/gate_wilcoxon.py), with the three methods for zeros, `--exact no` and
     `--continuity none`, and the one-sample form: the hash of the bytes of the answers."""
@@ -404,6 +429,7 @@ def fingerprint(driver, acc, threads_check=True, stats=None):
         lines += kruskal_lines(stats)
         lines += mannwhitney_lines(stats)
         lines += wilcoxon_lines(stats)
+        lines += ks_lines(stats)
     return lines, bad
 
 

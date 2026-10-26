@@ -309,6 +309,34 @@ CASES = [
     ("test: wilcoxon rows limit", b"a,b\n1,2\n3,4\n5,6\n", ["test", "wilcoxon", "--pairs", "a:b", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
     ("test: wilcoxon pairs limit", b"a,b\n1,2\n3,4\n", ["test", "wilcoxon", "--pairs", "a:b,b:a", "--max-pairs", "1", "f.csv"], "limit.too-many-pairs", 8),
     ("test: wilcoxon ragged", b"a,b\n1,2\n3\n", ["test", "wilcoxon", "--pairs", "a:b", "f.csv"], "stats.csv-ragged", 8),
+    # test ks (docs/rank.md section 2)
+    ('test: ks two groups', b'v,g\n1,a\n2,a\n3.5,a\n2.5,b\n4,b\n9,b\n', ['test', 'ks', '--cols', 'v', '--group', 'g', 'f.csv'], None, 0),
+    ('test: ks two columns', b'v,w,g\n1,5,a\n2,3,a\n4,3,b\n7,1,b\n8,2,b\n', ['test', 'ks', '--cols', 'v,w', '--group', 'g', 'f.csv'], None, 0),
+    ('test: ks groups of one row each', b'v,g\n1,a\n2,b\n', ['test', 'ks', '--cols', 'v', '--group', 'g', 'f.csv'], None, 0),
+    ('test: ks every value equal', b'v,g\n3,a\n3,a\n3,b\n3,b\n3,b\n', ['test', 'ks', '--cols', 'v', '--group', 'g', 'f.csv'], None, 0),
+    ('test: ks ties', b'v,g\n1,a\n2,a\n2,a\n3,a\n5,a\n2,b\n3,b\n3,b\n6,b\n7,b\n8,b\n', ['test', 'ks', '--cols', 'v', '--group', 'g', 'f.csv'], None, 0),
+    ('test: ks a group with no value', b'v,g\n1,a\n2,a\n,b\n,b\n', ['test', 'ks', '--cols', 'v', '--group', 'g', 'f.csv'], None, 0),
+    ('test: ks missing group cells and values', b'v,g\n1,a\n,a\n2,\n4,b\n7,b\n9,a\n', ['test', 'ks', '--cols', 'v', '--group', 'g', 'f.csv'], None, 0),
+    ('test: ks exact yes without ties', b'v,g\n1,a\n2,a\n3.5,a\n2.5,b\n4,b\n9,b\n', ['test', 'ks', '--cols', 'v', '--group', 'g', '--exact', 'yes', 'f.csv'], None, 0),
+    ('test: ks exact no', b'v,g\n1,a\n2,a\n3.5,a\n2.5,b\n4,b\n9,b\n', ['test', 'ks', '--cols', 'v', '--group', 'g', '--exact', 'no', 'f.csv'], None, 0),
+    ('test: ks holm', b'v,w,g\n1,5,a\n2,3,a\n4,3,b\n7,1,b\n8,2,b\n', ['test', 'ks', '--cols', 'v,w', '--group', 'g', '--correct', 'holm', 'f.csv'], None, 0),
+    ('test: ks exact yes with ties', b'v,g\n1,a\n2,a\n2,b\n4,b\n', ['test', 'ks', '--cols', 'v', '--group', 'g', '--exact', 'yes', 'f.csv'], 'stats.exact-unavailable', 2),
+    ('test: ks exact yes, 61 values', b'v,g\n0,b\n1,a\n2,b\n3,a\n4,b\n5,a\n6,b\n7,a\n8,b\n9,a\n10,b\n11,a\n12,b\n13,a\n14,b\n15,a\n16,b\n17,a\n18,b\n19,a\n20,b\n21,a\n22,b\n23,a\n24,b\n25,a\n26,b\n27,a\n28,b\n29,a\n30,b\n31,a\n32,b\n33,a\n34,b\n35,a\n36,b\n37,a\n38,b\n39,a\n40,b\n41,a\n42,b\n43,a\n44,b\n45,a\n46,b\n47,a\n48,b\n49,a\n50,b\n51,a\n52,b\n53,a\n54,b\n55,a\n56,b\n57,a\n58,b\n59,a\n60,b\n', ['test', 'ks', '--cols', 'v', '--group', 'g', '--exact', 'yes', 'f.csv'], 'stats.exact-unavailable', 2),
+    ('test: ks exact yes, 60 values', b'v,g\n0,b\n1,a\n2,b\n3,a\n4,b\n5,a\n6,b\n7,a\n8,b\n9,a\n10,b\n11,a\n12,b\n13,a\n14,b\n15,a\n16,b\n17,a\n18,b\n19,a\n20,b\n21,a\n22,b\n23,a\n24,b\n25,a\n26,b\n27,a\n28,b\n29,a\n30,b\n31,a\n32,b\n33,a\n34,b\n35,a\n36,b\n37,a\n38,b\n39,a\n40,b\n41,a\n42,b\n43,a\n44,b\n45,a\n46,b\n47,a\n48,b\n49,a\n50,b\n51,a\n52,b\n53,a\n54,b\n55,a\n56,b\n57,a\n58,b\n59,a\n', ['test', 'ks', '--cols', 'v', '--group', 'g', '--exact', 'yes', 'f.csv'], None, 0),
+    ('test: ks exact unknown', b'v,g\n1,a\n2,b\n', ['test', 'ks', '--cols', 'v', '--group', 'g', '--exact', 'maybe', 'f.csv'], 'args.bad-value', 2),
+    ('test: ks no group flag', b'v,g\n1,a\n2,b\n', ['test', 'ks', '--cols', 'v', 'f.csv'], 'stats.test-columns', 2),
+    ('test: ks no columns', b'v,g\n1,a\n2,b\n', ['test', 'ks', '--group', 'g', 'f.csv'], 'stats.test-columns', 2),
+    ('test: ks one level', b'v,g\n1,a\n2,a\n', ['test', 'ks', '--cols', 'v', '--group', 'g', 'f.csv'], 'stats.group-levels', 2),
+    ('test: ks three levels', b'v,g\n1,a\n2,b\n3,c\n', ['test', 'ks', '--cols', 'v', '--group', 'g', 'f.csv'], 'stats.group-levels', 2),
+    ('test: ks group column empty', b'v,g\n1,\n2,\n', ['test', 'ks', '--cols', 'v', '--group', 'g', 'f.csv'], 'stats.group-levels', 2),
+    ('test: ks no such group column', b'v,g\n1,a\n2,b\n', ['test', 'ks', '--cols', 'v', '--group', 'z', 'f.csv'], 'stats.no-such-column', 2),
+    ('test: ks no such column', b'v,g\n1,a\n2,b\n', ['test', 'ks', '--cols', 'z', '--group', 'g', 'f.csv'], 'stats.no-such-column', 2),
+    ('test: ks text column', b'v,w,g\n1,x,a\n2,y,b\n', ['test', 'ks', '--cols', 'w', '--group', 'g', 'f.csv'], 'stats.non-numeric', 2),
+    ('test: ks text in the second group', b'v,g\n1,a\n2,a\nx,b\n3,b\n', ['test', 'ks', '--cols', 'v', '--group', 'g', 'f.csv'], 'stats.non-numeric', 2),
+    ('test: ks groups limit', b'v,g\n1,a\n2,b\n', ['test', 'ks', '--cols', 'v', '--group', 'g', '--max-groups', '1', 'f.csv'], 'limit.too-many-groups', 8),
+    ('test: ks rows limit', b'v,g\n1,a\n2,b\n3,b\n', ['test', 'ks', '--cols', 'v', '--group', 'g', '--max-rows', '2', 'f.csv'], 'limit.too-many-rows', 8),
+    ('test: ks cells limit', b'v,g\n1,a\n2,a\n3,b\n4,b\n', ['test', 'ks', '--cols', 'v', '--group', 'g', '--max-cells', '3', 'f.csv'], 'limit.too-many-cells', 8),
+    ('test: ks ragged', b'v,g\n1,a\n2\n', ['test', 'ks', '--cols', 'v', '--group', 'g', 'f.csv'], 'stats.csv-ragged', 8),
     # --correct and --max-tests (docs/test.md section 12)
     ("test: t1 holm", b"a,b,c\n1,5,3\n2,5,3\n4,1,3\n", ["test", "t1", "--cols", "a,b,c", "--correct", "holm", "f.csv"], None, 0),
     ("test: t1 bh with a constant column", b"a,b\n1,3\n2,3\n4,3\n", ["test", "t1", "--cols", "a,b", "--correct", "bh", "f.csv"], None, 0),
@@ -463,7 +491,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 44)
+            k = int(r.next() % 47)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -534,6 +562,12 @@ def main():
                 argv = ["test", "wilcoxon", "--cols", "a,b", "--mu0", "1", "--zeros", "zsplit", "--exact", "yes", "f.csv"]
             elif k == 43:
                 argv = ["test", "wilcoxon", "--pairs", "b:a", "--zeros", "pratt", "--exact", "no", "--continuity", "none", "--correct", "bh", "--max-rows", "6", "f.csv"]
+            elif k == 44:
+                argv = ["test", "ks", "--cols", "a", "--group", "b", "f.csv"]
+            elif k == 45:
+                argv = ["test", "ks", "--cols", "b", "--group", "a", "--exact", "yes", "--max-groups", "3", "f.csv"]
+            elif k == 46:
+                argv = ["test", "ks", "--cols", "a,b", "--group", "b", "--exact", "no", "--correct", "bh", "f.csv"]
             elif k == 27:
                 argv = ["test", "prop", "--cols", "a", "--success", "1", "f.csv"]
             elif k == 28:

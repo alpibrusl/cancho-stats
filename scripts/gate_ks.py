@@ -42,6 +42,11 @@ def run(binary, tmp, names, rows, extra):
     return subprocess.run([binary, "test", "ks", "--root", str(tmp)] + list(extra) + ["f.csv"], capture_output=True, text=True, timeout=600)
 
 
+def pooled_ok(groups):
+    v = [x for g in groups for x in g]
+    return len(v) <= 60 and len(set(v)) == len(v)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bin", default=str(ROOT / "build" / "stats"))
@@ -95,7 +100,8 @@ def main():
             except subprocess.TimeoutExpired:
                 print("gate_ks: the program did not finish (hang)")
                 return 2
-            want_refusal = exact == "yes" and any(not ora[j]["exact_available"] and ora[j]["d"] is not None for j in chosen)
+            # the refusal is a property of the pooled values of the column (any two equal, or more than 60), whether or not a group is empty
+            want_refusal = exact == "yes" and any(not pooled_ok(gvs[j]) for j in chosen)
             if want_refusal:
                 refused += 1
                 doc = json.loads(p.stdout) if p.stdout else {}
