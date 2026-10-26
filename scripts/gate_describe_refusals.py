@@ -251,6 +251,35 @@ CASES = [
     ("test: kruskal rows limit", b"v,g\n1,a\n2,b\n3,b\n", ["test", "kruskal", "--cols", "v", "--group", "g", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
     ("test: kruskal ragged", b"v,g\n1,a\n2\n", ["test", "kruskal", "--cols", "v", "--group", "g", "f.csv"], "stats.csv-ragged", 8),
     ("test: kruskal too many tests for a family", b"a,b,c,g\n1,5,3,u\n2,5,3,v\n", ["test", "kruskal", "--cols", "a,b,c", "--group", "g", "--correct", "holm", "--max-tests", "2", "f.csv"], "limit.too-many-tests", 8),
+    # test mannwhitney (docs/rank.md section 2)
+    ("test: mannwhitney two groups", b"v,g\n1,a\n2,a\n3.5,a\n2.5,b\n4,b\n9,b\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: mannwhitney two columns, continuity none", b"v,w,g\n1,5,a\n2,3,a\n4,3,b\n7,1,b\n8,2,b\n", ["test", "mannwhitney", "--cols", "v,w", "--group", "g", "--continuity", "none", "f.csv"], None, 0),
+    ("test: mannwhitney groups of one row each", b"v,g\n1,a\n2,b\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: mannwhitney every value equal", b"v,g\n3,a\n3,a\n3,b\n3,b\n3,b\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: mannwhitney ties", b"v,g\n1,a\n2,a\n2,a\n3,a\n5,a\n2,b\n3,b\n3,b\n6,b\n7,b\n8,b\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: mannwhitney a group with no value", b"v,g\n1,a\n2,a\n,b\n,b\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: mannwhitney missing group cells and values", b"v,g\n1,a\n,a\n2,\n4,b\n7,b\n9,a\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "f.csv"], None, 0),
+    ("test: mannwhitney exact yes without ties", b"v,g\n1,a\n2,a\n3.5,a\n2.5,b\n4,b\n9,b\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "--exact", "yes", "f.csv"], None, 0),
+    ("test: mannwhitney exact no", b"v,g\n1,a\n2,a\n3.5,a\n2.5,b\n4,b\n9,b\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "--exact", "no", "f.csv"], None, 0),
+    ("test: mannwhitney holm", b"v,w,g\n1,5,a\n2,3,a\n4,3,b\n7,1,b\n8,2,b\n", ["test", "mannwhitney", "--cols", "v,w", "--group", "g", "--correct", "holm", "f.csv"], None, 0),
+    ("test: mannwhitney exact yes with ties", b"v,g\n1,a\n2,a\n2,b\n4,b\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "--exact", "yes", "f.csv"], "stats.exact-unavailable", 2),
+    ("test: mannwhitney exact yes, 61 values", b"v,g\n" + b"".join(b"%d,%s\n" % (i, b"a" if i % 2 else b"b") for i in range(61)), ["test", "mannwhitney", "--cols", "v", "--group", "g", "--exact", "yes", "f.csv"], "stats.exact-unavailable", 2),
+    ("test: mannwhitney exact yes, 60 values", b"v,g\n" + b"".join(b"%d,%s\n" % (i, b"a" if i % 2 else b"b") for i in range(60)), ["test", "mannwhitney", "--cols", "v", "--group", "g", "--exact", "yes", "f.csv"], None, 0),
+    ("test: mannwhitney exact unknown", b"v,g\n1,a\n2,b\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "--exact", "maybe", "f.csv"], "args.bad-value", 2),
+    ("test: mannwhitney continuity unknown", b"v,g\n1,a\n2,b\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "--continuity", "yes", "f.csv"], "args.bad-value", 2),
+    ("test: mannwhitney no group flag", b"v,g\n1,a\n2,b\n", ["test", "mannwhitney", "--cols", "v", "f.csv"], "stats.test-columns", 2),
+    ("test: mannwhitney no columns", b"v,g\n1,a\n2,b\n", ["test", "mannwhitney", "--group", "g", "f.csv"], "stats.test-columns", 2),
+    ("test: mannwhitney one level", b"v,g\n1,a\n2,a\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "f.csv"], "stats.group-levels", 2),
+    ("test: mannwhitney three levels", b"v,g\n1,a\n2,b\n3,c\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "f.csv"], "stats.group-levels", 2),
+    ("test: mannwhitney group column empty", b"v,g\n1,\n2,\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "f.csv"], "stats.group-levels", 2),
+    ("test: mannwhitney no such group column", b"v,g\n1,a\n2,b\n", ["test", "mannwhitney", "--cols", "v", "--group", "z", "f.csv"], "stats.no-such-column", 2),
+    ("test: mannwhitney no such column", b"v,g\n1,a\n2,b\n", ["test", "mannwhitney", "--cols", "z", "--group", "g", "f.csv"], "stats.no-such-column", 2),
+    ("test: mannwhitney text column", b"v,w,g\n1,x,a\n2,y,b\n", ["test", "mannwhitney", "--cols", "w", "--group", "g", "f.csv"], "stats.non-numeric", 2),
+    ("test: mannwhitney text in the second group", b"v,g\n1,a\n2,a\nx,b\n3,b\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "f.csv"], "stats.non-numeric", 2),
+    ("test: mannwhitney groups limit", b"v,g\n1,a\n2,b\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "--max-groups", "1", "f.csv"], "limit.too-many-groups", 8),
+    ("test: mannwhitney rows limit", b"v,g\n1,a\n2,b\n3,b\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "--max-rows", "2", "f.csv"], "limit.too-many-rows", 8),
+    ("test: mannwhitney cells limit", b"v,g\n1,a\n2,a\n3,b\n4,b\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "--max-cells", "3", "f.csv"], "limit.too-many-cells", 8),
+    ("test: mannwhitney ragged", b"v,g\n1,a\n2\n", ["test", "mannwhitney", "--cols", "v", "--group", "g", "f.csv"], "stats.csv-ragged", 8),
     # --correct and --max-tests (docs/test.md section 12)
     ("test: t1 holm", b"a,b,c\n1,5,3\n2,5,3\n4,1,3\n", ["test", "t1", "--cols", "a,b,c", "--correct", "holm", "f.csv"], None, 0),
     ("test: t1 bh with a constant column", b"a,b\n1,3\n2,3\n4,3\n", ["test", "t1", "--cols", "a,b", "--correct", "bh", "f.csv"], None, 0),
@@ -405,7 +434,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 38)
+            k = int(r.next() % 41)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -464,6 +493,12 @@ def main():
                 argv = ["test", "kruskal", "--cols", "a", "--group", "b", "f.csv"]
             elif k == 37:
                 argv = ["test", "kruskal", "--cols", "b", "--group", "a", "--correct", "bh", "--max-groups", "3", "--max-rows", "6", "f.csv"]
+            elif k == 38:
+                argv = ["test", "mannwhitney", "--cols", "a", "--group", "b", "f.csv"]
+            elif k == 39:
+                argv = ["test", "mannwhitney", "--cols", "b", "--group", "a", "--exact", "yes", "--max-groups", "3", "f.csv"]
+            elif k == 40:
+                argv = ["test", "mannwhitney", "--cols", "a,b", "--group", "b", "--exact", "no", "--continuity", "none", "--correct", "bh", "f.csv"]
             elif k == 27:
                 argv = ["test", "prop", "--cols", "a", "--success", "1", "f.csv"]
             elif k == 28:

@@ -1,0 +1,131 @@
+edition 5;
+
+module stest.answer7;
+
+import std.json;
+import std.vec;
+import flt;
+import special.dist;
+import stest.answer;
+import stest.mannwhitney;
+
+// One test of the answer for the kind mannwhitney (docs/rank.md section 2): the U statistic of the group a (the level that is first by bytes) against the group b over the column `col`. `statistic` is U_a (a half-integer
+// only through ties), `u` has both, `z` the normal score (with the continuity correction if it was asked) or null, `p_method` says "exact" or "normal" (tie-corrected), `effect_size` is the rank-biserial correlation
+// (positive: a tends to be larger).
+fn float_of_bits(bits: int) -> [] float {
+    var key = bits;
+    if bits < 0 {
+        key = bits ^ 0x7fffffffffffffff;
+    }
+    return flt.float_of_key(key);
+}
+
+pub fn put_mannwhitney[&h, &n, &en](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], col: int, r: mannwhitney.MannWhitney, continuity: bool) -> [heap] json.Writer {
+    var w = w0;
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "column");
+    w = answer.put_name(heap, w, names, ends, col);
+    var reason = "";
+    var have_z = false;
+    var have_p = false;
+    var p = 0.0;
+    var method = "normal";
+    if r.status == 1 {
+        reason = "too-few-rows";
+    } else if r.status == 2 {
+        reason = "variance-zero";
+    } else if r.zc != 0 {
+        reason = "statistic-beyond-double";
+    } else {
+        have_z = true;
+    }
+    if r.status != 1 && r.exact == 1 {
+        method = "exact";
+        if r.pc == 0 {
+            have_p = true;
+            p = float_of_bits(r.pb);
+        } else {
+            reason = "p-not-computed";
+        }
+    } else if have_z {
+        var az = float_of_bits(r.zb);
+        if az < 0.0 {
+            az = 0.0 - az;
+        }
+        let (sf, code) = dist.norm_sf(az);
+        if code == 0 {
+            have_p = true;
+            p = 2.0 * sf;
+            if p > 1.0 {
+                p = 1.0;
+            }
+        } else {
+            reason = "p-not-computed";
+        }
+    }
+    w = json.put_key(heap, w, "statistic");
+    if r.status != 1 {
+        w = json.put_float(heap, w, float_of(r.twice_u) / 2.0);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "u");
+    if r.status != 1 {
+        w = json.begin_object(heap, w);
+        w = json.put_key(heap, w, "a");
+        w = json.put_float(heap, w, float_of(r.twice_u) / 2.0);
+        w = json.put_key(heap, w, "b");
+        w = json.put_float(heap, w, float_of(2 * r.na * r.nb - r.twice_u) / 2.0);
+        w = json.end_object(heap, w);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "z");
+    if have_z {
+        w = json.put_float(heap, w, float_of_bits(r.zb));
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_value");
+    if have_p {
+        w = json.put_float(heap, w, p);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p_method");
+    if r.status != 1 && (have_p || r.exact == 1 || have_z) {
+        w = json.put_string(heap, w, method);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "continuity");
+    w = json.put_bool(heap, w, continuity);
+    w = json.put_key(heap, w, "effect_size");
+    if r.status != 1 {
+        w = json.begin_object(heap, w);
+        w = json.put_key(heap, w, "name");
+        w = json.put_string(heap, w, "rank_biserial");
+        w = json.put_key(heap, w, "value");
+        w = json.put_float(heap, w, r.rb);
+        w = json.end_object(heap, w);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "n");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "a");
+    w = json.put_int(heap, w, r.na);
+    w = json.put_key(heap, w, "b");
+    w = json.put_int(heap, w, r.nb);
+    w = json.end_object(heap, w);
+    w = json.put_key(heap, w, "ties");
+    w = json.put_int(heap, w, r.ties);
+    w = json.put_key(heap, w, "method");
+    w = json.put_string(heap, w, "mannwhitney");
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}

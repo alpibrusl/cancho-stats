@@ -32,6 +32,7 @@ import gate_test3  # noqa: E402
 import gate_test5  # noqa: E402
 import gate_anova  # noqa: E402
 import gate_kruskal  # noqa: E402
+import gate_mannwhitney  # noqa: E402
 import tempfile  # noqa: E402
 
 GOLDEN = ROOT / "docs" / "xplat_fp.txt"
@@ -321,6 +322,30 @@ def kruskal_lines(stats):
     return out
 
 
+def mannwhitney_lines(stats):
+    """`stats test mannwhitney` on 8 seeded CSV files (two groups of unequal sizes up to 200, lattices with heavy ties, empty cells, the shapes of scripts/gate_mannwhitney.py), with `--exact auto`, `--exact no` and `--continuity none`:
+    the hash of the bytes of the three answers (the exact p-value for up to 60 values, the normal one above)."""
+    out = []
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        r = gate_special.SM64(71)
+        done = 0
+        fi = len(gate_mannwhitney.FIXED)
+        while done < 8:
+            names, rows, gcol, labels, vidx, shapes = gate_mannwhitney.gen(r, fi)
+            fi += 1
+            num = [j for j in vidx if gate_mannwhitney.column_numeric(rows, j)]
+            if not num or len(set(rw[gcol] for rw in rows if rw[gcol] != "")) != 2:
+                continue
+            h = hashlib.sha256()
+            for extra in ([], ["--exact", "no"], ["--continuity", "none"]):
+                p = gate_mannwhitney.run(stats, tmp, names, rows, ["--cols", ",".join(names[j] for j in num), "--group", "g"] + extra)
+                h.update(("exit %d %s" % (p.returncode, p.stdout)).encode())
+            out.append("test-mannwhitney\tfile%02d\t%d\t%s" % (done, len(rows), h.hexdigest()))
+            done += 1
+    return out
+
+
 def fingerprint(driver, acc, threads_check=True, stats=None):
     lines = []
     bad = []
@@ -352,6 +377,7 @@ def fingerprint(driver, acc, threads_check=True, stats=None):
         lines += test5_lines(stats)
         lines += anova_lines(stats)
         lines += kruskal_lines(stats)
+        lines += mannwhitney_lines(stats)
     return lines, bad
 
 

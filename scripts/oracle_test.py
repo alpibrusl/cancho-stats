@@ -506,3 +506,91 @@ def kruskal(groups):
     out["eps"] = rounded(hs / (nn - 1))
     out["p"] = chi2_sf_exact(len(live) - 1, hs)
     return out
+
+
+def norm_sf_exact(z2):
+    """P(Z > z) for z = sqrt(z2) >= 0 at the exact rational z2, doubled for the two-sided p: erfc(z / sqrt 2), 60 digits"""
+    return mpmath.erfc(mpmath.sqrt(frac_mpf(Fraction(z2))) / mpmath.sqrt(2))
+
+
+def mw_counts(na, nb):
+    """the number of arrangements of na labels among na + nb ranks for each value of U (0 .. na nb): the coefficients of the Gaussian binomial [na + nb choose na]_q = prod_{i = 1..na} (1 - q^(nb + i)) / (1 - q^i), by
+    multiplying and dividing the polynomial (the division is exact), Python integers. It shares nothing with the program's table of rank sums, and is checked against the enumeration of every choice of ranks for small sizes."""
+    poly = [1]
+    for i in range(1, na + 1):
+        # multiply by 1 - q^(nb + i)
+        shift = nb + i
+        out = poly + [0] * shift
+        for k, c in enumerate(poly):
+            out[k + shift] -= c
+        # divide by 1 - q^i: out / (1 - q^i) = out * (1 + q^i + q^2i + ...), computed as the running sum with stride i
+        res = out[:]
+        for k in range(i, len(res)):
+            res[k] += res[k - i]
+        # the quotient has degree len(poly) - 1 + nb
+        poly = res[:len(poly) + nb]
+    return poly
+
+
+def mw_brute(na, nb):
+    """the same counts by listing every choice of the na ranks of group a among 1 .. na + nb (small sizes only)"""
+    import itertools
+    counts = [0] * (na * nb + 1)
+    for combo in itertools.combinations(range(1, na + nb + 1), na):
+        counts[sum(combo) - na * (na + 1) // 2] += 1
+    return counts
+
+
+def mannwhitney(a_vals, b_vals, exact, continuity):
+    """Mann-Whitney U of the present values of group a against group b (docs/rank.md section 2), from the definition U_a = #(a > b) + #(a = b) / 2 over the pairs (no ranks), the tie correction from the sizes of the groups of equal values.
+    exact: 'auto', 'yes' or 'no'; continuity: True for the correction of 0.5. A dict: na, nb, u_a (a Fraction), statistic (double), rb (rank-biserial, double), z (double or None), p (mpf or Fraction for the exact), p_method ('exact' or 'normal'),
+    ties (number of tie groups across both groups), reason, exact_available (bool)."""
+    na, nb = len(a_vals), len(b_vals)
+    out = {"na": na, "nb": nb, "u_a": None, "statistic": None, "rb": None, "z": None, "p": None, "p_method": None, "ties": 0, "reason": None, "exact_available": False, "p_exact": None}
+    fa = [Fraction(v) for v in a_vals]
+    fb = [Fraction(v) for v in b_vals]
+    if na == 0 or nb == 0:
+        out["reason"] = "too-few-rows"
+        return out
+    twice_u = sum((2 if x > y else (1 if x == y else 0)) for x in fa for y in fb)
+    out["u_a"] = Fraction(twice_u, 2)
+    out["statistic"] = rounded(Fraction(twice_u, 2))
+    out["rb"] = rounded(Fraction(twice_u - na * nb, na * nb))
+    allv = fa + fb
+    nn = na + nb
+    t3 = 0
+    for v in set(allv):
+        t = allv.count(v)
+        if t > 1:
+            out["ties"] += 1
+            t3 += t ** 3 - t
+    out["exact_available"] = (t3 == 0 and nn <= 60)
+    use_exact = out["exact_available"] if exact == "auto" else (exact == "yes")
+    m = twice_u - na * nb
+    if use_exact:
+        counts = mw_counts(na, nb)
+        total = sum(counts)
+        u = int(out["u_a"])
+        le = sum(counts[:u + 1])
+        ge = sum(counts[u:])
+        out["p_exact"] = min(Fraction(1), Fraction(2 * min(le, ge), total))
+        out["p"] = frac_mpf(out["p_exact"])
+        out["p_method"] = "exact"
+    base = nn ** 3 - nn - t3
+    if base == 0:
+        out["reason"] = "variance-zero"
+        out["p"] = None
+        out["p_method"] = None if not use_exact else "exact"
+        if use_exact:
+            out["p"] = frac_mpf(out["p_exact"])
+        return out
+    mm = abs(m)
+    if continuity and mm > 0:
+        mm -= 1
+    z2 = Fraction(3 * mm * mm * nn * (nn - 1), na * nb * base)
+    out["z2"] = z2
+    out["z"] = gd.sqrt_round(z2) * (-1 if m < 0 else 1) if z2 != 0 else 0.0   # z = 0 is printed as +0
+    if not use_exact:
+        out["p"] = min(mpmath.mpf(1), norm_sf_exact(z2))
+        out["p_method"] = "normal"
+    return out
