@@ -1,0 +1,191 @@
+edition 5;
+
+module stest.fisher;
+
+import acc.bigint;
+import acc.central;
+
+// Fisher's exact test of a 2 x 2 table (docs/rank.md sections 2 and 14). The table is (a b; c d) with the margins r1 = a + b, r2 = c + d, c1 = a + c and N = a + b + c + d. The probability of x in the first cell is
+// w(x) / W, w(x) = C(r1, x) C(r2, c1 - x), W = C(N, c1) the sum of the w(x) over x from max(0, c1 - r2) to min(r1, c1). The two-sided p-value is the sum of the w(x) NOT LARGER than w(a), over W: two exact big integers
+// compared one with the other, so there is NO tolerance (R and scipy admit a table whose probability is larger by up to a relative 1e-7), and the quotient is rounded once. The weights are walked from the first x by
+//     w(x + 1) = w(x) (r1 - x) (c1 - x) / ((x + 1) (r2 - c1 + x + 1)),
+// as two exact steps each (multiply by r1 - x, divide by x + 1, multiply by c1 - x, divide by r2 - c1 + x + 1: each quotient is the binomial of the next index, an integer), so a step costs a few passes over at most 385
+// limbs (C(10000, 5000) < 2^9995) and the whole walk about 5,000 steps. The odds ratio a d / (b c) is one division of two exact integers below 2^53 (one rounding), or undefined (a d = b c = 0) or infinite (b c = 0 < a d).
+
+pub struct Fisher {
+    n: int,
+    status: int,
+    a: int,
+    b: int,
+    c: int,
+    d: int,
+    orkind: int,
+    orb: int,
+    pb: int,
+    pc: int,
+}
+
+// the limits: the largest N answered; above it the caller refuses (limit.exact-too-large)
+pub fn limit() -> [] int {
+    return 10000;
+}
+
+fn mask() -> [] int {
+    return 67108863;
+}
+
+// v (n limbs in use) times the small m (below 2^27); answers the limbs in use
+fn mul_small[&v](v: &!v [int], n: int, m: int) -> [] int {
+    var carry = 0;
+    var i = 0;
+    while i < n {
+        let t = v[i] * m + carry;
+        v[i] = t & mask();
+        carry = t >> 26;
+        i = i + 1;
+    }
+    var len = n;
+    while carry > 0 {
+        v[len] = carry & mask();
+        carry = carry >> 26;
+        len = len + 1;
+    }
+    return len;
+}
+
+// v (n limbs in use) divided by the small d (below 2^27), exact; answers the limbs in use
+fn div_small[&v](v: &!v [int], n: int, d: int) -> [] int {
+    var rem = 0;
+    var i = n - 1;
+    while i >= 0 {
+        let t = rem * 67108864 + v[i];
+        let q = t / d;
+        v[i] = q;
+        rem = t - q * d;
+        i = i - 1;
+    }
+    var len = n;
+    while len > 1 && v[len - 1] == 0 {
+        len = len - 1;
+    }
+    return len;
+}
+
+fn top[&v](v: &v [int], n: int) -> [] int {
+    var len = n;
+    while len > 1 && v[len - 1] == 0 {
+        len = len - 1;
+    }
+    return len;
+}
+
+// v = C(n, k) (v zero on entry); answers the limbs in use
+fn binomial[&v](v: &!v [int], n: int, k: int) -> [] int {
+    var kk = k;
+    if n - k < kk {
+        kk = n - k;
+    }
+    v[0] = 1;
+    var len = 1;
+    var i = 1;
+    while i <= kk {
+        len = mul_small(v, len, n - kk + i);
+        len = div_small(v, len, i);
+        i = i + 1;
+    }
+    return len;
+}
+
+// w = the first weight w(xmin) (w zero on entry); answers the limbs in use
+fn first_weight[&v](w: &!v [int], r1: int, r2: int, c1: int) -> [] int {
+    if c1 <= r2 {
+        return binomial(w, r2, c1);
+    }
+    return binomial(w, r1, c1 - r2);
+}
+
+// w(x) -> w(x + 1) in place
+fn step[&v](w: &!v [int], len: int, r1: int, r2: int, c1: int, x: int) -> [] int {
+    var l = mul_small(w, len, r1 - x);
+    l = div_small(w, l, x + 1);
+    l = mul_small(w, l, c1 - x);
+    l = div_small(w, l, r2 - c1 + x + 1);
+    return l;
+}
+
+pub fn run[&h](heap: &!h Heap, a: int, b: int, c: int, d: int) -> [heap] Fisher {
+    let n = a + b + c + d;
+    var status = 0;
+    var orkind = 0;
+    var orb = 0;
+    var pb = 0;
+    var pc = 1;
+    if n == 0 {
+        status = 1;
+    } else {
+        // the odds ratio a d / (b c)
+        let num = a * d;
+        let den = b * c;
+        if den == 0 {
+            if num == 0 {
+                orkind = 1;
+            } else {
+                orkind = 2;
+            }
+        } else {
+            orb = bits_of(float_of(num) / float_of(den));
+        }
+        let cap = central.cap();
+        let r1 = a + b;
+        let r2 = c + d;
+        let c1 = a + c;
+        var xmin = 0;
+        if c1 - r2 > 0 {
+            xmin = c1 - r2;
+        }
+        var xmax = c1;
+        if r1 < xmax {
+            xmax = r1;
+        }
+        let store = box_slice(heap, 4 * cap, 0);
+        borrow mut store as &!sw in {
+            let s = contents(sw);
+            // 0: the weight, 1: the weight of the observed table, 2: the sum of the weights not larger, 3: the sum of all
+            var len = first_weight(s[0..cap], r1, r2, c1);
+            var lobs = 1;
+            var x = xmin;
+            while x <= xmax {
+                if x == a {
+                    bigint.copy(s[cap..2 * cap], s[0..cap], cap);
+                    lobs = len;
+                }
+                if x < xmax {
+                    len = step(s[0..cap], len, r1, r2, c1, x);
+                }
+                x = x + 1;
+            }
+            bigint.clear(s[0..cap], cap);
+            len = first_weight(s[0..cap], r1, r2, c1);
+            var lnum = 1;
+            var ltot = 1;
+            x = xmin;
+            while x <= xmax {
+                bigint.add_in(s[3 * cap..4 * cap], cap, s[0..cap], len);
+                if bigint.compare(s[0..cap], len, s[cap..2 * cap], lobs) <= 0 {
+                    bigint.add_in(s[2 * cap..3 * cap], cap, s[0..cap], len);
+                }
+                if x < xmax {
+                    len = step(s[0..cap], len, r1, r2, c1, x);
+                }
+                x = x + 1;
+            }
+            lnum = top(s[2 * cap..3 * cap], cap);
+            ltot = top(s[3 * cap..4 * cap], cap);
+            let (b2, c2) = central.ratio_bits(heap, s[2 * cap..3 * cap], lnum, s[3 * cap..4 * cap], ltot, 0, false);
+            pb = b2;
+            pc = c2;
+        }
+        unbox_slice(heap, store);
+    }
+    return Fisher { n: n, status: status, a: a, b: b, c: c, d: d, orkind: orkind, orb: orb, pb: pb, pc: pc };
+}

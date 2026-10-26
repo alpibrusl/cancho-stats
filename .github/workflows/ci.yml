@@ -263,6 +263,11 @@ jobs:
           python3 scripts/gate_ks.py --files 300 --scipy
           python3 scripts/gate_ks_calibration.py --replicates 2000
 
+      - name: stats test fisher against Fractions, the p-values bit for bit, and the tolerance tables
+        if: steps.stores.outputs.fetchable == 'yes'
+        run: |
+          python3 scripts/gate_fisher.py --files 300 --scipy
+
       - name: stats test wilcoxon against Fractions and mpmath, the exact p-values bit for bit, and the size of its test
         if: steps.stores.outputs.fetchable == 'yes'
         run: |
@@ -292,6 +297,7 @@ jobs:
           python3 scripts/mutants_mannwhitney.py --check
           python3 scripts/mutants_wilcoxon.py --check
           python3 scripts/mutants_ks.py --check
+          python3 scripts/mutants_fisher.py --check
           python3 scripts/mutants_special.py --check
 
       - name: Quantiles (nine definitions) against an independent exact reference
@@ -431,3 +437,4 @@ jobs:
           python3 scripts/mutants_mannwhitney.py
           python3 scripts/mutants_wilcoxon.py
           python3 scripts/mutants_ks.py
+          python3 scripts/mutants_fisher.py

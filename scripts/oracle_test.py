@@ -800,3 +800,42 @@ def ks(a_vals, b_vals, exact):
             out["p"] = min(mpmath.mpf(1), out["p"])
         out["p_method"] = "asymptotic"
     return out
+
+
+def fisher_brute(a, b, c, d):
+    """the weights w(x) of every first cell x of the tables with the margins of (a b; c d), by listing every choice of the c1 items of the first column among the N items (the first r1 are the first row), small N only"""
+    import itertools
+    n = a + b + c + d
+    r1, c1 = a + b, a + c
+    counts = {}
+    for combo in itertools.combinations(range(n), c1):
+        x = sum(1 for i in combo if i < r1)
+        counts[x] = counts.get(x, 0) + 1
+    return counts
+
+
+def fisher(a, b, c, d):
+    """Fisher's exact test of the table (a b; c d) (docs/rank.md section 14): the probability of the first cell x is C(r1, x) C(r2, c1 - x) / C(N, c1); the two-sided p-value is the exact sum of the probabilities NOT LARGER than the observed one
+    (no tolerance). A dict: n, status ('too-few-rows' or None), odds (Fraction or None), odds_reason ('odds-ratio-undefined', 'odds-ratio-infinite' or None), p (Fraction), p_tol (the same with R's relative 1 + 1e-7), p_double (twice the smaller
+    tail, capped at 1), p_less (the tail P(X <= a))."""
+    n = a + b + c + d
+    out = {"n": n, "status": None, "odds": None, "odds_reason": None, "p": None, "p_tol": None, "p_double": None, "p_less": None}
+    if n == 0:
+        out["status"] = "too-few-rows"
+        return out
+    if b * c == 0:
+        out["odds_reason"] = "odds-ratio-undefined" if a * d == 0 else "odds-ratio-infinite"
+    else:
+        out["odds"] = Fraction(a * d, b * c)
+    r1, r2, c1 = a + b, c + d, a + c
+    ws = {x: math.comb(r1, x) * math.comb(r2, c1 - x) for x in range(max(0, c1 - r2), min(r1, c1) + 1)}
+    total = math.comb(n, c1)
+    assert sum(ws.values()) == total
+    wo = ws[a]
+    out["p"] = Fraction(sum(w for w in ws.values() if w <= wo), total)
+    out["p_tol"] = Fraction(sum(w for w in ws.values() if w * 10**7 <= wo * (10**7 + 1)), total)
+    lo = Fraction(sum(w for x, w in ws.items() if x <= a), total)
+    hi = Fraction(sum(w for x, w in ws.items() if x >= a), total)
+    out["p_double"] = min(Fraction(1), 2 * min(lo, hi))
+    out["p_less"] = lo
+    return out
