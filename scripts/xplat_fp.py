@@ -36,6 +36,7 @@ import gate_mannwhitney  # noqa: E402
 import gate_ks  # noqa: E402
 import gate_fisher  # noqa: E402
 import gate_corr_exact  # noqa: E402
+import gate_ci_prop  # noqa: E402
 import gate_wilcoxon  # noqa: E402
 import tempfile  # noqa: E402
 
@@ -412,6 +413,26 @@ def corr_exact_lines(stats):
     return out
 
 
+def ci_prop_lines(stats):
+    """`stats ci prop` on 8 seeded CSV files (an outcome column with a success label, a group column, empty cells, 0 to 3,000 rows, the generator of scripts/gate_ci_prop.py): Wilson, Clopper-Pearson and (with --group) Newcombe, one hash of the bytes
+    of the three answers. The Clopper-Pearson endpoints come from the beta quantile of special.quantile, so these lines are what shows the quantile function agrees across platforms on this input."""
+    out = []
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        r = gate_special.SM64(113)
+        for k in range(8):
+            names, rows, succ, labels = gate_ci_prop.gen(r, 12 + k)
+            level = gate_ci_prop.LEVELS[int(r.next() % len(gate_ci_prop.LEVELS))]
+            h = hashlib.sha256()
+            for extra in (["--cols", "y,w", "--success", succ, "--level", level],
+                          ["--cols", "y,w", "--success", succ, "--level", level, "--method", "clopper-pearson"],
+                          ["--cols", "y,w", "--success", succ, "--level", level, "--group", "g"]):
+                p = gate_ci_prop.run(stats, tmp, names, rows, extra)
+                h.update(("exit %d %s" % (p.returncode, p.stdout)).encode())
+            out.append("ci-prop\tfile%02d\t%d\t%s" % (k, len(rows), h.hexdigest()))
+    return out
+
+
 def wilcoxon_lines(stats):
     """`stats test wilcoxon` on 8 seeded CSV files (pairs of columns with zero differences and heavy ties, sizes up to 200, the shapes of scripts/gate_wilcoxon.py), with the three methods for zeros, `--exact no` and
     `--continuity none`, and the one-sample form: the hash of the bytes of the answers."""
@@ -472,6 +493,7 @@ def fingerprint(driver, acc, threads_check=True, stats=None):
         lines += ks_lines(stats)
         lines += fisher_lines(stats)
         lines += corr_exact_lines(stats)
+        lines += ci_prop_lines(stats)
     return lines, bad
 
 

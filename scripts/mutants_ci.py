@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+"""Mutants of `stats ci prop` (docs/resample.md section 3): lib/stest/answerci.cho (Clopper-Pearson, the entries), lib/csvx/ci.cho (the counting pass and the method rules), the ci parts of tools/stats/main.cho. Each is applied to a copy, the program rebuilt, scripts/gate_ci_prop.py and the refusals gate rerun; killed = a gate fails or the program traps or hangs. A mutant that does not compile is INVALID. The gates first run on the UNMUTATED build and the script refuses to count kills if they fail. Exit 1 if one survives unexplained or is invalid.
+    python3 scripts/mutants_ci.py [--check] [--only NAME,NAME]"""
+import os, pathlib, shutil, subprocess, sys, tempfile
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+CANCHO = os.environ.get("CANCHO", str(ROOT.parent / "cancho-compiler-a4572ea" / "target" / "release" / "cancho"))
+W = "lib/stest/answerci.cho"
+C = "lib/csvx/ci.cho"
+R = "lib/csvx/run.cho"
+F = "tools/stats/main.cho"
+M = [
+    ("half-alpha", W, "return float_of(scale - num) / float_of(2 * scale);", "return float_of(scale - num) / float_of(scale);"),
+    ("cp-lower-shape", W, "quantile.beta_quantile(a2, float_of(x), float_of(n - x + 1))", "quantile.beta_quantile(a2, float_of(x), float_of(n - x))"),
+    ("cp-upper-shape", W, "quantile.beta_quantile_upper(a2, float_of(x + 1), float_of(n - x))", "quantile.beta_quantile_upper(a2, float_of(x), float_of(n - x))"),
+    ("cp-upper-tail", W, "quantile.beta_quantile_upper(a2, float_of(x + 1), float_of(n - x))", "quantile.beta_quantile(a2, float_of(x + 1), float_of(n - x))"),
+    ("cp-lower-guard", W, "        if x > 0 {\n            let (q1, k1)", "        if x > 1 {\n            let (q1, k1)"),
+    ("cp-upper-guard", W, "        if x < n {\n            let (q2, k2)", "        if x < n - 1 {\n            let (q2, k2)"),
+    ("cp-code", W, "if c1 == 0 && c2 == 0 {", "if c1 == 0 || c2 == 0 {"),
+    ("cp-method", W, "\"proportion\", \"clopper-pearson\", level", "\"proportion\", \"wilson\", level"),
+    ("branch", W, "        if exact {\n            w = answer4.put_interval(heap, w, \"proportion\", \"clopper-pearson\"", "        if !exact {\n            w = answer4.put_interval(heap, w, \"proportion\", \"clopper-pearson\""),
+    ("estimate", W, "    if r.status == 0 {\n        w = json.put_float(heap, w, float_of_bits(r.p1b));", "    if r.status == 1 {\n        w = json.put_float(heap, w, float_of_bits(r.p1b));"),
+    ("too-few", W, "    if r.status == 1 {\n        reason = \"too-few-rows\";\n    } else if exact {", "    if r.status == 2 {\n        reason = \"too-few-rows\";\n    } else if exact {"),
+    ("missing-one", W, "w = json.put_int(heap, w, rows - n);", "w = json.put_int(heap, w, rows);"),
+    ("missing-two", W, "w = json.put_int(heap, w, rows - n1 - n2);", "w = json.put_int(heap, w, rows - n1);"),
+    ("levels", W, "w = json.put_string(heap, w, level_a);", "w = json.put_string(heap, w, level_b);"),
+    ("newcombe-low", W, "lo = dd - sqrt((p1 - l1) * (p1 - l1) + (u2 - p2) * (u2 - p2));", "lo = dd - sqrt((p1 - l1) * (p1 - l1) + (p2 - l2) * (p2 - l2));"),
+    ("newcombe-high", W, "hi = dd + sqrt((u1 - p1) * (u1 - p1) + (p2 - l2) * (p2 - l2));", "hi = dd + sqrt((u1 - p1) * (u1 - p1) + (u2 - p2) * (u2 - p2));"),
+    ("newcombe-method", W, "\"difference of proportions\", \"newcombe\"", "\"difference of proportions\", \"wilson\""),
+    ("exact-flag", C, "if bytes.equal(m, \"clopper-pearson\") {\n            exact = true;", "if bytes.equal(m, \"wilson\") {\n            exact = true;"),
+    ("two-methods", C, "if two && !bytes.equal(m, \"newcombe\") {", "if two && false {"),
+    ("one-methods", C, "} else if !two && !bytes.equal(m, \"wilson\") && !exact {", "} else if !two && false {"),
+    ("empty-item", C, "if len(bytes.field(list, ',', i + 1)) == 0 {", "if len(bytes.field(list, ',', i + 1)) == 1 {"),
+    ("success-row", C, "let sr = map.get(dr.cross.la, success, 0 - 1);", "let sr = map.get(dr.cross.la, success, 0);"),
+    ("n-one", C, "n1 = n1 + contents(dr.counts)[row * dr.cols_];", "n1 = n1 + 1;"),
+    ("n-two", C, "n2 = n2 + contents(dr.counts)[row * dr.cols_ + 1];", "n2 = n2 + 0;"),
+    ("x-two", C, "x2 = contents(dr.counts)[sr * dr.cols_ + 1];", "x2 = contents(dr.counts)[sr * dr.cols_];"),
+    ("group-levels", C, "if two && dr.cols_ != 2 {", "if two && dr.cols_ != 3 {"),
+    ("header", C, "w = json.put_string(heap, w, \"prop\");", "w = json.put_string(heap, w, \"mean\");"),
+    ("level-echo", C, "w = json.put_key(heap, w, \"level\");\n        w = json.put_float(heap, w, level);", "w = json.put_key(heap, w, \"level\");\n        w = json.put_float(heap, w, 0.95);"),
+    ("verb", F, "} else if bytes.equal(cli.operand(args, parsed, 0), \"ci\") {\n        is_ci = true;", "} else if bytes.equal(cli.operand(args, parsed, 0), \"cix\") {\n        is_ci = true;"),
+    ("file-operand", F, "is_ci = true;\n        fidx = 2;", "is_ci = true;\n        fidx = 1;"),
+    ("kind", F, "} else if !bytes.equal(cli.operand(args, parsed, 1), \"prop\") {\n            e = rule.refuse(heap, e, \"args.bad-value\", \"the kind of interval", "} else if !bytes.equal(cli.operand(args, parsed, 1), \"propx\") {\n            e = rule.refuse(heap, e, \"args.bad-value\", \"the kind of interval"),
+    ("operands", F, "} else if cli.operand_count(parsed) != 3 {", "} else if cli.operand_count(parsed) > 3 {"),
+    ("required-flags", F, "if !cli.has(parsed, table, \"cols\") || !cli.has(parsed, table, \"success\") {", "if !cli.has(parsed, table, \"cols\") && !cli.has(parsed, table, \"success\") {"),
+    ("dispatch", F, "if is_ci {\n                        let (cn, ck, cok)", "if false {\n                        let (cn, ck, cok)"),
+    ("level-parse", F, "float_of(cn) / float_of(quantile.pow10(ck)), w, e);", "float_of(cn) / float_of(quantile.pow10(ck) + 1), w, e);"),
+    ("corr-methods", F, "\"corr\") && cli.has(parsed, table, \"method\") && !bytes.equal(cli.text(args, parsed, table, \"method\"), \"pearson\") &&", "\"corr\") && false &&"),
+]
+
+EXPLAINED = {
+    "cp-code": "unreachable guard (an argument, not a measurement): the bounds of section 9.2 of docs/numerics.md hold on every input of the sweeps, and no input of the gates or of the fuzz has made `beta_quantile` or `beta_quantile_upper` answer a nonzero code for shapes of 1 or more; the guard stays so that a failure is a reason, never a wrong endpoint",
+}
+
+
+def gates(binary, files):
+    """the gates in the order that fails fastest; True if all pass"""
+    for argv, tmo in (([sys.executable, str(ROOT / "scripts" / "gate_ci_prop.py"), "--bin", binary, "--files", str(files)], 1500),
+                      ([sys.executable, str(ROOT / "scripts" / "gate_describe_refusals.py"), "--bin", binary, "--fuzz", "150"], 600)):
+        try:
+            if subprocess.run(argv, capture_output=True, text=True, timeout=tmo).returncode != 0:
+                return False
+        except subprocess.TimeoutExpired:
+            return False
+    return True
+
+
+def main():
+    for n, f, o, w in M:
+        t = (ROOT / f).read_text()
+        if t.count(o) != 1 or o == w:
+            print("mutant %s: pattern occurs %d times in %s" % (n, t.count(o), f))
+            return 1
+    only = None
+    if "--only" in sys.argv:
+        only = set(sys.argv[sys.argv.index("--only") + 1].split(","))
+    if "--check" in sys.argv:
+        print("mutants_ci: %d mutants, every pattern applies once" % len(M)); return 0
+    if not gates(str(ROOT / "build" / "stats"), 100):
+        print("mutants_ci: the unmutated build fails the gates: refusing to count kills")
+        return 1
+    print("control (unmutated) passes the gates")
+    bad, killed = [], 0
+    for n, f, o, w in M:
+        if only is not None and n not in only:
+            continue
+        with tempfile.TemporaryDirectory() as d:
+            d = pathlib.Path(d)
+            for x in ("lib", "tools", "generated"): shutil.copytree(ROOT / x, d / x)
+            shutil.copy(ROOT / "cancho.toml", d / "cancho.toml")
+            (d / "build").mkdir(); shutil.copytree(ROOT / "build" / "deps", d / "build" / "deps")
+            fp = d / f; fp.write_text(fp.read_text().replace(o, w, 1))
+            r = subprocess.run([CANCHO, "build", "--bin", "stats"], cwd=d, capture_output=True, text=True)
+            if r.returncode != 0:
+                bad.append(n); print("%-32s INVALID: %s" % (n, r.stderr[-160:].replace("\n", " "))); continue
+            dead = not gates(str(d / "build" / "stats"), 100)
+        if dead: killed += 1; print("%-32s killed" % n)
+        elif n in EXPLAINED: print("%-32s SURVIVED (explained: %s)" % (n, EXPLAINED[n]))
+        else: bad.append(n); print("%-32s SURVIVED" % n)
+    total = len(M) if only is None else len([1 for n, f, o, w in M if n in only])
+    print("mutants_ci: %d killed of %d, %d survived and explained, %d unexplained" % (killed, total, total - killed - len(bad), len(bad)))
+    if bad: print("SURVIVORS: " + ", ".join(bad))
+    return 1 if bad else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

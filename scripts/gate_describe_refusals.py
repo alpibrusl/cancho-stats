@@ -370,6 +370,35 @@ CASES = [
     ('corr: spearman exact yes', b'a,b\n1,3\n2,1\n3,2\n4,5\n5,4\n', ['corr', '--method', 'spearman', '--exact', 'yes', 'f.csv'], 'stats.exact-unavailable', 2),
     ('corr: spearman exact auto', b'a,b\n1,3\n2,1\n3,2\n4,5\n5,4\n', ['corr', '--method', 'spearman', '--exact', 'auto', 'f.csv'], None, 0),
     ('corr: exact unknown', b'a,b\n1,3\n2,1\n3,2\n4,5\n5,4\n', ['corr', '--method', 'kendall', '--exact', 'maybe', 'f.csv'], 'args.bad-value', 2),
+    # ci prop (docs/resample.md section 3)
+    ('ci: prop one sample', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', 'f.csv'], None, 0),
+    ('ci: prop clopper-pearson', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', '--method', 'clopper-pearson', 'f.csv'], None, 0),
+    ('ci: prop wilson explicit', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', '--method', 'wilson', '--level', '0.99', 'f.csv'], None, 0),
+    ('ci: prop two samples', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', '--group', 'g', 'f.csv'], None, 0),
+    ('ci: prop two samples newcombe explicit', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', '--group', 'g', '--method', 'newcombe', 'f.csv'], None, 0),
+    ('ci: prop success level absent', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--cols', 'o', '--success', 'q', '--method', 'clopper-pearson', 'f.csv'], None, 0),
+    ('ci: prop every row a success', b'o\ny\ny\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', '--method', 'clopper-pearson', 'f.csv'], None, 0),
+    ('ci: prop no complete row', b'o\n\n\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', 'f.csv'], None, 0),
+    ('ci: prop two columns', b'o,w\ny,n\nn,n\ny,y\n', ['ci', 'prop', '--cols', 'o,w', '--success', 'y', 'f.csv'], None, 0),
+    ('ci: prop newcombe without --group', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', '--method', 'newcombe', 'f.csv'], 'args.bad-value', 2),
+    ('ci: prop clopper-pearson with --group', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', '--group', 'g', '--method', 'clopper-pearson', 'f.csv'], 'args.bad-value', 2),
+    ('ci: prop method pearson', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', '--method', 'pearson', 'f.csv'], 'args.bad-value', 2),
+    ('ci: prop no --success', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--cols', 'o', 'f.csv'], 'stats.test-columns', 2),
+    ('ci: prop no --cols', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--success', 'y', 'f.csv'], 'stats.test-columns', 2),
+    ('ci: prop empty item in --cols', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--cols', 'o,', '--success', 'y', 'f.csv'], 'args.bad-value', 2),
+    ('ci: prop level 1', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', '--level', '1', 'f.csv'], 'args.bad-value', 2),
+    ('ci: prop level ten decimals', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', '--level', '0.1234567891', 'f.csv'], 'args.bad-value', 2),
+    ('ci: prop three groups', b'o,g\ny,a\nn,b\ny,c\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', '--group', 'g', 'f.csv'], 'stats.group-levels', 2),
+    ('ci: prop one group', b'o,g\ny,a\nn,a\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', '--group', 'g', 'f.csv'], 'stats.group-levels', 2),
+    ('ci: prop no such column', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--cols', 'z', '--success', 'y', 'f.csv'], 'stats.no-such-column', 2),
+    ('ci: prop no such group column', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', '--group', 'z', 'f.csv'], 'stats.no-such-column', 2),
+    ('ci: prop rows limit', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', '--max-rows', '2', 'f.csv'], 'limit.too-many-rows', 8),
+    ('ci: prop ragged', b'o,g\ny,a\nn\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', 'f.csv'], 'stats.csv-ragged', 8),
+    ('ci: no kind', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci'], 'args.missing-operand', 2),
+    ('ci: kind alone', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop'], 'args.missing-operand', 2),
+    ('ci: unknown kind', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'mean', 'f.csv'], 'args.bad-value', 2),
+    ('ci: two files', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', 'f.csv', 'f.csv'], 'args.missing-operand', 2),
+    ('corr: method wilson', b'a,b\n1,2\n3,5\n', ['corr', '--method', 'wilson', 'f.csv'], 'args.bad-value', 2),
     # --correct and --max-tests (docs/test.md section 12)
     ("test: t1 holm", b"a,b,c\n1,5,3\n2,5,3\n4,1,3\n", ["test", "t1", "--cols", "a,b,c", "--correct", "holm", "f.csv"], None, 0),
     ("test: t1 bh with a constant column", b"a,b\n1,3\n2,3\n4,3\n", ["test", "t1", "--cols", "a,b", "--correct", "bh", "f.csv"], None, 0),
@@ -524,7 +553,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 53)
+            k = int(r.next() % 56)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -613,6 +642,12 @@ def main():
                 argv = ["corr", "--method", "kendall", "--exact", "auto", "--missing", "listwise", "f.csv"]
             elif k == 52:
                 argv = ["corr", "--method", "spearman", "--exact", "yes", "f.csv"]
+            elif k == 53:
+                argv = ["ci", "prop", "--cols", "a", "--success", "1", "f.csv"]
+            elif k == 54:
+                argv = ["ci", "prop", "--cols", "a,b", "--success", "1", "--group", "b", "--method", "newcombe", "--max-rows", "6", "f.csv"]
+            elif k == 55:
+                argv = ["ci", "prop", "--cols", "b", "--success", "", "--method", "clopper-pearson", "--level", "0.9", "f.csv"]
             elif k == 27:
                 argv = ["test", "prop", "--cols", "a", "--success", "1", "f.csv"]
             elif k == 28:

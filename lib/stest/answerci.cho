@@ -1,0 +1,175 @@
+edition 5;
+
+module stest.answerci;
+
+import std.json;
+import flt;
+import special.quantile;
+import stest.answer4;
+import stest.prop;
+
+// The entries of `stats ci prop` (docs/resample.md sections 1 and 3): the interval for a proportion (one column, `--method wilson` as in `test prop`, or `clopper-pearson`) or for the difference of two proportions (`--group`,
+// Newcombe's hybrid score as in `test prop`). The interval object is written by the function that `test prop` uses, so the two are the same bytes. Clopper-Pearson's lower endpoint is the alpha/2 quantile of Beta(x, n - x + 1)
+// (0 at x = 0) and the upper the alpha/2 UPPER-tail quantile of Beta(x + 1, n - x) (1 at x = n): the upper tail is asked for directly, never as 1 - alpha/2.
+fn float_of_bits(bits: int) -> [] float {
+    var key = bits;
+    if bits < 0 {
+        key = bits ^ 0x7fffffffffffffff;
+    }
+    return flt.float_of_key(key);
+}
+
+// alpha / 2 = (10^k - num) / (2 10^k) for the level num / 10^k
+fn half_alpha(num: int, k: int) -> [] float {
+    var scale = 1;
+    var i = 0;
+    while i < k {
+        scale = scale * 10;
+        i = i + 1;
+    }
+    return float_of(scale - num) / float_of(2 * scale);
+}
+
+pub fn put_one[&h, &c](heap: &!h Heap, w0: json.Writer, name: &c [byte], x: int, n: int, rows: int, r: prop.Prop, lnum: int, lk: int, level: float, exact: bool) -> [heap] json.Writer {
+    var w = w0;
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "column");
+    w = json.put_string(heap, w, name);
+    var reason = "";
+    var ok = false;
+    var lo = 0.0;
+    var hi = 1.0;
+    if r.status == 1 {
+        reason = "too-few-rows";
+    } else if exact {
+        let a2 = half_alpha(lnum, lk);
+        var c1 = 0;
+        var c2 = 0;
+        if x > 0 {
+            let (q1, k1) = quantile.beta_quantile(a2, float_of(x), float_of(n - x + 1));
+            lo = q1;
+            c1 = k1;
+        }
+        if x < n {
+            let (q2, k2) = quantile.beta_quantile_upper(a2, float_of(x + 1), float_of(n - x));
+            hi = q2;
+            c2 = k2;
+        }
+        if c1 == 0 && c2 == 0 {
+            ok = true;
+        } else {
+            reason = "interval-not-computed";
+        }
+    } else {
+        let (q, qcode) = answer4.critical(lnum, lk);
+        if qcode == 0 {
+            let (l1, h1) = answer4.wilson(float_of(x), float_of(n), q);
+            lo = l1;
+            hi = h1;
+            ok = true;
+        } else {
+            reason = "interval-not-computed";
+        }
+    }
+    w = json.put_key(heap, w, "estimate");
+    if r.status == 0 {
+        w = json.put_float(heap, w, float_of_bits(r.p1b));
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "interval");
+    if ok {
+        if exact {
+            w = answer4.put_interval(heap, w, "proportion", "clopper-pearson", level, float_of_bits(r.p1b), lo, hi);
+        } else {
+            w = answer4.put_interval(heap, w, "proportion", "wilson", level, float_of_bits(r.p1b), lo, hi);
+        }
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "n");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "n");
+    w = json.put_int(heap, w, n);
+    w = json.put_key(heap, w, "successes");
+    w = json.put_int(heap, w, x);
+    w = json.put_key(heap, w, "missing");
+    w = json.put_int(heap, w, rows - n);
+    w = json.end_object(heap, w);
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}
+
+pub fn put_two[&h, &c, &la, &lb](heap: &!h Heap, w0: json.Writer, name: &c [byte], level_a: &la [byte], level_b: &lb [byte], x1: int, n1: int, x2: int, n2: int, rows: int, r: prop.Prop, lnum: int, lk: int, level: float) -> [heap] json.Writer {
+    var w = w0;
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "column");
+    w = json.put_string(heap, w, name);
+    var reason = "";
+    var ok = false;
+    var lo = 0.0;
+    var hi = 0.0;
+    let (q, qcode) = answer4.critical(lnum, lk);
+    if r.status == 1 {
+        reason = "too-few-rows";
+    } else if r.dc == 0 && qcode == 0 {
+        let (l1, u1) = answer4.wilson(float_of(x1), float_of(n1), q);
+        let (l2, u2) = answer4.wilson(float_of(x2), float_of(n2), q);
+        let p1 = float_of_bits(r.p1b);
+        let p2 = float_of_bits(r.p2b);
+        let dd = float_of_bits(r.db);
+        lo = dd - sqrt((p1 - l1) * (p1 - l1) + (u2 - p2) * (u2 - p2));
+        hi = dd + sqrt((u1 - p1) * (u1 - p1) + (p2 - l2) * (p2 - l2));
+        ok = true;
+    } else {
+        reason = "interval-not-computed";
+    }
+    w = json.put_key(heap, w, "estimate");
+    if r.status != 1 && r.dc == 0 {
+        w = json.put_float(heap, w, float_of_bits(r.db));
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "interval");
+    if ok {
+        w = answer4.put_interval(heap, w, "difference of proportions", "newcombe", level, float_of_bits(r.db), lo, hi);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "levels");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "a");
+    w = json.put_string(heap, w, level_a);
+    w = json.put_key(heap, w, "b");
+    w = json.put_string(heap, w, level_b);
+    w = json.end_object(heap, w);
+    w = json.put_key(heap, w, "n");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "a");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "n");
+    w = json.put_int(heap, w, n1);
+    w = json.put_key(heap, w, "successes");
+    w = json.put_int(heap, w, x1);
+    w = json.end_object(heap, w);
+    w = json.put_key(heap, w, "b");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "n");
+    w = json.put_int(heap, w, n2);
+    w = json.put_key(heap, w, "successes");
+    w = json.put_int(heap, w, x2);
+    w = json.end_object(heap, w);
+    w = json.put_key(heap, w, "missing");
+    w = json.put_int(heap, w, rows - n1 - n2);
+    w = json.end_object(heap, w);
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}

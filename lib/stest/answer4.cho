@@ -19,7 +19,7 @@ fn float_of_bits(bits: int) -> [] float {
 }
 
 // the normal quantile q > 0 with P(Z > q) = (10^k - num) / (2 10^k) for the level num / 10^k: (q, code)
-fn critical(num: int, k: int) -> [] (float, int) {
+pub fn critical(num: int, k: int) -> [] (float, int) {
     var scale = 1;
     var i = 0;
     while i < k {
@@ -31,7 +31,7 @@ fn critical(num: int, k: int) -> [] (float, int) {
 }
 
 // Wilson's score interval of x successes in n trials: centre (x + q^2/2) / (n + q^2), half-width q sqrt(x (n - x) / n + q^2/4) / (n + q^2), clamped to [0, 1]
-fn wilson(x: float, n: float, q: float) -> [] (float, float) {
+pub fn wilson(x: float, n: float, q: float) -> [] (float, float) {
     let q2 = q * q;
     let c = (x + q2 / 2.0) / (n + q2);
     let h = q * sqrt(x * (n - x) / n + q2 / 4.0) / (n + q2);
@@ -63,7 +63,7 @@ fn p_normal(z: float) -> [] (float, int) {
     return (p, 0);
 }
 
-fn put_interval[&h](heap: &!h Heap, w0: json.Writer, of: &static [byte], method: &static [byte], level: float, est: float, lo: float, hi: float) -> [heap] json.Writer {
+pub fn put_interval[&h](heap: &!h Heap, w0: json.Writer, of: &static [byte], method: &static [byte], level: float, est: float, lo: float, hi: float) -> [heap] json.Writer {
     var w = w0;
     w = json.begin_object(heap, w);
     w = json.put_key(heap, w, "of");
