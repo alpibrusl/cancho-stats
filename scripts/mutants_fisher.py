@@ -9,6 +9,7 @@ W = "lib/stest/fisher.cho"
 E = "lib/stest/answer10.cho"
 R = "lib/csvx/run.cho"
 F = "tools/stats/main.cho"
+K = "lib/csvx/cat.cho"
 M = [
     ("limit", W, "    return 10000;", "    return 10001;"),
     ("mul-small", W, "let t = v[i] * m + carry;", "let t = v[i] * m;"),
@@ -44,14 +45,14 @@ M = [
     ("entry-level-vs", E, "map.key_at(d.cross.lb, contents(d.order_b)[1]));\n        w = json.end_array", "map.key_at(d.cross.lb, contents(d.order_b)[0]));\n        w = json.end_array"),
     ("entry-table", E, "w = json.put_int(heap, w, r.b);\n        w = json.put_int(heap, w, r.c);", "w = json.put_int(heap, w, r.c);\n        w = json.put_int(heap, w, r.b);"),
     ("entry-assumptions", E, "if r.status != 1 {\n        w = json.put_key(heap, w, \"levels\");", "if r.status != 2 {\n        w = json.put_key(heap, w, \"levels\");"),
-    ("main-levels", F, "} else if dr.rows_ != 2 || dr.cols_ != 2 {", "} else if dr.rows_ != 2 && dr.cols_ != 2 {"),
-    ("main-empty", F, "if dr.rows_ == 0 {\n                                w = answer10.put_fisher", "if dr.rows_ == 1 {\n                                w = answer10.put_fisher"),
-    ("main-limit", F, "} else if dr.cross.used > fisher.limit() {", "} else if dr.cross.used >= fisher.limit() {"),
-    ("main-counts", F, "fisher.run(heap, cn[0], cn[1], cn[2], cn[3])", "fisher.run(heap, cn[0], cn[2], cn[1], cn[3])"),
+    ("main-levels", K, "} else if dr.rows_ != 2 || dr.cols_ != 2 {", "} else if dr.rows_ != 2 && dr.cols_ != 2 {"),
+    ("main-empty", K, "if dr.rows_ == 0 {\n                                w = answer10.put_fisher", "if dr.rows_ == 1 {\n                                w = answer10.put_fisher"),
+    ("main-limit", K, "} else if dr.cross.used > fisher.limit() {", "} else if dr.cross.used >= fisher.limit() {"),
+    ("main-counts", K, "fisher.run(heap, cn[0], cn[1], cn[2], cn[3])", "fisher.run(heap, cn[0], cn[2], cn[1], cn[3])"),
     ("main-vs-required", F, "\"fisher\") && !cli.has(parsed, table, \"vs\") {", "\"fisher\") && false {"),
-    ("main-dispatch", F, "\"fisher\") {\n                        let (w2, e2) = fisher_one(", "\"fisherx\") {\n                        let (w2, e2) = fisher_one("),
+    ("main-dispatch", F, "\"fisher\") {\n                        let (w2, e2) = cat.fisher_one(", "\"fisherx\") {\n                        let (w2, e2) = cat.fisher_one("),
     ("main-kind-accepted", F, "&& !bytes.equal(cli.operand(args, parsed, 1), \"fisher\") {", "&& false {"),
-    ("main-header", F, "w = json.put_string(heap, w, \"fisher\");\n        w = json.put_key(heap, w, \"vs\");", "w = json.put_string(heap, w, \"chisq\");\n        w = json.put_key(heap, w, \"vs\");"),
+    ("main-header", K, "w = json.put_string(heap, w, \"fisher\");\n        w = json.put_key(heap, w, \"vs\");", "w = json.put_string(heap, w, \"chisq\");\n        w = json.put_key(heap, w, \"vs\");"),
 ]
 
 EXPLAINED = {
