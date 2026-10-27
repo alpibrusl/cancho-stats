@@ -30,8 +30,8 @@ M = [
     ("sort-range", "tools/stats/main.cho", "contents(cw), 0, m);\n                let count", "contents(cw), 0, m - 1);\n                let count"),
     ("gather-sentinel", "tools/stats/main.cho", "if k != rank.min_int() {", "if k != 0 {"),
     ("cells-limit-edge", "tools/stats/main.cho", "} else if (info.rows + 1) * info.ncols > max_cells {", "} else if (info.rows + 1) * info.ncols >= max_cells {"),
-    ("probability-bound", "tools/stats/main.cho", "num > quantile.pow10(k) {", "num >= quantile.pow10(k) {"),
-    ("probability-decimals", "tools/stats/main.cho", "if k > 9 || digits > 12 {", "if k > 10 || digits > 12 {"),
+    ("probability-bound", "lib/csvx/cat.cho", "num > quantile.pow10(k) {", "num >= quantile.pow10(k) {"),
+    ("probability-decimals", "lib/csvx/cat.cho", "if k > 9 || digits > 12 {", "if k > 10 || digits > 12 {"),
     ("probability-count", "tools/stats/main.cho", "if n > 99 {", "if n > 100 {"),
     ("default-type", "tools/stats/main.cho", "|none|7|which of the nine", "|none|6|which of the nine"),
 ]

@@ -10,6 +10,7 @@ X = "lib/csvx/cross.cho"
 Q = "lib/stest/chisq.cho"
 B = "lib/stest/answer3.cho"
 F = "tools/stats/main.cho"
+K = "lib/csvx/cat.cho"
 M = [
     # the counting pass
     ("second-cell-missing-taken", X, "if tb == fb && cs[3 * ib + 2] == 0 {\n                                        present = false;", "if tb == fb && cs[3 * ib + 2] == 0 {\n                                        present = true;"),
@@ -66,12 +67,12 @@ M = [
     ("table-dims", B, "w = json.put_int(heap, w, r.rows_);\n            w = json.put_key(heap, w, \"cols\");", "w = json.put_int(heap, w, r.cols_);\n            w = json.put_key(heap, w, \"cols\");"),
     # the verb
     ("vs-expected-exclusive", F, "cli.has(parsed, table, \"vs\") == cli.has(parsed, table, \"expected\")", "cli.has(parsed, table, \"vs\") != cli.has(parsed, table, \"expected\")"),
-    ("fit-flag", F, "let fit = cli.has(parsed, table, \"expected\");", "let fit = false;"),
-    ("level-count-check", F, "if dr.rows_ != kprops {", "if dr.rows_ > kprops {"),
+    ("fit-flag", K, "let fit = cli.has(parsed, table, \"expected\");", "let fit = false;"),
+    ("level-count-check", K, "if dr.rows_ != kprops {", "if dr.rows_ > kprops {"),
     ("chisq-dispatch", F, "if is_test && bytes.equal(cli.operand(args, parsed, 1), \"chisq\") {", "if false {"),
-    ("empty-item", F, "if len(bytes.field(list, ',', i + 1)) == 0 {", "if len(bytes.field(list, ',', i + 1)) == 1 {"),
-    ("expected-echo", F, "float_of(contents(pr0)[k]) / 1000000000.0", "float_of(contents(pr0)[k]) / 100000000.0"),
-    ("columns-after-first", F, "while ok && i < ncols_named {\n        let name = bytes.field(list, ',', i + 1);\n        match place.open_operand(fs, root, rel, full) {\n            Opened::Failed(reason) => {\n                e = fail.io_error(heap, e, reason, false, rel);\n            }\n            Opened::Ok(opened) => {\n                var file = opened;\n                borrow mut file as &!handle in {\n                    let (x, e2) = cross.cross(heap, handle, rel, name, cli.text(args, parsed, table, \"vs\"), !fit", "while ok && i < 1 {\n        let name = bytes.field(list, ',', i + 1);\n        match place.open_operand(fs, root, rel, full) {\n            Opened::Failed(reason) => {\n                e = fail.io_error(heap, e, reason, false, rel);\n            }\n            Opened::Ok(opened) => {\n                var file = opened;\n                borrow mut file as &!handle in {\n                    let (x, e2) = cross.cross(heap, handle, rel, name, cli.text(args, parsed, table, \"vs\"), !fit"),
+    ("empty-item", K, "if len(bytes.field(list, ',', i + 1)) == 0 {", "if len(bytes.field(list, ',', i + 1)) == 1 {"),
+    ("expected-echo", K, "float_of(contents(pr0)[k]) / 1000000000.0", "float_of(contents(pr0)[k]) / 100000000.0"),
+    ("columns-after-first", K, "while ok && i < ncols_named {\n        let name = bytes.field(list, ',', i + 1);\n        match place.open_operand(fs, root, rel, full) {\n            Opened::Failed(reason) => {\n                e = fail.io_error(heap, e, reason, false, rel);\n            }\n            Opened::Ok(opened) => {\n                var file = opened;\n                borrow mut file as &!handle in {\n                    let (x, e2) = cross.cross(heap, handle, rel, name, cli.text(args, parsed, table, \"vs\"), !fit", "while ok && i < 1 {\n        let name = bytes.field(list, ',', i + 1);\n        match place.open_operand(fs, root, rel, full) {\n            Opened::Failed(reason) => {\n                e = fail.io_error(heap, e, reason, false, rel);\n            }\n            Opened::Ok(opened) => {\n                var file = opened;\n                borrow mut file as &!handle in {\n                    let (x, e2) = cross.cross(heap, handle, rel, name, cli.text(args, parsed, table, \"vs\"), !fit"),
     ("kind-accepted", F, "&& !bytes.equal(cli.operand(args, parsed, 1), \"chisq\") && !bytes", "&& false && !bytes"),
 ]
 

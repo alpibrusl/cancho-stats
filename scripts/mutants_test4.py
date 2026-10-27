@@ -11,6 +11,7 @@ P = "lib/stest/prop.cho"
 A = "lib/stest/answer4.cho"
 X = "lib/csvx/cross.cho"
 F = "tools/stats/main.cho"
+K = "lib/csvx/cat.cho"
 M = [
     # one sample
     ("one-no-trial", P, "    if n == 0 {\n        return Prop", "    if n == 1 {\n        return Prop"),
@@ -57,16 +58,16 @@ M = [
     ("p0-upper-edge", F, "p0n >= quantile.pow10(p0k)", "p0n > quantile.pow10(p0k)"),
     ("p0-lower-edge", F, "!p0ok || p0n == 0 ||", "!p0ok || p0n == 7 ||"),
     ("p0-with-group", F, "cli.has(parsed, table, \"group\") && cli.has(parsed, table, \"p0\") {", "cli.has(parsed, table, \"group\") && !cli.has(parsed, table, \"p0\") {"),
-    ("group-levels-two", F, "if two && dr.cols_ != 2 {", "if two && dr.cols_ != 3 {"),
-    ("success-row-default", F, "map.get(dr.cross.la, success, 0 - 1)", "map.get(dr.cross.la, success, 0)"),
-    ("second-trials", F, "n2 = n2 + contents(dr.counts)[row * dr.cols_ + 1];", "n2 = n2 + contents(dr.counts)[row * dr.cols_];"),
-    ("second-successes", F, "x2 = contents(dr.counts)[sr * dr.cols_ + 1];", "x2 = contents(dr.counts)[sr * dr.cols_];"),
-    ("p0-scale", F, "let p0 = p0n * (dd / quantile.pow10(p0k));", "let p0 = p0n * (dd / quantile.pow10(p0k + 1));"),
-    ("p0-echo", F, "w = json.put_float(heap, w, float_of(p0) / 1000000000.0);", "w = json.put_float(heap, w, float_of(p0) / 100000000.0);"),
+    ("group-levels-two", K, "if two && dr.cols_ != 2 {", "if two && dr.cols_ != 3 {"),
+    ("success-row-default", K, "map.get(dr.cross.la, success, 0 - 1)", "map.get(dr.cross.la, success, 0)"),
+    ("second-trials", K, "n2 = n2 + contents(dr.counts)[row * dr.cols_ + 1];", "n2 = n2 + contents(dr.counts)[row * dr.cols_];"),
+    ("second-successes", K, "x2 = contents(dr.counts)[sr * dr.cols_ + 1];", "x2 = contents(dr.counts)[sr * dr.cols_];"),
+    ("p0-scale", K, "let p0 = p0n * (dd / quantile.pow10(p0k));", "let p0 = p0n * (dd / quantile.pow10(p0k + 1));"),
+    ("p0-echo", K, "w = json.put_float(heap, w, float_of(p0) / 1000000000.0);", "w = json.put_float(heap, w, float_of(p0) / 100000000.0);"),
     ("prop-dispatch", F, "if is_test && bytes.equal(cli.operand(args, parsed, 1), \"prop\") {", "if false {"),
     ("prop-kind-accepted", F, "&& !bytes.equal(cli.operand(args, parsed, 1), \"prop\") && !bytes.equal(cli.operand(args, parsed, 1), \"anova\") && !bytes.equal(cli.operand(args, parsed, 1), \"kruskal\") && !bytes.equal(cli.operand(args, parsed, 1), \"mannwhitney\") && !bytes.equal(cli.operand(args, parsed, 1), \"wilcoxon\") && !bytes.equal(cli.operand(args, parsed, 1), \"ks\") && !bytes.equal(cli.operand(args, parsed, 1), \"fisher\") {", "&& false {"),
-    ("levels-any-passed", F, "cli.text(args, parsed, table, \"group\"), two, true, int_of", "cli.text(args, parsed, table, \"group\"), two, false, int_of"),
-    ("columns-after-first", F, "while ok && i < ncols_named {\n        let name = bytes.field(list, ',', i + 1);\n        match place.open_operand(fs, root, rel, full) {\n            Opened::Failed(reason) => {\n                e = fail.io_error(heap, e, reason, false, rel);\n            }\n            Opened::Ok(opened) => {\n                var file = opened;\n                borrow mut file as &!handle in {\n                    let (x, e2) = cross.cross(heap, handle, rel, name, cli.text(args, parsed, table, \"group\")", "while ok && i < 1 {\n        let name = bytes.field(list, ',', i + 1);\n        match place.open_operand(fs, root, rel, full) {\n            Opened::Failed(reason) => {\n                e = fail.io_error(heap, e, reason, false, rel);\n            }\n            Opened::Ok(opened) => {\n                var file = opened;\n                borrow mut file as &!handle in {\n                    let (x, e2) = cross.cross(heap, handle, rel, name, cli.text(args, parsed, table, \"group\")"),
+    ("levels-any-passed", K, "cli.text(args, parsed, table, \"group\"), two, true, int_of", "cli.text(args, parsed, table, \"group\"), two, false, int_of"),
+    ("columns-after-first", K, "while ok && i < ncols_named {\n        let name = bytes.field(list, ',', i + 1);\n        match place.open_operand(fs, root, rel, full) {\n            Opened::Failed(reason) => {\n                e = fail.io_error(heap, e, reason, false, rel);\n            }\n            Opened::Ok(opened) => {\n                var file = opened;\n                borrow mut file as &!handle in {\n                    let (x, e2) = cross.cross(heap, handle, rel, name, cli.text(args, parsed, table, \"group\")", "while ok && i < 1 {\n        let name = bytes.field(list, ',', i + 1);\n        match place.open_operand(fs, root, rel, full) {\n            Opened::Failed(reason) => {\n                e = fail.io_error(heap, e, reason, false, rel);\n            }\n            Opened::Ok(opened) => {\n                var file = opened;\n                borrow mut file as &!handle in {\n                    let (x, e2) = cross.cross(heap, handle, rel, name, cli.text(args, parsed, table, \"group\")"),
 ]
 
 EXPLAINED = {}
