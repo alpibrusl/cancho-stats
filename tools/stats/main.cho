@@ -26,6 +26,7 @@ import csvx.scan;
 import stest.answer2;
 import stest.answer3;
 import stest.answer4;
+import stest.answerci;
 import stest.answer8;
 import stest.wilcoxon;
 import stest.correct;
@@ -949,7 +950,13 @@ fn check_numeric[&h, &n, &en, &s, &a1, &b1, &a2, &b2](heap: &!h Heap, names: &n 
 }
 
 // The tests of the columns named by --cols (kind t1) or of the pairs named by --pairs (kind paired) (docs/test.md). The same file reader as describe and corr.
-fn test_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], paired: bool, wil: bool, w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
+fn test_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], paired: bool, wil: bool, ci: bool, w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
+    var hkey = "test";
+    var rkey = "tests";
+    if ci {
+        hkey = "ci";
+        rkey = "intervals";
+    }
     let table = flag_table();
     var w = w0;
     var e = errs;
@@ -1100,8 +1107,10 @@ fn test_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed:
                                     borrow pb as &pbr in {
                                         borrow names as &nb in {
                                             borrow ends as &eb in {
-                                                w = json.put_key(heap, w, "test");
-                                                if wil {
+                                                w = json.put_key(heap, w, hkey);
+                                                if ci {
+                                                    w = json.put_string(heap, w, "mean");
+                                                } else if wil {
                                                     w = json.put_string(heap, w, "wilcoxon");
                                                 } else if paired {
                                                     w = json.put_string(heap, w, "paired");
@@ -1110,7 +1119,7 @@ fn test_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed:
                                                 }
                                                 w = json.put_key(heap, w, "rows");
                                                 w = json.put_int(heap, w, info.rows);
-                                                if !paired {
+                                                if !paired && !ci {
                                                     w = json.put_key(heap, w, "mu0");
                                                     w = json.put_float(heap, w, mu0);
                                                 }
@@ -1118,14 +1127,18 @@ fn test_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed:
                                                     w = json.put_key(heap, w, "level");
                                                     w = json.put_float(heap, w, level);
                                                 }
-                                                w = cat.put_adjustment(heap, w, cli.text(args, parsed, table, "correct"));
-                                                w = json.put_key(heap, w, "tests");
+                                                if !ci {
+                                                    w = cat.put_adjustment(heap, w, cli.text(args, parsed, table, "correct"));
+                                                }
+                                                w = json.put_key(heap, w, rkey);
                                                 w = json.begin_array(heap, w);
                                                 if paired {
                                                     var k = 0;
                                                     while k < npairs {
                                                         if wil {
                                                             w = answer8.put_wilcoxon(heap, w, buffer.bytes(nb), eb, sb, nc, contents(par)[k], contents(pbr)[k], info.rows, 0.0, zmode, xmode, cmode);
+                                                        } else if ci {
+                                                            w = answerci.put_mean(heap, w, buffer.bytes(nb), eb, sb, nc, contents(par)[k], contents(pbr)[k], info.rows, lnum, lk, level);
                                                         } else {
                                                             w = answer.put_t1(heap, w, buffer.bytes(nb), eb, sb, nc, contents(par)[k], contents(pbr)[k], info.rows, 0, lnum, lk, level);
                                                         }
@@ -1137,6 +1150,8 @@ fn test_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed:
                                                         if contents(sr3)[j] == 1 {
                                                             if wil {
                                                                 w = answer8.put_wilcoxon(heap, w, buffer.bytes(nb), eb, sb, nc, j, 0 - 1, info.rows, mu0, zmode, xmode, cmode);
+                                                            } else if ci {
+                                                                w = answerci.put_mean(heap, w, buffer.bytes(nb), eb, sb, nc, j, 0 - 1, info.rows, lnum, lk, level);
                                                             } else {
                                                                 w = answer.put_t1(heap, w, buffer.bytes(nb), eb, sb, nc, j, 0 - 1, info.rows, bits_of(mu0), lnum, lk, level);
                                                             }
@@ -1169,7 +1184,17 @@ fn test_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed:
 
 // The tests of the columns named by --cols between the two groups of the column named by --group, kind t2 (docs/test.md). Pass 0 finds the levels of the group column (exactly two, else stats.group-levels);
 // then the file is read once for each, the group a being the level that is first by its bytes.
-fn t2_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
+fn t2_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], ci: bool, w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
+    var hkey = "test";
+    var rkey = "tests";
+    if ci {
+        hkey = "ci";
+        rkey = "intervals";
+    }
+    var tname = "t2";
+    if ci {
+        tname = "diff";
+    }
     let table = flag_table();
     var w = w0;
     var e = errs;
@@ -1244,8 +1269,8 @@ fn t2_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &
                                         borrow sel as &sr3 in {
                                             borrow names as &nb in {
                                                 borrow ends as &eb in {
-                                                    w = json.put_key(heap, w, "test");
-                                                    w = json.put_string(heap, w, "t2");
+                                                    w = json.put_key(heap, w, hkey);
+                                                    w = json.put_string(heap, w, tname);
                                                     w = json.put_key(heap, w, "group");
                                                     w = json.put_string(heap, w, cli.text(args, parsed, table, "group"));
                                                     w = json.put_key(heap, w, "levels");
@@ -1265,13 +1290,19 @@ fn t2_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &
                                                     } else {
                                                         w = json.put_string(heap, w, "welch");
                                                     }
-                                                    w = cat.put_adjustment(heap, w, cli.text(args, parsed, table, "correct"));
-                                                    w = json.put_key(heap, w, "tests");
+                                                    if !ci {
+                                                        w = cat.put_adjustment(heap, w, cli.text(args, parsed, table, "correct"));
+                                                    }
+                                                    w = json.put_key(heap, w, rkey);
                                                     w = json.begin_array(heap, w);
                                                     var j = 0;
                                                     while j < nc {
                                                         if contents(sr3)[j] == 1 {
-                                                            w = answer2.put_t2(heap, w, buffer.bytes(nb), eb, sa, info_a.rows, sb, info_b.rows, nc, j, pooled, lnum, lk, level);
+                                                            if ci {
+                                                                w = answerci.put_diff(heap, w, buffer.bytes(nb), eb, sa, info_a.rows, sb, info_b.rows, nc, j, pooled, lnum, lk, level);
+                                                            } else {
+                                                                w = answer2.put_t2(heap, w, buffer.bytes(nb), eb, sa, info_a.rows, sb, info_b.rows, nc, j, pooled, lnum, lk, level);
+                                                            }
                                                         }
                                                         j = j + 1;
                                                     }
@@ -1318,13 +1349,17 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
         fidx = 2;
         if cli.operand_count(parsed) < 2 {
             e = rule.refuse(heap, e, "args.missing-operand", "no kind of interval: the second operand names it", "stats ci prop --cols A --success yes FILE", "", "");
-        } else if !bytes.equal(cli.operand(args, parsed, 1), "prop") {
-            e = rule.refuse(heap, e, "args.bad-value", "the kind of interval is not one this tool has", "the kinds so far are: prop", "kind", cli.operand(args, parsed, 1));
+        } else if !bytes.equal(cli.operand(args, parsed, 1), "prop") && !bytes.equal(cli.operand(args, parsed, 1), "mean") && !bytes.equal(cli.operand(args, parsed, 1), "diff") {
+            e = rule.refuse(heap, e, "args.bad-value", "the kind of interval is not one this tool has", "the kinds so far are: prop, mean, diff", "kind", cli.operand(args, parsed, 1));
         } else if cli.operand_count(parsed) != 3 {
             e = rule.refuse(heap, e, "args.missing-operand", "ci names one kind and one FILE", "stats ci prop --cols A --success yes FILE", "", "");
         }
-        if !cli.has(parsed, table, "cols") || !cli.has(parsed, table, "success") {
+        if cli.operand_count(parsed) >= 2 && bytes.equal(cli.operand(args, parsed, 1), "prop") && (!cli.has(parsed, table, "cols") || !cli.has(parsed, table, "success")) {
             e = rule.refuse(heap, e, "stats.test-columns", "ci prop needs --cols and --success", "stats ci prop --cols A --success yes FILE", "flag", "--cols");
+        } else if cli.operand_count(parsed) >= 2 && bytes.equal(cli.operand(args, parsed, 1), "mean") && !cli.has(parsed, table, "cols") && !cli.has(parsed, table, "pairs") {
+            e = rule.refuse(heap, e, "stats.test-columns", "ci mean needs --cols (the mean of each) or --pairs (the mean of the differences)", "stats ci mean --cols A,B FILE, or --pairs A:B", "flag", "--cols");
+        } else if cli.operand_count(parsed) >= 2 && bytes.equal(cli.operand(args, parsed, 1), "diff") && (!cli.has(parsed, table, "cols") || !cli.has(parsed, table, "group")) {
+            e = rule.refuse(heap, e, "stats.test-columns", "ci diff needs --cols and --group", "stats ci diff --cols A,B --group G FILE", "flag", "--cols");
         }
     } else if bytes.equal(cli.operand(args, parsed, 0), "test") {
         is_test = true;
@@ -1474,7 +1509,15 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
                     w = json.begin_object(heap, w);
                     let ddof = cli.nat(args, parsed, table, "ddof");
                     let qtype = cli.nat(args, parsed, table, "quantile-type");
-                    if is_ci {
+                    if is_ci && bytes.equal(cli.operand(args, parsed, 1), "mean") {
+                        let (w2, e2) = test_one(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), cli.has(parsed, table, "pairs"), false, true, w, e);
+                        w = w2;
+                        e = e2;
+                    } else if is_ci && bytes.equal(cli.operand(args, parsed, 1), "diff") {
+                        let (w2, e2) = t2_one(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), true, w, e);
+                        w = w2;
+                        e = e2;
+                    } else if is_ci {
                         let (cn, ck, cok) = cat.parse_p(cli.text(args, parsed, table, "level"));
                         let (w2, e2) = ci.prop(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), table, cn, ck, float_of(cn) / float_of(quantile.pow10(ck)), w, e);
                         w = w2;
@@ -1504,11 +1547,11 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
                         w = w2;
                         e = e2;
                     } else if is_test && bytes.equal(cli.operand(args, parsed, 1), "t2") {
-                        let (w2, e2) = t2_one(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), w, e);
+                        let (w2, e2) = t2_one(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), false, w, e);
                         w = w2;
                         e = e2;
                     } else if is_test {
-                        let (w2, e2) = test_one(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), bytes.equal(cli.operand(args, parsed, 1), "paired") || (bytes.equal(cli.operand(args, parsed, 1), "wilcoxon") && cli.has(parsed, table, "pairs")), bytes.equal(cli.operand(args, parsed, 1), "wilcoxon"), w, e);
+                        let (w2, e2) = test_one(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), bytes.equal(cli.operand(args, parsed, 1), "paired") || (bytes.equal(cli.operand(args, parsed, 1), "wilcoxon") && cli.has(parsed, table, "pairs")), bytes.equal(cli.operand(args, parsed, 1), "wilcoxon"), false, w, e);
                         w = w2;
                         e = e2;
                     } else if bytes.equal(cli.operand(args, parsed, 0), "corr") {

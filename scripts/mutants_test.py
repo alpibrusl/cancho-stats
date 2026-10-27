@@ -40,7 +40,7 @@ M = [
     ("variance-zero-reason", A, "} else if status == 2 {\n        reason = \"variance-zero\";\n    } else if tc == 0 {", "} else if status == 2 {\n        reason = \"too-few-rows\";\n    } else if tc == 0 {"),
     ("missing-count", A, "w = json.put_int(heap, w, rows - n);", "w = json.put_int(heap, w, rows);"),
     ("top-level-echo", F, "w = json.put_float(heap, w, mu0);", "w = json.put_float(heap, w, 0.0);"),
-    ("level-echo", F, "w = json.put_float(heap, w, level);\n                                                }\n                                                w = cat.put_adjustment(", "w = json.put_float(heap, w, 0.95);\n                                                }\n                                                w = cat.put_adjustment("),
+    ("level-echo", F, "w = json.put_float(heap, w, level);\n                                                }\n                                                if !ci {\n                                                    w = cat.put_adjustment(", "w = json.put_float(heap, w, 0.95);\n                                                }\n                                                if !ci {\n                                                    w = cat.put_adjustment("),
 
     ("cols-required", F, "} else if !cli.has(parsed, table, \"cols\") {\n            e = rule.refuse(heap, e, \"stats.test-columns\"", "} else if false {\n            e = rule.refuse(heap, e, \"stats.test-columns\""),
     ("kind-name", F, "!bytes.equal(cli.operand(args, parsed, 1), \"t1\") && !bytes", "!bytes.equal(cli.operand(args, parsed, 1), \"tX\") && !bytes"),
