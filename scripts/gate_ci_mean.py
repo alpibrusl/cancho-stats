@@ -193,6 +193,28 @@ def main():
                 bad.append((1000 + fi, "the header of ci mean --pairs: %r" % sorted(dc)))
             same_entries(1000 + fi, "paired", dc, dt)
             counts["paired"] += len(dc["intervals"])
+        # columns of one value, of one value among empty cells, and the key of a pair
+        for k, (cells, what) in enumerate((([["3.5"]], "one value"), ([["3.5"], [""], [""]], "one value among empty cells"), ([["2"], ["2"], ["2"]], "every value equal"), ([["1"], ["2"]], "two values"))):
+            rows1 = [[c[0], c[0]] for c in cells]
+            nm = ["x", "y"]
+            pc = run(a.bin, tmp, nm, rows1, ["ci", "mean", "--cols", "x"])
+            pt = run(a.bin, tmp, nm, rows1, ["test", "t1", "--cols", "x"])
+            if pc.returncode != 0 or pt.returncode != 0:
+                bad.append((2000 + k, "%s: exit %d / %d" % (what, pc.returncode, pt.returncode)))
+                continue
+            g = json.loads(pc.stdout)["data"]["intervals"][0]
+            h = json.loads(pt.stdout)["data"]["tests"][0]
+            vs = [float(c[0]) for c in cells if c[0] != ""]
+            want_est = sum(vs) / len(vs)
+            if g["interval"] != h["interval"] or g.get("estimate") != want_est or g["n"] != h["n"] or g["column"] != "x":
+                bad.append((2000 + k, "%s: ci %r against test %r" % (what, g, h)))
+            if len(vs) < 2 and (g["interval"] is not None or g.get("reason") != "too-few-rows"):
+                bad.append((2000 + k, "%s: want a null interval with too-few-rows, got %r" % (what, g)))
+        rows2 = [["1", "2"], ["2", "4"], ["4", "5"]]
+        pc = run(a.bin, tmp, ["a", "b"], rows2, ["ci", "mean", "--pairs", "a:b"])
+        g = json.loads(pc.stdout)["data"]["intervals"][0]
+        if g.get("pair") != ["a", "b"] or "column" in g:
+            bad.append((2100, "the pair entry has the key(s) %r" % sorted(g)))
         # --correct is not for ci
         names, rows, gcol, labels, shapes, vidx, variance, level = g2.gen_t2(SM64(3), 40)
         p = run(a.bin, tmp, names, rows, ["ci", "mean", "--cols", names[vidx[0]], "--correct", "holm"])

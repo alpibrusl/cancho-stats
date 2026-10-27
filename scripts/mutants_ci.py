@@ -74,6 +74,7 @@ M = [
 ]
 
 EXPLAINED = {
+    "mean-variance-zero": "equivalent: with every value equal the standard error is 0, so the half-width q * 0 is 0 whether the branch that sets it is taken or the one that computes it (the quantile is found: the level is valid)",
     "cp-code": "unreachable guard (an argument, not a measurement): the bounds of section 9.2 of docs/numerics.md hold on every input of the sweeps, and no input of the gates or of the fuzz has made `beta_quantile` or `beta_quantile_upper` answer a nonzero code for shapes of 1 or more; the guard stays so that a failure is a reason, never a wrong endpoint",
 }
 

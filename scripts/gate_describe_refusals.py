@@ -396,7 +396,7 @@ CASES = [
     ('ci: prop ragged', b'o,g\ny,a\nn\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', 'f.csv'], 'stats.csv-ragged', 8),
     ('ci: no kind', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci'], 'args.missing-operand', 2),
     ('ci: kind alone', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop'], 'args.missing-operand', 2),
-    ('ci: unknown kind', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'median', 'f.csv'], 'args.bad-value', 2),
+    ('ci: unknown kind', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'median', '--cols', 'o', '--success', 'y', 'f.csv'], 'args.bad-value', 2),
     ('ci: two files', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', 'f.csv', 'f.csv'], 'args.missing-operand', 2),
     ('corr: method wilson', b'a,b\n1,2\n3,5\n', ['corr', '--method', 'wilson', 'f.csv'], 'args.bad-value', 2),
     # ci mean and ci diff (docs/resample.md section 9)
