@@ -1,0 +1,90 @@
+# `stats ci` and `stats resample`: intervals and seeded resampling (milestone S5)
+
+**Status: design only, written 2026-10-27 before any code of S5. Nothing in it has been measured; what it reads from the code of S0 to S4 is marked [read], every bound and every default is a [choice] fixed before the first run and corrected in place, in this document, if a run shows it false, and what is not decided is [open].** Tags: **[read]** read from a document or source, **[measured]** printed by a script (none yet), **[choice]** a decision the maintainer can overturn, **[open]** not decided. This is the S5 row of `docs/design.md` section 10. The conventions of `docs/test.md` (the answer, the flags, the rule tags, the gates, the discipline of the mutants and the fingerprint) and of `docs/rank.md` are not repeated.
+
+## 1. What it adds
+
+Two verbs, both seeded where they draw. Intervals that have a closed form are answered with the same exact-where-it-decides arithmetic as the tests; the bootstrap is the one place where the answer is not an exact quantity but a **deterministic function of the data and the seed**, and the document says what that means and gates it.
+
+| verb | kind | answers | exactness |
+|---|---|---|---|
+| `stats ci` | `mean` | the t interval for a mean | the same code as the interval of `test t1` **[read]** `lib/stest/answer.cho`; the bytes are equal |
+| `stats ci` | `diff` | the Welch interval for a difference of means | as `test t2` |
+| `stats ci` | `prop` | `--method wilson` (as `test prop`) or `clopper-pearson` (new) | the exact proportion; endpoints from the beta quantile of S0b **[read]** `special.dist` |
+| `stats ci` | `corr` | the interval for Pearson's r by Fisher's z (new) | `r` is the exact one of `corr`; `atanh`, the interval on `z` and `tanh` in double-double or doubles, stated below |
+| `stats ci` | `boot` | the percentile or BCa interval of a statistic of one column (or of a pair of columns, for `pearson`) | each replicate statistic is the correctly rounded value of the exact statistic of the resampled values; the interval is order statistics of the replicates |
+| `stats resample` | `perm` | the permutation test of a difference of means or of medians between two groups, of Pearson's r between two columns, and the paired sign-flip test | the statistic of every permutation as above; the p-value is a count |
+| `stats resample` | `boot` | the bootstrap distribution itself: the replicates' summary (mean, standard error, bias, quantiles) of a statistic | as `ci boot` |
+
+The closed list of statistics (not an expression) **[choice]**: `mean`, `median`, `variance`, `sd`, `skewness`, `kurtosis`, `quantile` (with `--q`, a type of the nine of S1), `trimmed-mean` (with `--trim`), and, for two columns, `pearson`. Each is a statistic `describe` or `corr` already computes exactly **[read]**; the resampling does not change what it is.
+
+## 2. Determinism: what a seeded answer promises **[choice]**
+
+* **One stream per replicate.** Replicate `b` (0-based) draws its row indices from the stream `derive(derive(seed, kind), b)` of `ml.rng` **[read]** (SplitMix64, one int of state; `derive(h, c) = mix((h ^ c) + gold)`; the bounded draw is `uniform(z, m) = (output >> 1) mod m`, whose small bias for `m` not a power of two is stated in the answer's `assumptions.draw`: at most `m / 2^63` in probability for any one index, about `1.1e-13` at the default row limit of 1,000,000 and `1.1e-12` at the ceiling of 10,000,000 (arithmetic, not measured)). The `kind` constants are fixed by this document (`boot` 1, `perm` 2, `signflip` 3). Nothing depends on the order the replicates are computed in, so **adding threads can never change a replicate**, and the interval is a function of the sorted replicates only.
+* **Replicates are exact where the statistic is.** The sum of a resample is the same whatever order the indices came in, and the exact accumulators (`acc.psum` / `acc.central`, **[read]** S0) take the multiset: so the mean, variance, sd, skewness, kurtosis of a replicate are the correctly rounded values of the exact statistic of that multiset, the same bits on every platform. `median`, `quantile`, `trimmed-mean` are order statistics of the multiset (exact selection, S1). `pearson` is the exact `r` of `corr` for the resampled pairs.
+* **The interval is not exact and says so.** Its endpoints are order statistics of `R` replicates (percentile) or of a BCa adjustment of the level (below): a Monte Carlo quantity with a standard error that the answer reports (`mc_error`, from the binomial standard error of the position of the endpoint, **[choice]** as a diagnostic, not a guarantee). The bytes are reproducible; their meaning is the ordinary bootstrap's.
+* **Cross-machine.** A fingerprint (`docs/xplat_fp.txt` lines `ci-boot`, `resample-perm`) on the three platforms of the CI workflow, as for every earlier slice.
+
+## 3. `stats ci` **[choice]**
+
+```
+stats ci KIND FILE [--cols A,..] [--level 0.95] [KIND flags]
+```
+
+* **`mean`**, **`diff`** (`--group`), **`prop`** (`--success`, `--group` for two samples, `--method wilson|clopper-pearson|newcombe`): answered from the code of `test`, so that `ci mean` equals the `interval` of `test t1` byte for byte (gate). They are repeated here because "give me the interval" is a different question from "test this", and an agent should not have to run a test to read an interval. **Clopper-Pearson** is new: the lower endpoint is the `alpha/2` quantile of `Beta(x, n - x + 1)` and the upper the `1 - alpha/2` quantile of `Beta(x + 1, n - x)` (0 and 1 at `x = 0` and `x = n`), by the beta quantile of S0b, whose accuracy bound `kappa (1e-13 + 1e-15 |ln tau|)` relative to the quantile, with `kappa = 1 / min(1, a, b)` **[read]** `docs/numerics.md` section 9.2, is the bound of the endpoint.
+* **`corr`** (`--cols A,B`, `--method pearson`): `z = atanh(r)`, standard error `1 / sqrt(n - 3)`, endpoints `tanh(z -+ q / sqrt(n - 3))` with `q = qnorm((1 + level) / 2)`; `n >= 4`, else `null` with `reason: "too-few-rows"`; `|r| = 1` has no interval (`reason: "perfect-correlation"`). The accuracy is that of `atanh` and `tanh` composed from `exp` and `ln` of `std.math` **[read]**: the bound is fixed before the gate (relative `1e-12`, **[choice]**). The Fisher interval is an approximation under bivariate normality and `assumptions` says so; Spearman and Kendall intervals are **not in v1** **[choice]**.
+* **`boot`** (`--cols A` or `--cols A,B` with `--statistic pearson`, `--statistic S`, `--replicates R`, `--seed S`, `--method percentile|bca`): section 4.
+
+The answer is `{"kind", "level", "estimate", "interval": {"low", "high", "method", ..}, "n", "method", "assumptions", "reason"}`; `estimate` is the statistic on the data itself, exact as above.
+
+## 4. The bootstrap **[choice]**
+
+* **Resample.** `n` rows drawn with replacement from the `n` rows with a value (for a pair of columns, the rows with both). The index of draw `j` of replicate `b` is `uniform(output number j of the stream of b, n)`.
+* **Percentile.** Sort the `R` replicate statistics (as order keys: the doubles are ordered exactly). The endpoints are the order statistics at positions `floor(R alpha / 2)` and `ceil(R (1 - alpha / 2)) - 1` (0-based) **[choice]**: a stated type, not an interpolation, so that the endpoint is itself a replicate and no arithmetic touches it. (Hyndman and Fan's type 6/7 interpolations are not used for this reason; the choice is open to overturn.)
+* **BCa.** Bias `z0 = qnorm(#{replicates < estimate} / R)` (ties counted as half), acceleration `a = sum (m - t_i)^3 / (6 (sum (m - t_i)^2)^(3/2))` from the `n` leave-one-out statistics `t_i` (`m` their mean), adjusted levels `alpha_k' = Phi(z0 + (z0 + z_k) / (1 - a (z0 + z_k)))`, the endpoints as above at `alpha_k'`. The leave-one-out statistics are exact (the correctly rounded statistic of the `n - 1` values); `z0`, `a` and the adjusted levels are computed in doubles from them, with the `qnorm` and `norm_cdf` of S0 **[read]**, so the BCa positions are a deterministic function of exact inputs and of correctly specified double arithmetic. `reason: "bca-undefined"` when `z0` is infinite (every replicate on one side) or the denominator vanishes; the interval then falls back to nothing (`null`), never silently to the percentile.
+* **Bounds.** `--replicates` 100 to 100,000 (default 2,000 **[choice]**), `--max-work` the product `R n` at most 2^31 by default **[open: to be set from the measured cost of one replicate]**; over it `limit.too-much-work` (exit 8, repair: fewer replicates, or a column sample). `--seed` is required for the bootstrap (no default: an unseeded draw is not reproducible and the tool has no clock); the answer echoes it.
+* **Not in v1** **[choice]**: the studentized (bootstrap-t) interval, the parametric bootstrap, block and cluster resampling, smoothed bootstraps, and bootstrap of an expression.
+
+## 5. `stats resample` **[choice]**
+
+* **`perm`**, two groups (`--cols A --group G`, `--statistic mean-diff|median-diff`): permute the group labels `R` times (a Fisher-Yates shuffle of the label vector from the replicate's stream), the statistic is the difference of group statistics; **two-sided** `p = (1 + #{|T*| >= |T|}) / (R + 1)` (Phipson and Smyth: a Monte Carlo p-value that is never 0 and is valid exactly), the comparison of two exact quantities for `mean-diff` (the difference of two exact rationals, compared as rationals, **no tolerance** as for `fisher`) and of two order statistics for `median-diff`. With `--replicates all` and at most 2^20 distinct label arrangements, the exact permutation p-value by enumeration (`p_method: "exact"`); else `"monte-carlo"` with the seed. 
+* **`perm`, paired** (`--pairs A:B`): the sign-flip test of the differences, as above (`kind` 3).
+* **`perm`, correlation** (`--cols A,B --statistic pearson`): permute one column.
+* **`boot`**: the summary of the bootstrap distribution: `estimate`, `bias = mean(replicates) - estimate`, `se = sd(replicates)` (both from the exact sums of the replicates), the quantiles `--quantiles` as order statistics. 
+* The answer says `p_method`, `replicates`, `seed`, `mc_error` (the binomial standard error of the p-value, `sqrt(p (1 - p) / R)`), as data.
+
+## 6. Gates (written before the code; each can fail) **[choice]**
+
+| id | gate | fails when |
+|---|---|---|
+| I-A | **Closed forms against `mpmath`** at 60 digits: Clopper-Pearson endpoints by root-finding on the exact beta cdf (relative `1e-12`), Fisher z endpoints (relative `1e-12`), `ci mean`/`diff`/`prop wilson` **byte equal** to the interval of `test` | outside the bound; one byte differs |
+| I-B | **Coverage**, seeded, 4,000 replicates: Wilson, Clopper-Pearson (conservative: inside or above, printed against its exact coverage computed by summing binomial probabilities), Fisher z (bivariate normal), t for a mean and Welch for a difference; the rate inside the 99.9% binomial interval around the **exact coverage of the method** where it is computable and around the nominal level where it is the method's claim. **Controls** that must be refused: the Wald interval for a proportion, `z` for `t`, the Fisher interval with `n - 2` | a control inside the interval |
+| I-C | **The bootstrap against an independent implementation**: a Python SplitMix64 and `derive` written from the specification (checked against the published vectors of `ml.rng` **[read]**), the same indices, `Fraction` statistics, and the replicates compared **bit for bit** for every statistic of the list at sizes from 2 to 200 with ties, constants, huge and subnormal values; then the percentile endpoints and the BCa positions (`z0`, `a`, adjusted levels from `mpmath` at 60 digits, the position by the same rounding rule) compared | one replicate bit differs; an endpoint is another replicate |
+| I-D | **Thread and order invariance**: 1, 2, 3, 7 threads (if threaded), the rows shuffled, the columns named in another order: the same bytes; a different seed gives different replicates (a control: the gate must be able to tell) | one byte differs; two seeds equal |
+| I-E | **Bootstrap coverage**: percentile and BCa intervals for the mean of a normal, an exponential and a lognormal sample at n = 20, 100, 500, 1,000 replicates of the experiment (each with R = 999, seeded), the rate printed with its 99.9% binomial interval; **printed, not gated against nominal** (the percentile bootstrap undercovers at small n for skewed data; that is a known property, and a gate that required 95% would be a false one). Gated: BCa's coverage at least the percentile's on the skewed families at n >= 100 (a stated expectation to be corrected in place if it is false) | measured, then corrected in place |
+| I-F | **Permutation test calibration**: under a true null the rejection rate at 0.05 inside the binomial interval around `floor(0.05 (R + 1)) / (R + 1)` (the exact size of the Monte Carlo test); the exact (enumerated) p-value equals the oracle's rational bit for bit; a control with `p = #{...} / R` (without the +1) is refused | outside the interval; a control inside it |
+| I-G | **Refusals and fuzz** (no input reaches a panic), **mutants** for every module (killed or each survivor explained), the check of their patterns, **the fingerprint** lines | an unexplained survivor; a differing line |
+
+New rule tags **[choice]**: `limit.too-much-work`, `stats.seed-required`, `stats.statistic` (a statistic not on the list or not defined for the arguments). Flags: `--replicates`, `--seed`, `--statistic`, `--method`, `--trim`, `--q`, `--max-work`.
+
+## 7. Slices (one pull request each)
+
+1. **S5.0** this design. Nothing else.
+2. **S5.1** `ci mean`, `ci diff`, `ci prop` (Wilson, Clopper-Pearson, Newcombe), `ci corr` (I-A, I-B for the closed forms).
+3. **S5.2** the resampling core: the stream, the index draw, the statistic list on a multiset, `ci boot --method percentile` (I-C, I-D, I-E for the percentile).
+4. **S5.3** BCa and the leave-one-out statistics (I-C for BCa, I-E).
+5. **S5.4** `resample perm` (two groups, paired, correlation) and `resample boot` (I-F).
+6. **S5.5** closing: the results of the slices in one table, the page.
+
+## 8. Decisions asked for, and what is proposed
+
+1. `ci mean`, `ci diff` and `ci prop wilson` repeat the intervals of `test` with the same bytes (proposed), or `ci` offers only what `test` does not.
+2. The statistic list of section 1 (proposed), or a shorter one (`mean`, `median`, `sd`, `pearson`) for v1.
+3. The percentile endpoints are order statistics at `floor(R alpha / 2)` and `ceil(R (1 - alpha / 2)) - 1` (proposed), or an interpolated type.
+4. BCa is in v1 (proposed), as its own slice, or deferred.
+5. `--replicates` defaults to 2,000 for the bootstrap and 9,999 for the permutation test (proposed), with `--max-work` set from the measured cost of one replicate.
+6. Threads: the first version is sequential and the invariance gate is trivially met; `conc` is added only if the measured cost of a realistic job (R = 10,000, n = 10,000) makes it necessary, and then under I-D (proposed).
+7. No Spearman or Kendall interval and no studentized bootstrap in v1 (proposed).
+8. The two-sided Monte Carlo p-value with the +1 (proposed), not the unadjusted `#/R`.
+
+Open: the value of `--max-work` (to be measured); whether the draw's modulo bias should be removed by rejection sampling (it costs the one-to-one relation between a draw and an output, and the bias is at most `m / 2^63`, section 2; proposed: keep, stated); the `mc_error` field for an interval endpoint (a diagnostic, proposed).
