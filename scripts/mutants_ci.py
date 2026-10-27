@@ -49,6 +49,7 @@ M = [
 ]
 
 EXPLAINED = {
+    "cp-code": "unreachable guard (an argument, not a measurement): the bounds of section 9.2 of docs/numerics.md hold on every input of the sweeps, and no input of the gates or of the fuzz has made `beta_quantile` or `beta_quantile_upper` answer a nonzero code for shapes of 1 or more; the guard stays so that a failure is a reason, never a wrong endpoint",
 }
 
 

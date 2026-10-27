@@ -124,7 +124,11 @@ def main():
                 print("gate_ci_prop: exit %d / %d on file %d: %s %s" % (pw.returncode, pt.returncode, fi, pw.stdout[:200], pt.stdout[:200]))
                 return 2
             files += 1
-            gw = json.loads(pw.stdout)["data"]["intervals"]
+            dw = json.loads(pw.stdout)["data"]
+            num_, k_ = ot.level_parts(level)
+            if dw.get("ci") != "prop" or dw.get("success") != succ or not gd.same(dw.get("level"), ot.rounded(Fraction(num_, 10 ** k_))) or "group" in dw:
+                bad.append((fi, "the header: %r" % {k: dw.get(k) for k in ("ci", "success", "level", "group")}))
+            gw = dw["intervals"]
             gt = json.loads(pt.stdout)["data"]["tests"]
             for k, (g, h) in enumerate(zip(gw, gt)):
                 tests += 1
@@ -132,6 +136,9 @@ def main():
                     bad.append((fi, "wilson %s: ci %r against test %r" % (names[[0, 2][k]], g["interval"], h["interval"])))
                 if g["n"] != h["n"]:
                     bad.append((fi, "wilson n: %r against %r" % (g["n"], h["n"])))
+                want_est = None if g["n"]["n"] == 0 else ot.rounded(Fraction(g["n"]["successes"], g["n"]["n"]))
+                if (want_est is None and g.get("estimate") is not None) or (want_est is not None and not gd.same(g.get("estimate"), want_est)):
+                    bad.append((fi, "estimate: want %r got %r" % (want_est, g.get("estimate"))))
                 if g.get("reason") != h.get("reason") and not (g.get("reason") is None and h.get("reason") == "variance-zero"):
                     bad.append((fi, "wilson reason: %r against %r" % (g.get("reason"), h.get("reason"))))
             # Clopper-Pearson, first column y
@@ -160,7 +167,7 @@ def main():
                         worst = max(worst, float(abs(got - want) / abs(want) / tol_rel))
                     if not ok:
                         bad.append((fi, "cp %s x %d n %d level %s: want %s got %r" % (key, x, nn, level, mpmath.nstr(want, 17), iv[key])))
-                if iv["method"] != "clopper-pearson" or iv["of"] != "proportion" or not gd.same(iv["estimate"], x / nn):
+                if iv["method"] != "clopper-pearson" or iv["of"] != "proportion" or not gd.same(iv["estimate"], x / nn) or not gd.same(gc.get("estimate"), x / nn):
                     bad.append((fi, "cp object: %r" % iv))
                 # controls
                 q = abs(float(mpmath.sqrt(2) * mpmath.erfinv(1 - 2 * a2)))
@@ -192,7 +199,10 @@ def main():
                     if p4.returncode != 0 or p5.returncode != 0:
                         bad.append((fi, "newcombe: exit %d / %d" % (p4.returncode, p5.returncode)))
                     else:
-                        for k, (g, h) in enumerate(zip(json.loads(p4.stdout)["data"]["intervals"], json.loads(p5.stdout)["data"]["tests"])):
+                        d4 = json.loads(p4.stdout)["data"]
+                        if d4.get("ci") != "prop" or d4.get("group") != "g" or d4.get("success") != succ:
+                            bad.append((fi, "the header of the two-sample answer: %r" % {k: d4.get(k) for k in ("ci", "success", "level", "group")}))
+                        for k, (g, h) in enumerate(zip(d4["intervals"], json.loads(p5.stdout)["data"]["tests"])):
                             tests += 1
                             if g["interval"] != h["interval"] or g["n"] != h["n"] or g["levels"] != h["levels"]:
                                 bad.append((fi, "newcombe %d: ci %r against test %r" % (k, g, h)))
