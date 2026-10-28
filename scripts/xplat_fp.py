@@ -37,6 +37,8 @@ import gate_ks  # noqa: E402
 import gate_fisher  # noqa: E402
 import gate_corr_exact  # noqa: E402
 import gate_ci_prop  # noqa: E402
+import gate_test2  # noqa: E402
+import gate_test  # noqa: E402
 import gate_wilcoxon  # noqa: E402
 import tempfile  # noqa: E402
 
@@ -433,6 +435,44 @@ def ci_prop_lines(stats):
     return out
 
 
+def ci_mean_lines(stats):
+    """`stats ci mean` and `stats ci diff` on 8 seeded CSV files of the groups of scripts/gate_test2.py (two labels, missing cells, the shapes of scripts/gate_describe.py) and 4 paired ones: `ci mean --cols`, `ci diff` with Welch's and the pooled variance, and
+    `ci mean --pairs`; one hash of the bytes of the answers."""
+    out = []
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        r = gate_special.SM64(127)
+        done = 0
+        fi = len(gate_test2.FIXED2)
+        while done < 8:
+            names, rows, gcol, labels, shapes, vidx, variance, level = gate_test2.gen_t2(r, fi)
+            fi += 1
+            num = [j for j in vidx if gate_test.numeric([rw[j] for rw in rows])]
+            if not num:
+                continue
+            cols = ",".join(names[j] for j in num)
+            h = hashlib.sha256()
+            for argv in (["ci", "mean", "--cols", cols, "--level", level],
+                         ["ci", "diff", "--cols", cols, "--group", names[gcol], "--level", level],
+                         ["ci", "diff", "--cols", cols, "--group", names[gcol], "--variance", "pooled", "--level", level]):
+                text = ",".join(names) + "\n" + "\n".join(",".join(rw) for rw in rows) + "\n"
+                (tmp / "f.csv").write_text(text)
+                p = subprocess.run([stats] + argv + ["--root", str(tmp), "f.csv"], capture_output=True, text=True, timeout=300)
+                h.update(("exit %d %s" % (p.returncode, p.stdout)).encode())
+            out.append("ci-mean\tfile%02d\t%d\t%s" % (done, len(rows), h.hexdigest()))
+            done += 1
+        fp = len(gate_test2.FIXED_P)
+        for k in range(4):
+            names, rows, pairs, shapes, level = gate_test2.gen_paired(r, fp + k)
+            if not pairs:
+                continue
+            text = ",".join(names) + "\n" + "\n".join(",".join(rw) for rw in rows) + "\n"
+            (tmp / "f.csv").write_text(text)
+            p = subprocess.run([stats, "ci", "mean", "--pairs", ",".join("%s:%s" % pr for pr in pairs), "--level", level, "--root", str(tmp), "f.csv"], capture_output=True, text=True, timeout=300)
+            out.append("ci-mean-paired\tfile%02d\t%d\t%s" % (k, len(rows), hashlib.sha256(("exit %d %s" % (p.returncode, p.stdout)).encode()).hexdigest()))
+    return out
+
+
 def wilcoxon_lines(stats):
     """`stats test wilcoxon` on 8 seeded CSV files (pairs of columns with zero differences and heavy ties, sizes up to 200, the shapes of scripts/gate_wilcoxon.py), with the three methods for zeros, `--exact no` and
     `--continuity none`, and the one-sample form: the hash of the bytes of the answers."""
@@ -494,6 +534,7 @@ def fingerprint(driver, acc, threads_check=True, stats=None):
         lines += fisher_lines(stats)
         lines += corr_exact_lines(stats)
         lines += ci_prop_lines(stats)
+        lines += ci_mean_lines(stats)
     return lines, bad
 
 

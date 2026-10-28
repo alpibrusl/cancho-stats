@@ -3,10 +3,14 @@ edition 5;
 module stest.answerci;
 
 import std.json;
+import std.vec;
 import flt;
 import special.quantile;
+import stest.answer;
 import stest.answer4;
 import stest.prop;
+import stest.ttest;
+import stest.welch;
 
 // The entries of `stats ci prop` (docs/resample.md sections 1 and 3): the interval for a proportion (one column, `--method wilson` as in `test prop`, or `clopper-pearson`) or for the difference of two proportions (`--group`,
 // Newcombe's hybrid score as in `test prop`). The interval object is written by the function that `test prop` uses, so the two are the same bytes. Clopper-Pearson's lower endpoint is the alpha/2 quantile of Beta(x, n - x + 1)
@@ -165,6 +169,157 @@ pub fn put_two[&h, &c, &la, &lb](heap: &!h Heap, w0: json.Writer, name: &c [byte
     w = json.end_object(heap, w);
     w = json.put_key(heap, w, "missing");
     w = json.put_int(heap, w, rows - n1 - n2);
+    w = json.end_object(heap, w);
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}
+
+// The interval object of a mean or of a difference of means, as `test t1`, `test paired` and `test t2` write it (no `method` key): of, level, estimate, low, high, rounding.
+fn put_mean_interval[&h](heap: &!h Heap, w0: json.Writer, of: &static [byte], level: float, est: float, half: float) -> [heap] json.Writer {
+    var w = w0;
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "of");
+    w = json.put_string(heap, w, of);
+    w = json.put_key(heap, w, "level");
+    w = json.put_float(heap, w, level);
+    w = json.put_key(heap, w, "estimate");
+    w = json.put_float(heap, w, est);
+    w = json.put_key(heap, w, "low");
+    w = json.put_float(heap, w, est - half);
+    w = json.put_key(heap, w, "high");
+    w = json.put_float(heap, w, est + half);
+    w = json.put_key(heap, w, "rounding");
+    w = json.put_string(heap, w, "double");
+    w = json.end_object(heap, w);
+    return w;
+}
+
+// `stats ci mean`: the t interval of the mean of column `col`, or (col2 >= 0) of the mean of the differences col - col2, from the same quantities as `test t1` and `test paired` (stest.ttest.one_sample): half-width
+// t_{n-1, (1+level)/2} s / sqrt(n) as the test writes it. n < 2 is a null interval with `too-few-rows`; every value equal is the interval of width 0.
+pub fn put_mean[&h, &n, &en, &k](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], store: &k vec.Vec[int], ncols: int, col: int, col2: int, rows: int, lnum: int, lk: int, level: float) -> [heap] json.Writer {
+    var w = w0;
+    let (n, status, tb, tc, db, dc, mb, mc, sb, sc) = ttest.one_sample(heap, store, ncols, col, col2, rows, 0);
+    w = json.begin_object(heap, w);
+    if col2 < 0 {
+        w = json.put_key(heap, w, "column");
+        w = answer.put_name(heap, w, names, ends, col);
+    } else {
+        w = json.put_key(heap, w, "pair");
+        w = json.begin_array(heap, w);
+        w = answer.put_name(heap, w, names, ends, col);
+        w = answer.put_name(heap, w, names, ends, col2);
+        w = json.end_array(heap, w);
+    }
+    var reason = "";
+    var ok = false;
+    var half = 0.0;
+    if n < 2 {
+        reason = "too-few-rows";
+    } else if mc != 0 || sc != 0 {
+        reason = "statistic-beyond-double";
+    } else if status == 2 {
+        ok = true;
+    } else {
+        let (q, qcode) = ttest.t_critical(lnum, lk, n - 1);
+        if qcode == 0 {
+            ok = true;
+            half = q * float_of_bits(sb);
+        } else {
+            reason = "interval-not-computed";
+        }
+    }
+    w = json.put_key(heap, w, "estimate");
+    if n >= 1 && mc == 0 {
+        w = json.put_float(heap, w, float_of_bits(mb));
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "interval");
+    if ok {
+        if col2 < 0 {
+            w = put_mean_interval(heap, w, "mean", level, float_of_bits(mb), half);
+        } else {
+            w = put_mean_interval(heap, w, "difference of means", level, float_of_bits(mb), half);
+        }
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "n");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "n");
+    w = json.put_int(heap, w, n);
+    w = json.put_key(heap, w, "missing");
+    w = json.put_int(heap, w, rows - n);
+    w = json.end_object(heap, w);
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}
+
+// `stats ci diff`: the interval of the difference of the means of column `col` between the groups a and b, from the same quantities as `test t2` (stest.welch.two_sample): Welch's by default, with the Satterthwaite degrees
+// of freedom rounded once, or the pooled one with n_a + n_b - 2.
+pub fn put_diff[&h, &n, &en, &ka, &kb](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], keys_a: &ka vec.Vec[int], rows_a: int, keys_b: &kb vec.Vec[int], rows_b: int, ncols: int, col: int, pooled: bool, lnum: int, lk: int, level: float) -> [heap] json.Writer {
+    var w = w0;
+    let r = welch.two_sample(heap, keys_a, rows_a, keys_b, rows_b, ncols, col, pooled);
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "column");
+    w = answer.put_name(heap, w, names, ends, col);
+    var reason = "";
+    var df = 0.0;
+    var have_df = false;
+    if r.status != 1 {
+        if pooled {
+            df = float_of(r.n1 + r.n2 - 2);
+            have_df = true;
+        } else if r.status == 0 && r.fc == 0 {
+            df = float_of_bits(r.fb);
+            have_df = true;
+        }
+    }
+    var ok = false;
+    var half = 0.0;
+    if r.status == 1 {
+        reason = "too-few-rows";
+    } else if r.ec != 0 || r.sc != 0 {
+        reason = "statistic-beyond-double";
+    } else if r.status == 2 {
+        ok = true;
+    } else if have_df {
+        let (q, qcode) = ttest.t_critical_real(lnum, lk, df);
+        if qcode == 0 {
+            ok = true;
+            half = q * float_of_bits(r.sb);
+        } else {
+            reason = "interval-not-computed";
+        }
+    } else {
+        reason = "statistic-beyond-double";
+    }
+    w = json.put_key(heap, w, "estimate");
+    if r.status != 1 && r.ec == 0 {
+        w = json.put_float(heap, w, float_of_bits(r.eb));
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "interval");
+    if ok {
+        w = put_mean_interval(heap, w, "difference of means", level, float_of_bits(r.eb), half);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "n");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "a");
+    w = json.put_int(heap, w, r.n1);
+    w = json.put_key(heap, w, "b");
+    w = json.put_int(heap, w, r.n2);
     w = json.end_object(heap, w);
     if len(reason) > 0 {
         w = json.put_key(heap, w, "reason");

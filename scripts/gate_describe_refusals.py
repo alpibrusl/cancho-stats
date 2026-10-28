@@ -396,9 +396,30 @@ CASES = [
     ('ci: prop ragged', b'o,g\ny,a\nn\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', 'f.csv'], 'stats.csv-ragged', 8),
     ('ci: no kind', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci'], 'args.missing-operand', 2),
     ('ci: kind alone', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop'], 'args.missing-operand', 2),
-    ('ci: unknown kind', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'mean', 'f.csv'], 'args.bad-value', 2),
+    ('ci: unknown kind', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'median', '--cols', 'o', '--success', 'y', 'f.csv'], 'args.bad-value', 2),
     ('ci: two files', b'o,g\ny,a\ny,a\nn,a\nn,b\ny,b\nn,b\n', ['ci', 'prop', '--cols', 'o', '--success', 'y', 'f.csv', 'f.csv'], 'args.missing-operand', 2),
     ('corr: method wilson', b'a,b\n1,2\n3,5\n', ['corr', '--method', 'wilson', 'f.csv'], 'args.bad-value', 2),
+    # ci mean and ci diff (docs/resample.md section 9)
+    ('ci: mean', b'a,b,g\n1.5,1.0,x\n2.5,2.2,x\n3.1,2.0,y\n4.0,4.4,y\n5.5,3.0,x\n', ['ci', 'mean', '--cols', 'a,b', 'f.csv'], None, 0),
+    ('ci: mean level 0.99', b'a,b,g\n1.5,1.0,x\n2.5,2.2,x\n3.1,2.0,y\n4.0,4.4,y\n5.5,3.0,x\n', ['ci', 'mean', '--cols', 'a', '--level', '0.99', 'f.csv'], None, 0),
+    ('ci: mean of the differences', b'a,b,g\n1.5,1.0,x\n2.5,2.2,x\n3.1,2.0,y\n4.0,4.4,y\n5.5,3.0,x\n', ['ci', 'mean', '--pairs', 'a:b', 'f.csv'], None, 0),
+    ('ci: mean one value', b'a\n1\n', ['ci', 'mean', '--cols', 'a', 'f.csv'], None, 0),
+    ('ci: mean no value', b'a\n\n\n', ['ci', 'mean', '--cols', 'a', 'f.csv'], 'stats.non-numeric', 2),
+    ('ci: mean every value equal', b'a\n3\n3\n3\n', ['ci', 'mean', '--cols', 'a', 'f.csv'], None, 0),
+    ('ci: mean text column', b'a,w\n1,x\n2,y\n', ['ci', 'mean', '--cols', 'w', 'f.csv'], 'stats.non-numeric', 2),
+    ('ci: mean no --cols or --pairs', b'a,b,g\n1.5,1.0,x\n2.5,2.2,x\n3.1,2.0,y\n4.0,4.4,y\n5.5,3.0,x\n', ['ci', 'mean', 'f.csv'], 'stats.test-columns', 2),
+    ('ci: mean no such column', b'a,b,g\n1.5,1.0,x\n2.5,2.2,x\n3.1,2.0,y\n4.0,4.4,y\n5.5,3.0,x\n', ['ci', 'mean', '--cols', 'z', 'f.csv'], 'stats.no-such-column', 2),
+    ('ci: mean --correct', b'a,b,g\n1.5,1.0,x\n2.5,2.2,x\n3.1,2.0,y\n4.0,4.4,y\n5.5,3.0,x\n', ['ci', 'mean', '--cols', 'a', '--correct', 'holm', 'f.csv'], 'args.bad-value', 2),
+    ('ci: mean level 0', b'a,b,g\n1.5,1.0,x\n2.5,2.2,x\n3.1,2.0,y\n4.0,4.4,y\n5.5,3.0,x\n', ['ci', 'mean', '--cols', 'a', '--level', '0', 'f.csv'], 'args.bad-value', 2),
+    ('ci: mean rows limit', b'a,b,g\n1.5,1.0,x\n2.5,2.2,x\n3.1,2.0,y\n4.0,4.4,y\n5.5,3.0,x\n', ['ci', 'mean', '--cols', 'a', '--max-rows', '2', 'f.csv'], 'limit.too-many-rows', 8),
+    ('ci: diff', b'a,b,g\n1.5,1.0,x\n2.5,2.2,x\n3.1,2.0,y\n4.0,4.4,y\n5.5,3.0,x\n', ['ci', 'diff', '--cols', 'a,b', '--group', 'g', 'f.csv'], None, 0),
+    ('ci: diff pooled', b'a,b,g\n1.5,1.0,x\n2.5,2.2,x\n3.1,2.0,y\n4.0,4.4,y\n5.5,3.0,x\n', ['ci', 'diff', '--cols', 'a', '--group', 'g', '--variance', 'pooled', 'f.csv'], None, 0),
+    ('ci: diff a group of one value', b'a,g\n1,x\n2,y\n3,y\n', ['ci', 'diff', '--cols', 'a', '--group', 'g', 'f.csv'], None, 0),
+    ('ci: diff no --group', b'a,b,g\n1.5,1.0,x\n2.5,2.2,x\n3.1,2.0,y\n4.0,4.4,y\n5.5,3.0,x\n', ['ci', 'diff', '--cols', 'a', 'f.csv'], 'stats.test-columns', 2),
+    ('ci: diff no --cols', b'a,b,g\n1.5,1.0,x\n2.5,2.2,x\n3.1,2.0,y\n4.0,4.4,y\n5.5,3.0,x\n', ['ci', 'diff', '--group', 'g', 'f.csv'], 'stats.test-columns', 2),
+    ('ci: diff three levels', b'a,g\n1,x\n2,y\n3,z\n', ['ci', 'diff', '--cols', 'a', '--group', 'g', 'f.csv'], 'stats.group-levels', 2),
+    ('ci: diff groups limit', b'a,b,g\n1.5,1.0,x\n2.5,2.2,x\n3.1,2.0,y\n4.0,4.4,y\n5.5,3.0,x\n', ['ci', 'diff', '--cols', 'a', '--group', 'g', '--max-groups', '1', 'f.csv'], 'limit.too-many-groups', 8),
+    ('ci: diff variance unknown', b'a,b,g\n1.5,1.0,x\n2.5,2.2,x\n3.1,2.0,y\n4.0,4.4,y\n5.5,3.0,x\n', ['ci', 'diff', '--cols', 'a', '--group', 'g', '--variance', 'maybe', 'f.csv'], 'args.bad-value', 2),
     # --correct and --max-tests (docs/test.md section 12)
     ("test: t1 holm", b"a,b,c\n1,5,3\n2,5,3\n4,1,3\n", ["test", "t1", "--cols", "a,b,c", "--correct", "holm", "f.csv"], None, 0),
     ("test: t1 bh with a constant column", b"a,b\n1,3\n2,3\n4,3\n", ["test", "t1", "--cols", "a,b", "--correct", "bh", "f.csv"], None, 0),
@@ -553,7 +574,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 56)
+            k = int(r.next() % 59)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -648,6 +669,12 @@ def main():
                 argv = ["ci", "prop", "--cols", "a,b", "--success", "1", "--group", "b", "--method", "newcombe", "--max-rows", "6", "f.csv"]
             elif k == 55:
                 argv = ["ci", "prop", "--cols", "b", "--success", "", "--method", "clopper-pearson", "--level", "0.9", "f.csv"]
+            elif k == 56:
+                argv = ["ci", "mean", "--cols", "a,b", "--level", "0.9", "f.csv"]
+            elif k == 57:
+                argv = ["ci", "mean", "--pairs", "a:b", "--max-rows", "6", "f.csv"]
+            elif k == 58:
+                argv = ["ci", "diff", "--cols", "a", "--group", "b", "--variance", "pooled", "f.csv"]
             elif k == 27:
                 argv = ["test", "prop", "--cols", "a", "--success", "1", "f.csv"]
             elif k == 28:

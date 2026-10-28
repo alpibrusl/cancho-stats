@@ -278,6 +278,7 @@ jobs:
         run: |
           python3 scripts/gate_ci_prop.py --files 300
           python3 scripts/gate_ci_prop_coverage.py
+          python3 scripts/gate_ci_mean.py --files 300
 
       - name: stats test wilcoxon against Fractions and mpmath, the exact p-values bit for bit, and the size of its test
         if: steps.stores.outputs.fetchable == 'yes'

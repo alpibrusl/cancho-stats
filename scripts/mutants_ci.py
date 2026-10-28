@@ -21,7 +21,7 @@ M = [
     ("branch", W, "        if exact {\n            w = answer4.put_interval(heap, w, \"proportion\", \"clopper-pearson\"", "        if !exact {\n            w = answer4.put_interval(heap, w, \"proportion\", \"clopper-pearson\""),
     ("estimate", W, "    if r.status == 0 {\n        w = json.put_float(heap, w, float_of_bits(r.p1b));", "    if r.status == 1 {\n        w = json.put_float(heap, w, float_of_bits(r.p1b));"),
     ("too-few", W, "    if r.status == 1 {\n        reason = \"too-few-rows\";\n    } else if exact {", "    if r.status == 2 {\n        reason = \"too-few-rows\";\n    } else if exact {"),
-    ("missing-one", W, "w = json.put_int(heap, w, rows - n);", "w = json.put_int(heap, w, rows);"),
+    ("missing-one", W, "w = json.put_int(heap, w, x);\n    w = json.put_key(heap, w, \"missing\");\n    w = json.put_int(heap, w, rows - n);", "w = json.put_int(heap, w, x);\n    w = json.put_key(heap, w, \"missing\");\n    w = json.put_int(heap, w, rows);"),
     ("missing-two", W, "w = json.put_int(heap, w, rows - n1 - n2);", "w = json.put_int(heap, w, rows - n1);"),
     ("levels", W, "w = json.put_string(heap, w, level_a);", "w = json.put_string(heap, w, level_b);"),
     ("newcombe-low", W, "lo = dd - sqrt((p1 - l1) * (p1 - l1) + (u2 - p2) * (u2 - p2));", "lo = dd - sqrt((p1 - l1) * (p1 - l1) + (p2 - l2) * (p2 - l2));"),
@@ -40,15 +40,41 @@ M = [
     ("level-echo", C, "w = json.put_key(heap, w, \"level\");\n        w = json.put_float(heap, w, level);", "w = json.put_key(heap, w, \"level\");\n        w = json.put_float(heap, w, 0.95);"),
     ("verb", F, "} else if bytes.equal(cli.operand(args, parsed, 0), \"ci\") {\n        is_ci = true;", "} else if bytes.equal(cli.operand(args, parsed, 0), \"cix\") {\n        is_ci = true;"),
     ("file-operand", F, "is_ci = true;\n        fidx = 2;", "is_ci = true;\n        fidx = 1;"),
-    ("kind", F, "} else if !bytes.equal(cli.operand(args, parsed, 1), \"prop\") {\n            e = rule.refuse(heap, e, \"args.bad-value\", \"the kind of interval", "} else if !bytes.equal(cli.operand(args, parsed, 1), \"propx\") {\n            e = rule.refuse(heap, e, \"args.bad-value\", \"the kind of interval"),
+    ("kind", F, "} else if !bytes.equal(cli.operand(args, parsed, 1), \"prop\") && !bytes.equal(cli.operand(args, parsed, 1), \"mean\") && !bytes.equal(cli.operand(args, parsed, 1), \"diff\") {", "} else if !bytes.equal(cli.operand(args, parsed, 1), \"prop\") && !bytes.equal(cli.operand(args, parsed, 1), \"mean\") && false {"),
     ("operands", F, "} else if cli.operand_count(parsed) != 3 {", "} else if cli.operand_count(parsed) > 3 {"),
-    ("required-flags", F, "if !cli.has(parsed, table, \"cols\") || !cli.has(parsed, table, \"success\") {", "if !cli.has(parsed, table, \"cols\") && !cli.has(parsed, table, \"success\") {"),
+    ("required-flags", F, "bytes.equal(cli.operand(args, parsed, 1), \"prop\") && (!cli.has(parsed, table, \"cols\") || !cli.has(parsed, table, \"success\")) {", "bytes.equal(cli.operand(args, parsed, 1), \"prop\") && (!cli.has(parsed, table, \"cols\") && !cli.has(parsed, table, \"success\")) {"),
     ("dispatch", F, "if is_ci {\n                        let (cn, ck, cok)", "if false {\n                        let (cn, ck, cok)"),
     ("level-parse", F, "float_of(cn) / float_of(quantile.pow10(ck)), w, e);", "float_of(cn) / float_of(quantile.pow10(ck) + 1), w, e);"),
     ("corr-methods", F, "\"corr\") && cli.has(parsed, table, \"method\") && !bytes.equal(cli.text(args, parsed, table, \"method\"), \"pearson\") &&", "\"corr\") && false &&"),
+    ("mean-guard", W, "    if n < 2 {\n        reason = \"too-few-rows\";\n    } else if mc != 0", "    if n < 1 {\n        reason = \"too-few-rows\";\n    } else if mc != 0"),
+    ("mean-variance-zero", W, "} else if status == 2 {\n        ok = true;\n    } else {\n        let (q, qcode) = ttest.t_critical(", "} else if status == 1 {\n        ok = true;\n    } else {\n        let (q, qcode) = ttest.t_critical("),
+    ("mean-df", W, "ttest.t_critical(lnum, lk, n - 1)", "ttest.t_critical(lnum, lk, n)"),
+    ("mean-half", W, "half = q * float_of_bits(sb);", "half = q * float_of_bits(mb);"),
+    ("mean-of", W, "put_mean_interval(heap, w, \"mean\", level", "put_mean_interval(heap, w, \"difference of means\", level"),
+    ("mean-paired-of", W, "put_mean_interval(heap, w, \"difference of means\", level, float_of_bits(mb), half);", "put_mean_interval(heap, w, \"mean\", level, float_of_bits(mb), half);"),
+    ("mean-estimate", W, "    if n >= 1 && mc == 0 {", "    if n >= 2 && mc == 0 {"),
+    ("mean-pair-key", W, "w = json.put_key(heap, w, \"pair\");", "w = json.put_key(heap, w, \"pairs\");"),
+    ("mean-missing", W, "w = json.put_int(heap, w, n);\n    w = json.put_key(heap, w, \"missing\");\n    w = json.put_int(heap, w, rows - n);", "w = json.put_int(heap, w, n);\n    w = json.put_key(heap, w, \"missing\");\n    w = json.put_int(heap, w, rows);"),
+    ("diff-pooled-df", W, "df = float_of(r.n1 + r.n2 - 2);", "df = float_of(r.n1 + r.n2 - 1);"),
+    ("diff-welch-df", W, "} else if r.status == 0 && r.fc == 0 {", "} else if r.status == 0 && r.fc == 1 {"),
+    ("diff-variance-zero", W, "} else if r.status == 2 {\n        ok = true;", "} else if r.status == 1 {\n        ok = true;"),
+    ("diff-half", W, "half = q * float_of_bits(r.sb);", "half = q * float_of_bits(r.eb);"),
+    ("diff-estimate", W, "if r.status != 1 && r.ec == 0 {\n        w = json.put_float(heap, w, float_of_bits(r.eb));", "if r.status != 2 && r.ec == 0 {\n        w = json.put_float(heap, w, float_of_bits(r.eb));"),
+    ("diff-n-a", W, "w = json.put_key(heap, w, \"a\");\n    w = json.put_int(heap, w, r.n1);", "w = json.put_key(heap, w, \"a\");\n    w = json.put_int(heap, w, r.n2);"),
+    ("main-mean-dispatch", F, "if is_ci && bytes.equal(cli.operand(args, parsed, 1), \"mean\") {", "if is_ci && bytes.equal(cli.operand(args, parsed, 1), \"meanx\") {"),
+    ("main-diff-dispatch", F, "} else if is_ci && bytes.equal(cli.operand(args, parsed, 1), \"diff\") {", "} else if is_ci && bytes.equal(cli.operand(args, parsed, 1), \"diffx\") {"),
+    ("main-mean-pairs", F, "cli.has(parsed, table, \"pairs\"), false, true, w, e);", "cli.has(parsed, table, \"pairs\"), true, true, w, e);"),
+    ("main-result-key", F, "rkey = \"intervals\";\n    }\n    var tname", "rkey = \"tests\";\n    }\n    var tname"),
+    ("main-header-key", F, "hkey = \"ci\";\n        rkey = \"intervals\";\n    }\n    var tname", "hkey = \"test\";\n        rkey = \"intervals\";\n    }\n    var tname"),
+    ("main-mean-name", F, "if ci {\n                                                    w = json.put_string(heap, w, \"mean\");", "if ci {\n                                                    w = json.put_string(heap, w, \"t1\");"),
+    ("main-diff-name", F, "tname = \"diff\";", "tname = \"t2\";"),
+    ("main-mu0", F, "if !paired && !ci {", "if !paired {"),
+    ("main-mean-flags", F, "bytes.equal(cli.operand(args, parsed, 1), \"mean\") && !cli.has(parsed, table, \"cols\") && !cli.has(parsed, table, \"pairs\") {", "bytes.equal(cli.operand(args, parsed, 1), \"mean\") && !cli.has(parsed, table, \"cols\") || !cli.has(parsed, table, \"pairs\") {"),
+    ("main-diff-flags", F, "bytes.equal(cli.operand(args, parsed, 1), \"diff\") && (!cli.has(parsed, table, \"cols\") || !cli.has(parsed, table, \"group\")) {", "bytes.equal(cli.operand(args, parsed, 1), \"diff\") && (!cli.has(parsed, table, \"cols\") && !cli.has(parsed, table, \"group\")) {"),
 ]
 
 EXPLAINED = {
+    "mean-variance-zero": "equivalent: with every value equal the standard error is 0, so the half-width q * 0 is 0 whether the branch that sets it is taken or the one that computes it (the quantile is found: the level is valid)",
     "cp-code": "unreachable guard (an argument, not a measurement): the bounds of section 9.2 of docs/numerics.md hold on every input of the sweeps, and no input of the gates or of the fuzz has made `beta_quantile` or `beta_quantile_upper` answer a nonzero code for shapes of 1 or more; the guard stays so that a failure is a reason, never a wrong endpoint",
 }
 
@@ -56,6 +82,7 @@ EXPLAINED = {
 def gates(binary, files):
     """the gates in the order that fails fastest; True if all pass"""
     for argv, tmo in (([sys.executable, str(ROOT / "scripts" / "gate_ci_prop.py"), "--bin", binary, "--files", str(files)], 1500),
+                      ([sys.executable, str(ROOT / "scripts" / "gate_ci_mean.py"), "--bin", binary, "--files", str(files)], 1500),
                       ([sys.executable, str(ROOT / "scripts" / "gate_describe_refusals.py"), "--bin", binary, "--fuzz", "150"], 600)):
         try:
             if subprocess.run(argv, capture_output=True, text=True, timeout=tmo).returncode != 0:
