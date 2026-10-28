@@ -5,7 +5,7 @@
 
 [package]
 name = "stats"
-cancho = "a4572ea3b506e4bcec1c4be43deda1043c11ba9f"
+cancho = "f4ead824f33b291a0ad7620a34a0c1346a7abe4f"
 
 [dependencies.cli]
 git = "https://github.com/alpibrusl/cancho-tools"
