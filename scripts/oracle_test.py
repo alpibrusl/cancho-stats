@@ -873,3 +873,63 @@ def kendall_brute(n):
     for perm in itertools.permutations(range(n)):
         counts[sum(1 for i in range(n) for j in range(i + 1, n) if perm[i] > perm[j])] += 1
     return counts
+
+
+# ---- the bootstrap (docs/resample.md section 12) ----
+MASK64 = (1 << 64) - 1
+GOLD = 0x9E3779B97F4A7C15
+
+
+def sm_mix(z):
+    """the SplitMix64 finaliser on a 64-bit unsigned integer"""
+    z &= MASK64
+    z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & MASK64
+    z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & MASK64
+    return z ^ (z >> 31)
+
+
+def sm_derive(h, c):
+    """derive(h, c) = mix((h xor c) + gold), 64-bit"""
+    return sm_mix(((h ^ c) + GOLD) & MASK64)
+
+
+def boot_index(seed, kind, b, j, n):
+    """draw j of replicate b: z = mix(s_b + (j + 1) gold) with s_b = derive(derive(seed, kind), b); the index (z >> 1) mod n"""
+    sb = sm_derive(sm_derive(seed, kind), b)
+    z = sm_mix((sb + (j + 1) * GOLD) & MASK64)
+    return (z >> 1) % n
+
+
+def boot_stat(name, vals):
+    """the exact statistic of a multiset of doubles, as the program rounds it: mean S1 / n; variance (n S2 - S1^2) / (n (n - 1)) rounded once; sd the sqrt of that double; median the middle value or the exact half-sum of the two
+    middle values rounded once"""
+    n = len(vals)
+    f = [Fraction(v) for v in vals]
+    if name == "mean":
+        return rounded(sum(f, Fraction(0)) / n)
+    if name in ("variance", "sd"):
+        s1 = sum(f, Fraction(0))
+        s2 = sum((v * v for v in f), Fraction(0))
+        var = rounded((n * s2 - s1 * s1) / (n * (n - 1)))
+        return var if name == "variance" else math.sqrt(var)
+    if name == "median":
+        g = sorted(f)
+        if n % 2 == 1:
+            return rounded(g[n // 2])
+        return rounded((g[n // 2 - 1] + g[n // 2]) / 2)
+    raise ValueError(name)
+
+
+def boot_replicates(vals, name, reps, seed, kind=1):
+    """the R replicate statistics of the bootstrap of the list `vals` (the present values in file order)"""
+    n = len(vals)
+    return [boot_stat(name, [vals[boot_index(seed, kind, b, j, n)] for j in range(n)]) for b in range(reps)]
+
+
+def boot_positions(reps, level_text):
+    """the 0-based positions of the percentile endpoints, in exact integers: floor(R (10^k - num) / (2 10^k)) and ceil(R (10^k + num) / (2 10^k)) - 1"""
+    num, k = level_parts(level_text)
+    scale = 10 ** k
+    lo = reps * (scale - num) // (2 * scale)
+    hi = -((-reps * (scale + num)) // (2 * scale)) - 1
+    return lo, hi
