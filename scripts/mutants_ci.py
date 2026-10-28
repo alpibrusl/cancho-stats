@@ -40,7 +40,7 @@ M = [
     ("level-echo", C, "w = json.put_key(heap, w, \"level\");\n        w = json.put_float(heap, w, level);", "w = json.put_key(heap, w, \"level\");\n        w = json.put_float(heap, w, 0.95);"),
     ("verb", F, "} else if bytes.equal(cli.operand(args, parsed, 0), \"ci\") {\n        is_ci = true;", "} else if bytes.equal(cli.operand(args, parsed, 0), \"cix\") {\n        is_ci = true;"),
     ("file-operand", F, "is_ci = true;\n        fidx = 2;", "is_ci = true;\n        fidx = 1;"),
-    ("kind", F, "} else if !bytes.equal(cli.operand(args, parsed, 1), \"prop\") && !bytes.equal(cli.operand(args, parsed, 1), \"mean\") && !bytes.equal(cli.operand(args, parsed, 1), \"diff\") {", "} else if !bytes.equal(cli.operand(args, parsed, 1), \"prop\") && !bytes.equal(cli.operand(args, parsed, 1), \"mean\") && false {"),
+    ("kind", F, "} else if !bytes.equal(cli.operand(args, parsed, 1), \"prop\") && !bytes.equal(cli.operand(args, parsed, 1), \"mean\") && !bytes.equal(cli.operand(args, parsed, 1), \"diff\") && !bytes.equal(cli.operand(args, parsed, 1), \"corr\") {", "} else if !bytes.equal(cli.operand(args, parsed, 1), \"prop\") && !bytes.equal(cli.operand(args, parsed, 1), \"mean\") && !bytes.equal(cli.operand(args, parsed, 1), \"diff\") && false {"),
     ("operands", F, "} else if cli.operand_count(parsed) != 3 {", "} else if cli.operand_count(parsed) > 3 {"),
     ("required-flags", F, "bytes.equal(cli.operand(args, parsed, 1), \"prop\") && (!cli.has(parsed, table, \"cols\") || !cli.has(parsed, table, \"success\")) {", "bytes.equal(cli.operand(args, parsed, 1), \"prop\") && (!cli.has(parsed, table, \"cols\") && !cli.has(parsed, table, \"success\")) {"),
     ("dispatch", F, "if is_ci {\n                        let (cn, ck, cok)", "if false {\n                        let (cn, ck, cok)"),
@@ -71,6 +71,24 @@ M = [
     ("main-mu0", F, "if !paired && !ci {", "if !paired {"),
     ("main-mean-flags", F, "bytes.equal(cli.operand(args, parsed, 1), \"mean\") && !cli.has(parsed, table, \"cols\") && !cli.has(parsed, table, \"pairs\") {", "bytes.equal(cli.operand(args, parsed, 1), \"mean\") && !cli.has(parsed, table, \"cols\") || !cli.has(parsed, table, \"pairs\") {"),
     ("main-diff-flags", F, "bytes.equal(cli.operand(args, parsed, 1), \"diff\") && (!cli.has(parsed, table, \"cols\") || !cli.has(parsed, table, \"group\")) {", "bytes.equal(cli.operand(args, parsed, 1), \"diff\") && (!cli.has(parsed, table, \"cols\") && !cli.has(parsed, table, \"group\")) {"),
+    ("corr-atanh-negative", W, "return 0.0 - 0.5 * math.log1p(2.0 * (0.0 - r) / (1.0 + r));", "return 0.0 - 0.5 * math.log1p(2.0 * (0.0 - r) / (1.0 - r));"),
+    ("corr-atanh-positive", W, "return 0.5 * math.log1p(2.0 * r / (1.0 - r));", "return 0.5 * math.log1p(2.0 * r / (1.0 + r));"),
+    ("corr-tanh-cut", W, "if a < 20.0 {", "if a < 10.0 {"),
+    ("corr-tanh-sign", W, "if x < 0.0 {\n        return 0.0 - t;", "if x > 0.0 {\n        return 0.0 - t;"),
+    ("corr-se", W, "let h = q / sqrt(float_of(n - 3));", "let h = q / sqrt(float_of(n - 2));"),
+    ("corr-rows", W, "} else if n < 4 {", "} else if n < 3 {"),
+    ("corr-perfect", W, "} else if exact == 1 {\n        reason = \"perfect-correlation\";", "} else if exact == 2 {\n        reason = \"perfect-correlation\";"),
+    ("corr-constant", W, "if status != 0 {\n        reason = \"constant-column\";", "if status != 1 {\n        reason = \"constant-column\";"),
+    ("corr-estimate", W, "    if status == 0 {\n        w = json.put_float(heap, w, r);", "    if status != 0 {\n        w = json.put_float(heap, w, r);"),
+    ("corr-low", W, "lo = tanh(z - h);", "lo = tanh(z + h);"),
+    ("corr-high", W, "hi = tanh(z + h);", "hi = tanh(z - h);"),
+    ("corr-method", W, "\"correlation\", \"fisher-z\"", "\"correlation\", \"t\""),
+    ("main-corr-dispatch", F, "} else if is_ci && bytes.equal(cli.operand(args, parsed, 1), \"corr\") {", "} else if is_ci && bytes.equal(cli.operand(args, parsed, 1), \"corrx\") {"),
+    ("main-corr-header", F, "if ci {\n                                                w = json.put_key(heap, w, \"ci\");", "if !ci {\n                                                w = json.put_key(heap, w, \"ci\");"),
+    ("main-corr-key", F, "w = json.put_key(heap, w, \"intervals\");\n                                            } else {", "w = json.put_key(heap, w, \"pairs\");\n                                            } else {"),
+    ("main-corr-adjustment", F, "if !ci {\n                                                w = json.put_key(heap, w, \"adjustment\");", "if ci {\n                                                w = json.put_key(heap, w, \"adjustment\");"),
+    ("main-corr-method", F, "\"corr\") && cli.has(parsed, table, \"method\") && !bytes.equal(cli.text(args, parsed, table, \"method\"), \"pearson\") {\n        e = rule.refuse(heap, e, \"args.bad-value\", \"ci corr", "\"corr\") && cli.has(parsed, table, \"method\") && false {\n        e = rule.refuse(heap, e, \"args.bad-value\", \"ci corr"),
+    ("main-corr-level", F, "w = json.put_key(heap, w, \"level\");\n                                                w = json.put_float(heap, w, level);\n                                            }\n                                            w = json.put_key(heap, w, \"method\");", "w = json.put_key(heap, w, \"level\");\n                                                w = json.put_float(heap, w, 0.95);\n                                            }\n                                            w = json.put_key(heap, w, \"method\");"),
 ]
 
 EXPLAINED = {
@@ -83,6 +101,7 @@ def gates(binary, files):
     """the gates in the order that fails fastest; True if all pass"""
     for argv, tmo in (([sys.executable, str(ROOT / "scripts" / "gate_ci_prop.py"), "--bin", binary, "--files", str(files)], 1500),
                       ([sys.executable, str(ROOT / "scripts" / "gate_ci_mean.py"), "--bin", binary, "--files", str(files)], 1500),
+                      ([sys.executable, str(ROOT / "scripts" / "gate_ci_corr.py"), "--bin", binary, "--files", str(files)], 1500),
                       ([sys.executable, str(ROOT / "scripts" / "gate_describe_refusals.py"), "--bin", binary, "--fuzz", "150"], 600)):
         try:
             if subprocess.run(argv, capture_output=True, text=True, timeout=tmo).returncode != 0:

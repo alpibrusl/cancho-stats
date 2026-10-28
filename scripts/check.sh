@@ -29,7 +29,7 @@ step "stats test prop"; $PY scripts/gate_test4.py --files 300; $PY scripts/gate_
 step "stats test --correct"; $PY scripts/gate_test5.py --files 100; $PY scripts/gate_test5_calibration.py --replicates 1000
 step "stats test anova"; $PY scripts/gate_anova.py --files 200 --scipy; $PY scripts/gate_anova_calibration.py --replicates 1000
 step "stats test kruskal"; $PY scripts/gate_kruskal.py --files 200 --scipy; $PY scripts/gate_kruskal_calibration.py --replicates 1000
-step "stats ci prop"; $PY scripts/gate_ci_prop.py --files 200; $PY scripts/gate_ci_prop_coverage.py; $PY scripts/gate_ci_mean.py --files 200
+step "stats ci prop"; $PY scripts/gate_ci_prop.py --files 200; $PY scripts/gate_ci_prop_coverage.py; $PY scripts/gate_ci_mean.py --files 200; $PY scripts/gate_ci_corr.py --files 200
 step "stats corr --exact"; $PY scripts/gate_corr_exact.py --files 200 --scipy
 step "stats test fisher"; $PY scripts/gate_fisher.py --files 200 --scipy
 step "stats test ks"; $PY scripts/gate_ks.py --files 200 --scipy; $PY scripts/gate_ks_calibration.py --replicates 1000

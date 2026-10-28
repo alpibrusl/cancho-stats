@@ -420,6 +420,22 @@ CASES = [
     ('ci: diff three levels', b'a,g\n1,x\n2,y\n3,z\n', ['ci', 'diff', '--cols', 'a', '--group', 'g', 'f.csv'], 'stats.group-levels', 2),
     ('ci: diff groups limit', b'a,b,g\n1.5,1.0,x\n2.5,2.2,x\n3.1,2.0,y\n4.0,4.4,y\n5.5,3.0,x\n', ['ci', 'diff', '--cols', 'a', '--group', 'g', '--max-groups', '1', 'f.csv'], 'limit.too-many-groups', 8),
     ('ci: diff variance unknown', b'a,b,g\n1.5,1.0,x\n2.5,2.2,x\n3.1,2.0,y\n4.0,4.4,y\n5.5,3.0,x\n', ['ci', 'diff', '--cols', 'a', '--group', 'g', '--variance', 'maybe', 'f.csv'], 'args.bad-value', 2),
+    # ci corr (docs/resample.md section 11)
+    ('ci: corr', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci', 'corr', 'f.csv'], None, 0),
+    ('ci: corr --cols', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci', 'corr', '--cols', 'a,c', 'f.csv'], None, 0),
+    ('ci: corr listwise level 0.99', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci', 'corr', '--missing', 'listwise', '--level', '0.99', 'f.csv'], None, 0),
+    ('ci: corr perfect correlation', b'a,b\n1,2\n2,4\n3,6\n4,8\n5,10\n', ['ci', 'corr', 'f.csv'], None, 0),
+    ('ci: corr constant column', b'a,b\n1,2\n2,2\n3,2\n4,2\n', ['ci', 'corr', 'f.csv'], None, 0),
+    ('ci: corr three rows', b'a,b\n1,2\n2,1\n3,3\n', ['ci', 'corr', 'f.csv'], None, 0),
+    ('ci: corr one numeric column', b'a,b\n1,x\n2,y\n', ['ci', 'corr', 'f.csv'], 'stats.corr-columns', 2),
+    ('ci: corr method pearson explicit', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci', 'corr', '--method', 'pearson', 'f.csv'], None, 0),
+    ('ci: corr method spearman', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci', 'corr', '--method', 'spearman', 'f.csv'], 'args.bad-value', 2),
+    ('ci: corr method kendall', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci', 'corr', '--method', 'kendall', 'f.csv'], 'args.bad-value', 2),
+    ('ci: corr --correct', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci', 'corr', '--correct', 'holm', 'f.csv'], 'args.bad-value', 2),
+    ('ci: corr pairs limit', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci', 'corr', '--max-pairs', '2', 'f.csv'], 'limit.too-many-pairs', 8),
+    ('ci: corr level 1', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci', 'corr', '--level', '1', 'f.csv'], 'args.bad-value', 2),
+    ('ci: corr no such column', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci', 'corr', '--cols', 'a,z', 'f.csv'], 'stats.no-such-column', 2),
+    ('ci: corr ragged', b'a,b\n1,2\n3\n', ['ci', 'corr', 'f.csv'], 'stats.csv-ragged', 8),
     # --correct and --max-tests (docs/test.md section 12)
     ("test: t1 holm", b"a,b,c\n1,5,3\n2,5,3\n4,1,3\n", ["test", "t1", "--cols", "a,b,c", "--correct", "holm", "f.csv"], None, 0),
     ("test: t1 bh with a constant column", b"a,b\n1,3\n2,3\n4,3\n", ["test", "t1", "--cols", "a,b", "--correct", "bh", "f.csv"], None, 0),
@@ -574,7 +590,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 59)
+            k = int(r.next() % 62)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -675,6 +691,12 @@ def main():
                 argv = ["ci", "mean", "--pairs", "a:b", "--max-rows", "6", "f.csv"]
             elif k == 58:
                 argv = ["ci", "diff", "--cols", "a", "--group", "b", "--variance", "pooled", "f.csv"]
+            elif k == 59:
+                argv = ["ci", "corr", "f.csv"]
+            elif k == 60:
+                argv = ["ci", "corr", "--cols", "a,b", "--missing", "listwise", "--level", "0.9", "--max-rows", "6", "f.csv"]
+            elif k == 61:
+                argv = ["ci", "corr", "--cols", "b,a", "--max-pairs", "1", "f.csv"]
             elif k == 27:
                 argv = ["test", "prop", "--cols", "a", "--success", "1", "f.csv"]
             elif k == 28:
