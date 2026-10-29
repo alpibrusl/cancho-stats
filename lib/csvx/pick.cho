@@ -2,8 +2,11 @@ edition 5;
 
 module csvx.pick;
 
+import std.buffer;
 import std.bytes;
 import std.vec;
+import csvx.rule;
+import toolbox.fail;
 
 // The columns named by --cols: `sel[j]` is 1 for each named column and 0 for the others. Answers (0, _) when all is well, else (1, i) no column of the header has the name of item i, (2, i) two or more have, (3, i) item i is empty.
 pub fn select[&n, &en, &t, &o](names: &n [byte], ends: &en vec.Vec[int], ncols: int, list: &t [byte], sel: &!o [int]) -> [] (int, int) {
@@ -82,4 +85,24 @@ pub fn pairs[&n, &en, &t, &a, &b](names: &n [byte], ends: &en vec.Vec[int], ncol
         i = i + 1;
     }
     return (0, 0);
+}
+
+// Checks that every column marked in `sel` is numeric in both reads (the same read twice for a test of one file): no cell that is not a number and at least one number between the two. Answers the errors.
+pub fn check_numeric[&h, &n, &en, &s, &a1, &b1, &a2, &b2](heap: &!h Heap, names: &n buffer.Buffer, ends: &en vec.Vec[int], sel: &s [int], nc: int, num_a: &a1 [int], bad_a: &b1 [int], num_b: &a2 [int], bad_b: &b2 [int], errs: fail.Errors) -> [heap] fail.Errors {
+    var e = errs;
+    var ok = true;
+    var j = 0;
+    while j < nc {
+        let numeric = num_a[j] + num_b[j] > 0 && bad_a[j] == 0 && bad_b[j] == 0;
+        if sel[j] == 1 && !numeric && ok {
+            ok = false;
+            var from = 0;
+            if j > 0 {
+                from = vec.get(ends, j - 1);
+            }
+            e = rule.refuse(heap, e, "stats.non-numeric", "--cols names a column that has no numbers or has a cell that is not a number", "name numeric columns only", "column", buffer.bytes(names)[from..vec.get(ends, j)]);
+        }
+        j = j + 1;
+    }
+    return e;
 }

@@ -281,6 +281,11 @@ jobs:
           python3 scripts/gate_ci_mean.py --files 300
           python3 scripts/gate_ci_corr.py --files 300
 
+      - name: stats ci boot against the independent SplitMix64 and Fractions, every replicate bit for bit
+        if: steps.stores.outputs.fetchable == 'yes'
+        run: |
+          python3 scripts/gate_ci_boot.py --files 150
+
       - name: stats test wilcoxon against Fractions and mpmath, the exact p-values bit for bit, and the size of its test
         if: steps.stores.outputs.fetchable == 'yes'
         run: |
@@ -313,6 +318,7 @@ jobs:
           python3 scripts/mutants_fisher.py --check
           python3 scripts/mutants_corrx.py --check
           python3 scripts/mutants_ci.py --check
+          python3 scripts/mutants_boot.py --check
           python3 scripts/mutants_special.py --check
 
       - name: Quantiles (nine definitions) against an independent exact reference
@@ -455,3 +461,4 @@ jobs:
           python3 scripts/mutants_fisher.py
           python3 scripts/mutants_corrx.py
           python3 scripts/mutants_ci.py
+          python3 scripts/mutants_boot.py

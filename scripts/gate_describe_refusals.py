@@ -436,6 +436,34 @@ CASES = [
     ('ci: corr level 1', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci', 'corr', '--level', '1', 'f.csv'], 'args.bad-value', 2),
     ('ci: corr no such column', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci', 'corr', '--cols', 'a,z', 'f.csv'], 'stats.no-such-column', 2),
     ('ci: corr ragged', b'a,b\n1,2\n3\n', ['ci', 'corr', 'f.csv'], 'stats.csv-ragged', 8),
+    # ci boot (docs/resample.md section 12)
+    ('ci: boot', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a,b','--seed','1','--replicates','100','f.csv'], None, 0),
+    ('ci: boot median', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--statistic','median','--seed','1','--replicates','100','f.csv'], None, 0),
+    ('ci: boot variance', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--statistic','variance','--seed','1','--replicates','100','f.csv'], None, 0),
+    ('ci: boot sd level 0.99', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--statistic','sd','--seed','1','--replicates','100','--level','0.99','f.csv'], None, 0),
+    ('ci: boot seed 0', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','0','--replicates','100','f.csv'], None, 0),
+    ('ci: boot largest seed', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','4611686018427387903','--replicates','100','f.csv'], None, 0),
+    ('ci: boot no seed', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','f.csv'], 'stats.seed-required', 2),
+    ('ci: boot seed 2^62', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','4611686018427387904','--replicates','100','f.csv'], 'args.bad-value', 2),
+    ('ci: boot seed negative', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','-1','--replicates','100','f.csv'], 'args.bad-value', 2),
+    ('ci: boot seed text', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','abc','--replicates','100','f.csv'], 'args.bad-value', 2),
+    ('ci: boot seed twenty digits', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','99999999999999999999','--replicates','100','f.csv'], 'args.bad-value', 2),
+    ('ci: boot seed empty', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','','--replicates','100','f.csv'], 'args.bad-value', 2),
+    ('ci: boot replicates 99', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','99','f.csv'], 'args.bad-value', 2),
+    ('ci: boot replicates 100001', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100001','f.csv'], 'args.bad-value', 2),
+    ('ci: boot statistic unknown', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--statistic','mode','f.csv'], 'args.bad-value', 2),
+    ('ci: boot no --cols', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--seed','1','f.csv'], 'stats.test-columns', 2),
+    ('ci: boot no such column', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','z','--seed','1','--replicates','100','f.csv'], 'stats.no-such-column', 2),
+    ('ci: boot too much work', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--max-work','599','f.csv'], 'limit.too-much-work', 8),
+    ('ci: boot work at the limit', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--max-work','600','f.csv'], None, 0),
+    ('ci: boot level 1', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--level','1','f.csv'], 'args.bad-value', 2),
+    ('ci: boot --correct', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--correct','holm','f.csv'], 'args.bad-value', 2),
+    ('ci: boot rows limit', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--max-rows','2','f.csv'], 'limit.too-many-rows', 8),
+    ('ci: boot two files', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','f.csv','f.csv'], 'args.missing-operand', 2),
+    ('ci: boot seed with a colon', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1:','--replicates','100','f.csv'], 'args.bad-value', 2),
+    ('ci: boot seed with a slash', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1/','--replicates','100','f.csv'], 'args.bad-value', 2),
+    ('ci: boot one value under a small max-work', b'a\n1\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--max-work','50','f.csv'], None, 0),
+    ('ci: boot 100000 replicates', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100000','f.csv'], None, 0),
     # --correct and --max-tests (docs/test.md section 12)
     ("test: t1 holm", b"a,b,c\n1,5,3\n2,5,3\n4,1,3\n", ["test", "t1", "--cols", "a,b,c", "--correct", "holm", "f.csv"], None, 0),
     ("test: t1 bh with a constant column", b"a,b\n1,3\n2,3\n4,3\n", ["test", "t1", "--cols", "a,b", "--correct", "bh", "f.csv"], None, 0),
@@ -590,7 +618,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 62)
+            k = int(r.next() % 66)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -697,6 +725,14 @@ def main():
                 argv = ["ci", "corr", "--cols", "a,b", "--missing", "listwise", "--level", "0.9", "--max-rows", "6", "f.csv"]
             elif k == 61:
                 argv = ["ci", "corr", "--cols", "b,a", "--max-pairs", "1", "f.csv"]
+            elif k == 62:
+                argv = ["ci", "boot", "--cols", "a,b", "--seed", str(int(r.next() % 1000)), "--replicates", "100", "f.csv"]
+            elif k == 63:
+                argv = ["ci", "boot", "--cols", "b", "--statistic", "median", "--seed", "3", "--replicates", "100", "--max-rows", "5", "f.csv"]
+            elif k == 64:
+                argv = ["ci", "boot", "--cols", "a", "--statistic", "sd", "--seed", "4611686018427387903", "--replicates", "100", "--max-work", "300", "f.csv"]
+            elif k == 65:
+                argv = ["ci", "boot", "--cols", "a,b", "--statistic", "variance", "--seed", "9", "--replicates", "100", "--level", "0.5", "f.csv"]
             elif k == 27:
                 argv = ["test", "prop", "--cols", "a", "--success", "1", "f.csv"]
             elif k == 28:
