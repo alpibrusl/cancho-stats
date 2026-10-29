@@ -900,9 +900,10 @@ def boot_index(seed, kind, b, j, n):
     return (z >> 1) % n
 
 
-def boot_stat(name, vals):
+def boot_stat(name, vals, qt=7, p=None, trim=None):
     """the exact statistic of a multiset of doubles, as the program rounds it: mean S1 / n; variance (n S2 - S1^2) / (n (n - 1)) rounded once; sd the sqrt of that double; median the middle value or the exact half-sum of the two
-    middle values rounded once"""
+    middle values rounded once; skewness and excess kurtosis as `describe` (gate_describe.shape_moments); the quantile of type `qt` at the Fraction `p` (gate_quantile.hf); the trimmed mean dropping floor(n trim) values at each end
+    (`trim` a Fraction). Answers a float, None where the exact value is beyond the double, or the string "undefined" where it does not exist (skewness and kurtosis of a constant multiset)."""
     n = len(vals)
     f = [Fraction(v) for v in vals]
     if name == "mean":
@@ -919,13 +920,30 @@ def boot_stat(name, vals):
         if n % 2 == 1:
             return rounded(g[n // 2])
         return rounded((g[n // 2 - 1] + g[n // 2]) / 2)
+    if name in ("skewness", "kurtosis"):
+        try:
+            sk, ku = gd.shape_moments(f)
+        except OverflowError:
+            return None
+        if sk is None:
+            return "undefined"
+        v = sk if name == "skewness" else ku
+        return v if v is not None and math.isfinite(v) else None
+    if name == "quantile":
+        import gate_quantile as gq
+        return rounded(gq.hf(sorted(vals), p, qt))
+    if name == "trimmed-mean":
+        g = sorted(f)
+        cut = math.floor(n * trim)
+        mid = g[cut:n - cut]
+        return rounded(sum(mid, Fraction(0)) / len(mid))
     raise ValueError(name)
 
 
-def boot_replicates(vals, name, reps, seed, kind=1):
+def boot_replicates(vals, name, reps, seed, kind=1, **kw):
     """the R replicate statistics of the bootstrap of the list `vals` (the present values in file order)"""
     n = len(vals)
-    return [boot_stat(name, [vals[boot_index(seed, kind, b, j, n)] for j in range(n)]) for b in range(reps)]
+    return [boot_stat(name, [vals[boot_index(seed, kind, b, j, n)] for j in range(n)], **kw) for b in range(reps)]
 
 
 def boot_positions(reps, level_text):

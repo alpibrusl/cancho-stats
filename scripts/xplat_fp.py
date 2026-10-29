@@ -520,7 +520,7 @@ def ci_boot_lines(stats):
             h = hashlib.sha256()
             for stat in gate_ci_boot.STATS:
                 seed = gate_ci_boot.SEEDS[int(r.next() % len(gate_ci_boot.SEEDS))]
-                p = gate_ci_boot.run(stats, tmp, names, rows, ["ci", "boot", "--cols", cols, "--statistic", stat, "--seed", str(seed), "--replicates", "200", "--level", level])
+                p = gate_ci_boot.run(stats, tmp, names, rows, ["ci", "boot", "--cols", cols, "--statistic", stat, "--seed", str(seed), "--replicates", "200", "--level", level] + gate_ci_boot.stat_args(stat))
                 h.update(("exit %d %s" % (p.returncode, p.stdout)).encode())
             out.append("ci-boot\tfile%02d\t%d\t%s" % (done, len(rows), h.hexdigest()))
             done += 1

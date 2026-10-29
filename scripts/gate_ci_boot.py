@@ -28,7 +28,18 @@ import oracle_test as ot  # noqa: E402
 from gate_test import numeric, parse  # noqa: E402
 import gate_test2 as g2  # noqa: E402
 
-STATS = ("mean", "median", "variance", "sd")
+STATS = ("mean", "median", "variance", "sd", "skewness", "kurtosis", "quantile", "trimmed-mean")
+PROBS = ["0", "0.05", "0.25", "0.5", "0.9", "1", "0.333333333", "0.999"]
+TRIMS = ["0", "0.1", "0.2", "0.25", "0.49", "0.333333333"]
+
+
+def stat_args(stat, qt=6, prob="0.9", trim="0.2"):
+    """the flags that go with a statistic"""
+    if stat == "quantile":
+        return ["--prob", prob, "--quantile-type", str(qt)]
+    if stat == "trimmed-mean":
+        return ["--trim", trim]
+    return []
 SEEDS = [0, 1, 7, 20240229, 4611686018427387903, 1234567890123456789, 2 ** 40 + 5]
 REPS = [100, 120, 160, 200, 240, 400, 800]
 
@@ -52,15 +63,20 @@ def finite_all(xs):
     return all(isinstance(x, float) and math.isfinite(x) for x in xs)
 
 
-def safe_stat(name, vals):
+def is_num(x):
+    return isinstance(x, float) and math.isfinite(x)
+
+
+def safe_stat(name, vals, **kw):
+    """the oracle's statistic: a float, inf where it is beyond the double, or the string "undefined" where it does not exist"""
     try:
-        v = ot.boot_stat(name, vals)
+        v = ot.boot_stat(name, vals, **kw)
     except (OverflowError, ValueError):
         return float("inf")
     return float("inf") if v is None else v
 
 
-def safe_reps(vals, name, reps, seed, kind=1, swap=False):
+def safe_reps(vals, name, reps, seed, kind=1, swap=False, **kw):
     n = len(vals)
     out = []
     for b in range(reps):
@@ -70,7 +86,7 @@ def safe_reps(vals, name, reps, seed, kind=1, swap=False):
                 picked.append(vals[ot.boot_index(seed, kind, j, b, n)])
             else:
                 picked.append(vals[ot.boot_index(seed, kind, b, j, n)])
-        out.append(safe_stat(name, picked))
+        out.append(safe_stat(name, picked, **kw))
     return out
 
 
@@ -89,6 +105,7 @@ def main():
     ctl = {}
     entries = 0
     nulls = 0
+    und_seen = 0
 
     def control(name, differs):
         c = ctl.setdefault(name, [0, 0])
@@ -102,13 +119,21 @@ def main():
             num = [j for j in vidx if numeric([rw[j] for rw in rows])]
             if not num:
                 continue
-            stat = STATS[fi % 4]
+            stat = STATS[fi % len(STATS)]
+            qt = 1 + int(r.next() % 9)
+            prob = PROBS[int(r.next() % len(PROBS))]
+            trim = TRIMS[int(r.next() % len(TRIMS))]
+            kw = {}
+            if stat == "quantile":
+                kw = {"qt": qt, "p": Fraction(prob)}
+            elif stat == "trimmed-mean":
+                kw = {"trim": Fraction(trim)}
             seed = SEEDS[int(r.next() % len(SEEDS))]
             reps = REPS[int(r.next() % len(REPS))]
             if len(rows) > 60:
                 reps = 100
             cols = ",".join(names[j] for j in num)
-            argv = ["ci", "boot", "--cols", cols, "--statistic", stat, "--seed", str(seed), "--replicates", str(reps), "--level", level]
+            argv = ["ci", "boot", "--cols", cols, "--statistic", stat, "--seed", str(seed), "--replicates", str(reps), "--level", level] + stat_args(stat, qt, prob, trim)
             p = run(a.bin, tmp, names, rows, argv)
             if p.returncode != 0:
                 print("gate_ci_boot: exit %d on file %d: %s" % (p.returncode, fi, p.stdout[:300]))
@@ -117,6 +142,12 @@ def main():
             want_level = ot.rounded(Fraction(ot.level_parts(level)[0], 10 ** ot.level_parts(level)[1]))
             if (d.get("ci"), d.get("statistic"), d.get("method"), d.get("replicates"), d.get("seed"), d.get("rows")) != ("boot", stat, "percentile", reps, seed, len(rows)) or d.get("level") != want_level:
                 bad.append((fi, "the header: %r" % {k: d.get(k) for k in ("ci", "statistic", "method", "level", "replicates", "seed", "rows")}))
+            if stat == "quantile" and (d.get("p"), d.get("type")) != (float(Fraction(prob)), qt):
+                bad.append((fi, "the quantile header: %r" % {k: d.get(k) for k in ("p", "type")}))
+            if stat == "trimmed-mean" and d.get("trim") != float(Fraction(trim)):
+                bad.append((fi, "the trim header: %r" % d.get("trim")))
+            if stat not in ("quantile", "trimmed-mean") and any(k in d for k in ("p", "type", "trim")):
+                bad.append((fi, "a key of another statistic in the header: %r" % sorted(d)))
             lo_pos, hi_pos = ot.boot_positions(reps, level)
             if len(d["intervals"]) != len(num):
                 bad.append((fi, "%d entries for %d columns" % (len(d["intervals"]), len(num))))
@@ -126,24 +157,35 @@ def main():
                 vs = present(rows, j)
                 if g["column"] != names[j] or g["n"] != {"n": len(vs), "missing": len(rows) - len(vs)}:
                     bad.append((fi, "%s: column/n %r" % (names[j], (g["column"], g["n"]))))
-                est = safe_stat(stat, vs) if len(vs) >= (2 if stat in ("variance", "sd") else 1) else None
-                if est is None and g["estimate"] is not None:
-                    bad.append((fi, "%s %s: estimate %r of %d values" % (stat, names[j], g["estimate"], len(vs))))
-                if est is not None and math.isfinite(est):
+                est = safe_stat(stat, vs, **kw) if len(vs) >= (2 if stat in ("variance", "sd") else 1) else None
+                if is_num(est):
                     if g["estimate"] != est:
                         bad.append((fi, "%s %s: estimate %r, want %r" % (stat, names[j], g["estimate"], est)))
-                elif est is not None and g["estimate"] is not None:
-                    bad.append((fi, "%s %s: estimate %r where the oracle's is beyond the double" % (stat, names[j], g["estimate"])))
+                elif g["estimate"] is not None:
+                    bad.append((fi, "%s %s: estimate %r where the oracle has none (%r)" % (stat, names[j], g["estimate"], est)))
                 if len(vs) < 2:
                     nulls += 1
                     if g["interval"] is not None or g.get("reason") != "too-few-rows":
                         bad.append((fi, "%s: %d values: want a null interval with too-few-rows, got %r" % (names[j], len(vs), g)))
                     continue
-                reps_v = safe_reps(vs, stat, reps, seed)
-                if not finite_all(reps_v) or est is None or not math.isfinite(est):
+                if est == "undefined":
                     nulls += 1
-                    if g["interval"] is not None or g.get("reason") != "statistic-beyond-double":
+                    if g["interval"] is not None or g.get("reason") != "variance-zero":
+                        bad.append((fi, "%s %s: constant column: want null with variance-zero, got %r" % (stat, names[j], g)))
+                    continue
+                reps_v = safe_reps(vs, stat, reps, seed, **kw)
+                inf = not is_num(est) or any(isinstance(x, float) and not math.isfinite(x) for x in reps_v)
+                und = sum(1 for x in reps_v if x == "undefined")
+                if inf:
+                    nulls += 1
+                    if g["interval"] is not None or g.get("reason") != "statistic-beyond-double" or "undefined" in g:
                         bad.append((fi, "%s %s: want null with statistic-beyond-double, got %r" % (stat, names[j], g)))
+                    continue
+                if und:
+                    nulls += 1
+                    und_seen += 1
+                    if g["interval"] is not None or g.get("reason") != "replicate-undefined" or g.get("undefined") != und:
+                        bad.append((fi, "%s %s: want null with replicate-undefined and %d undefined, got %r" % (stat, names[j], und, g)))
                     continue
                 srt = sorted(reps_v)
                 iv = g["interval"]
@@ -155,10 +197,24 @@ def main():
                     bad.append((fi, "%s %s seed %d R %d level %s: got %r want %r" % (stat, names[j], seed, reps, level, iv, want)))
                 # controls: other draws, other positions, other divisor
                 alts = {
-                    "another-seed": safe_reps(vs, stat, reps, seed ^ 1),
-                    "kind-2": safe_reps(vs, stat, reps, seed, kind=2),
-                    "indices-exchanged": safe_reps(vs, stat, reps, seed, swap=True),
+                    "another-seed": safe_reps(vs, stat, reps, seed ^ 1, **kw),
+                    "kind-2": safe_reps(vs, stat, reps, seed, kind=2, **kw),
+                    "indices-exchanged": safe_reps(vs, stat, reps, seed, swap=True, **kw),
                 }
+                if stat == "quantile" and qt != 7:
+                    alts["quantile-type-7"] = safe_reps(vs, stat, reps, seed, **dict(kw, qt=7))
+                if stat == "kurtosis":
+                    alts["kurtosis-not-excess"] = [x + 3.0 for x in reps_v]
+                if stat == "trimmed-mean":
+                    n_ = len(vs)
+                    alt_cut = int(Fraction(n_) * kw["trim"] + Fraction(1, 2))
+                    if alt_cut != math.floor(n_ * kw["trim"]) and n_ - 2 * alt_cut >= 1:
+                        rt = []
+                        for b in range(reps):
+                            pk_ = sorted(Fraction(vs[ot.boot_index(seed, 1, b, jj, n_)]) for jj in range(n_))
+                            mid = pk_[alt_cut:n_ - alt_cut]
+                            rt.append(ot.rounded(sum(mid, Fraction(0)) / len(mid)))
+                        alts["trim-rounded"] = rt
                 for k, rv in alts.items():
                     if finite_all(rv):
                         s2 = sorted(rv)
@@ -188,16 +244,34 @@ def main():
                     bad.append((fi, "--cols in another order changes an entry or the order of the entries"))
         # a column of one value: the estimate of the data for the mean and the median, null for the variance and the sd; never an interval
         for st in STATS:
-            p1 = run(a.bin, tmp, ["x", "y"], [["3.5", "1"], ["", "2"], ["", "3"]], ["ci", "boot", "--cols", "x", "--statistic", st, "--seed", "5", "--replicates", "100"])
+            p1 = run(a.bin, tmp, ["x", "y"], [["3.5", "1"], ["", "2"], ["", "3"]], ["ci", "boot", "--cols", "x", "--statistic", st, "--seed", "5", "--replicates", "100"] + stat_args(st))
             g1 = json.loads(p1.stdout)["data"]["intervals"][0]
-            want_est = 3.5 if st in ("mean", "median") else None
+            want_est = 3.5 if st in ("mean", "median", "quantile", "trimmed-mean") else None
             if g1["estimate"] != want_est or g1["interval"] is not None or g1.get("reason") != "too-few-rows" or g1["n"] != {"n": 1, "missing": 2}:
                 bad.append((-3, "one value, %s: %r" % (st, g1)))
+        # small columns whose resamples are often constant: the rule for undefined replicates, whatever the random files reached
+        for k, vs_ in enumerate(([1.0, 2.0, 5.0], [1.0, 1.0, 2.0], [0.5, 2.5, 4.0, 4.5])):
+            for st in ("skewness", "kurtosis"):
+                p1 = run(a.bin, tmp, ["x"], [[repr(v)] for v in vs_], ["ci", "boot", "--cols", "x", "--statistic", st, "--seed", str(3 + k), "--replicates", "100"])
+                g1 = json.loads(p1.stdout)["data"]["intervals"][0]
+                rv = safe_reps(vs_, st, 100, 3 + k)
+                und1 = sum(1 for x in rv if x == "undefined")
+                if und1:
+                    ok1 = g1["interval"] is None and g1.get("reason") == "replicate-undefined" and g1.get("undefined") == und1
+                else:
+                    srt1 = sorted(rv)
+                    lo1, hi1 = ot.boot_positions(100, "0.95")
+                    ok1 = g1["interval"] is not None and (g1["interval"]["low"], g1["interval"]["high"]) == (srt1[lo1], srt1[hi1]) and "undefined" not in g1
+                if not ok1:
+                    bad.append((-4, "small column %r, %s: %r (the oracle has %d undefined)" % (vs_, st, g1, und1)))
+                und_seen += 1 if und1 else 0
+    if a.files >= 150 and und_seen == 0:
+        bad.append((-1, "no column had an undefined replicate: the rule is not exercised"))
     for k, (differs, total) in sorted(ctl.items()):
         if total and differs * 10 < total:
             bad.append((-1, "control %s left the answer on only %d of %d cases: the gate cannot tell it from the program" % (k, differs, total)))
-    print("gate_ci_boot: %d entries (%d null), %d problems; controls that differ from the program: %s" % (
-        entries, nulls, len(bad), ", ".join("%s %d of %d" % (k, v[0], v[1]) for k, v in sorted(ctl.items()))))
+    print("gate_ci_boot: %d entries (%d null, %d with undefined replicates), %d problems; controls that differ from the program: %s" % (
+        entries, nulls, und_seen, len(bad), ", ".join("%s %d of %d" % (k, v[0], v[1]) for k, v in sorted(ctl.items()))))
     for b in bad[:8]:
         print("  file %d: %s" % b)
     return 1 if bad else 0

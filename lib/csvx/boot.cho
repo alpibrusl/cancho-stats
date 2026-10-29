@@ -6,6 +6,7 @@ import std.buffer;
 import std.bytes;
 import std.json;
 import std.vec;
+import csvx.cat;
 import csvx.pick;
 import csvx.rule;
 import csvx.scan;
@@ -51,8 +52,9 @@ fn parse_seed[&t](text: &t [byte]) -> [] (int, bool) {
     return (v, true);
 }
 
-// The refusals of the flags of `ci boot` that need no file: --seed required and below 2^62, --replicates 100 to 100000. Answers (errors, seed, replicates, statistic code 0 mean, 1 median, 2 variance, 3 sd).
-pub fn check_flags[&h, &g, &p](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, table: &static [byte], errs: fail.Errors) -> [heap, args] (fail.Errors, int, int, int) {
+// The refusals of the flags of `ci boot` that need no file: --seed required and below 2^62, --replicates 100 to 100000, --prob with the quantile only (and required there), --trim with the trimmed mean only, below 0.5. Answers
+// (errors, seed, replicates, statistic code, quantile type, numerator and number of decimals of the probability or of the trim): the codes of stest.boots.
+pub fn check_flags[&h, &g, &p](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, table: &static [byte], errs: fail.Errors) -> [heap, args] (fail.Errors, int, int, int, int, int, int) {
     var e = errs;
     var seed = 0;
     if !cli.has(parsed, table, "seed") {
@@ -76,11 +78,45 @@ pub fn check_flags[&h, &g, &p](heap: &!h Heap, args: &g Args, parsed: &p cli.Par
         stat = 2;
     } else if bytes.equal(st, "sd") {
         stat = 3;
+    } else if bytes.equal(st, "skewness") {
+        stat = 4;
+    } else if bytes.equal(st, "kurtosis") {
+        stat = 5;
+    } else if bytes.equal(st, "quantile") {
+        stat = 6;
+    } else if bytes.equal(st, "trimmed-mean") {
+        stat = 7;
     }
-    return (e, seed, reps, stat);
+    var pn = 0;
+    var pk = 0;
+    if stat == 6 {
+        if !cli.has(parsed, table, "prob") {
+            e = rule.refuse(heap, e, "args.bad-value", "the quantile needs --prob, the probability from 0 to 1", "--statistic quantile --prob 0.9", "flag", "--prob");
+        } else {
+            let (n1, k1, ok1) = cat.parse_p(cli.text(args, parsed, table, "prob"));
+            pn = n1;
+            pk = k1;
+            if !ok1 {
+                e = rule.refuse(heap, e, "args.bad-value", "--prob is a decimal from 0 to 1 with at most 9 decimals", "--prob 0.9", "flag", "--prob");
+            }
+        }
+    } else if cli.has(parsed, table, "prob") {
+        e = rule.refuse(heap, e, "args.bad-value", "--prob is for --statistic quantile", "drop --prob, or use --statistic quantile", "flag", "--prob");
+    }
+    if stat == 7 {
+        let (n2, k2, ok2) = cat.parse_p(cli.text(args, parsed, table, "trim"));
+        pn = n2;
+        pk = k2;
+        if !ok2 || 2 * n2 >= quantile.pow10(k2) {
+            e = rule.refuse(heap, e, "args.bad-value", "--trim is a decimal from 0 up to but not including 0.5 with at most 9 decimals", "--trim 0.1", "flag", "--trim");
+        }
+    } else if cli.has(parsed, table, "trim") {
+        e = rule.refuse(heap, e, "args.bad-value", "--trim is for --statistic trimmed-mean", "drop --trim, or use --statistic trimmed-mean", "flag", "--trim");
+    }
+    return (e, seed, reps, stat, cli.nat(args, parsed, table, "quantile-type"), pn, pk);
 }
 
-fn put_entry[&h, &n, &en, &v](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], j: int, vals: &v [int], count: int, rows: int, stat: int, seed: int, reps: int, lnum: int, lk: int, level: float) -> [heap] json.Writer {
+fn put_entry[&h, &n, &en, &v](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], j: int, vals: &v [int], count: int, rows: int, stat: int, qt: int, pn: int, pk: int, seed: int, reps: int, lnum: int, lk: int, level: float) -> [heap] json.Writer {
     var w = w0;
     w = json.begin_object(heap, w);
     w = json.put_key(heap, w, "column");
@@ -89,8 +125,11 @@ fn put_entry[&h, &n, &en, &v](heap: &!h Heap, w0: json.Writer, names: &n [byte],
     var ok = false;
     var est = 0.0;
     var have_est = false;
+    var est_code = 0;
+    var undef = 0;
     if count >= 1 {
-        let (eb, ec) = boots.stat_bits(heap, vals[0..count], count, stat);
+        let (eb, ec) = boots.stat_bits(heap, vals[0..count], count, stat, qt, pn, pk);
+        est_code = ec;
         if ec == 0 {
             est = float_of_bits(eb);
             have_est = true;
@@ -109,18 +148,25 @@ fn put_entry[&h, &n, &en, &v](heap: &!h Heap, w0: json.Writer, names: &n [byte],
         let out = box_slice(heap, reps + 1, 0);
         var code = 0;
         borrow mut out as &!ow in {
-            code = boots.replicates(heap, vals[0..count], count, stat, seed, reps, contents(ow));
-            if code == 0 {
+            let (c1, u1) = boots.replicates(heap, vals[0..count], count, stat, qt, pn, pk, seed, reps, contents(ow));
+            code = c1;
+            undef = u1;
+            if code == 0 && undef == 0 {
                 lo = float_of_bits(boots.key_of_bits(contents(ow)[lo_pos]));
                 hi = float_of_bits(boots.key_of_bits(contents(ow)[hi_pos]));
             }
         }
         unbox_slice(heap, out);
-        if code == 0 {
-            ok = true;
-        } else {
+        if code != 0 {
             reason = "statistic-beyond-double";
+            undef = 0;
+        } else if undef != 0 {
+            reason = "replicate-undefined";
+        } else {
+            ok = true;
         }
+    } else if est_code == 2 {
+        reason = "variance-zero";
     } else {
         reason = "statistic-beyond-double";
     }
@@ -169,6 +215,10 @@ fn put_entry[&h, &n, &en, &v](heap: &!h Heap, w0: json.Writer, names: &n [byte],
         w = json.put_key(heap, w, "reason");
         w = json.put_string(heap, w, reason);
     }
+    if undef != 0 {
+        w = json.put_key(heap, w, "undefined");
+        w = json.put_int(heap, w, undef);
+    }
     w = json.end_object(heap, w);
     return w;
 }
@@ -182,6 +232,18 @@ fn stat_name(stat: int) -> [] &static [byte] {
     }
     if stat == 3 {
         return "sd";
+    }
+    if stat == 4 {
+        return "skewness";
+    }
+    if stat == 5 {
+        return "kurtosis";
+    }
+    if stat == 6 {
+        return "quantile";
+    }
+    if stat == 7 {
+        return "trimmed-mean";
     }
     return "mean";
 }
@@ -201,7 +263,7 @@ fn gather[&sv, &o](store: &sv vec.Vec[int], rows: int, ncols: int, j: int, out: 
     return m;
 }
 
-pub fn boot[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], table: &static [byte], seed: int, reps: int, stat: int, lnum: int, lk: int, level: float, w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
+pub fn boot[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], table: &static [byte], seed: int, reps: int, stat: int, qt: int, pn: int, pk: int, lnum: int, lk: int, level: float, w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
     var w = w0;
     var e = errs;
     match place.open_operand(fs, root, rel, full) {
@@ -265,6 +327,16 @@ pub fn boot[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed:
                         w = json.put_string(heap, w, "boot");
                         w = json.put_key(heap, w, "statistic");
                         w = json.put_string(heap, w, stat_name(stat));
+                        if stat == 6 {
+                            w = json.put_key(heap, w, "p");
+                            w = json.put_float(heap, w, float_of(pn) / float_of(quantile.pow10(pk)));
+                            w = json.put_key(heap, w, "type");
+                            w = json.put_int(heap, w, qt);
+                        }
+                        if stat == 7 {
+                            w = json.put_key(heap, w, "trim");
+                            w = json.put_float(heap, w, float_of(pn) / float_of(quantile.pow10(pk)));
+                        }
                         w = json.put_key(heap, w, "method");
                         w = json.put_string(heap, w, "percentile");
                         w = json.put_key(heap, w, "level");
@@ -294,7 +366,7 @@ pub fn boot[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed:
                                             while j < nc {
                                                 if contents(sr2)[j] == 1 {
                                                     let m = gather(sb, info.rows, nc, j, contents(vw));
-                                                    w = put_entry(heap, w, buffer.bytes(nb2), eb2, j, contents(vw), m, info.rows, stat, seed, reps, lnum, lk, level);
+                                                    w = put_entry(heap, w, buffer.bytes(nb2), eb2, j, contents(vw), m, info.rows, stat, qt, pn, pk, seed, reps, lnum, lk, level);
                                                 }
                                                 j = j + 1;
                                             }
