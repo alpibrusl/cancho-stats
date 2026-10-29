@@ -249,6 +249,22 @@ def main():
             want_est = 3.5 if st in ("mean", "median", "quantile", "trimmed-mean") else None
             if g1["estimate"] != want_est or g1["interval"] is not None or g1.get("reason") != "too-few-rows" or g1["n"] != {"n": 1, "missing": 2}:
                 bad.append((-3, "one value, %s: %r" % (st, g1)))
+        # small columns whose resamples are often constant: the rule for undefined replicates, whatever the random files reached
+        for k, vs_ in enumerate(([1.0, 2.0, 5.0], [1.0, 1.0, 2.0], [0.5, 2.5, 4.0, 4.5])):
+            for st in ("skewness", "kurtosis"):
+                p1 = run(a.bin, tmp, ["x"], [[repr(v)] for v in vs_], ["ci", "boot", "--cols", "x", "--statistic", st, "--seed", str(3 + k), "--replicates", "100"])
+                g1 = json.loads(p1.stdout)["data"]["intervals"][0]
+                rv = safe_reps(vs_, st, 100, 3 + k)
+                und1 = sum(1 for x in rv if x == "undefined")
+                if und1:
+                    ok1 = g1["interval"] is None and g1.get("reason") == "replicate-undefined" and g1.get("undefined") == und1
+                else:
+                    srt1 = sorted(rv)
+                    lo1, hi1 = ot.boot_positions(100, "0.95")
+                    ok1 = g1["interval"] is not None and (g1["interval"]["low"], g1["interval"]["high"]) == (srt1[lo1], srt1[hi1]) and "undefined" not in g1
+                if not ok1:
+                    bad.append((-4, "small column %r, %s: %r (the oracle has %d undefined)" % (vs_, st, g1, und1)))
+                und_seen += 1 if und1 else 0
     if a.files >= 150 and und_seen == 0:
         bad.append((-1, "no column had an undefined replicate: the rule is not exercised"))
     for k, (differs, total) in sorted(ctl.items()):
