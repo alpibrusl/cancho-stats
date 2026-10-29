@@ -1,0 +1,193 @@
+edition 5;
+
+module stest.boots;
+
+import std.math;
+import acc.bigint;
+import acc.central;
+import acc.psum;
+import acc.quantile;
+import flt;
+import metrics.rank;
+import ml.rng;
+
+// The replicates of `stats ci boot` (docs/resample.md section 12): the statistic of a resample, exact, and the n draws that make a resample. The values are order keys (flt.key_of) of the n present cells of a column in file
+// order; `stat` is 0 mean, 1 median, 2 variance, 3 sd. A statistic is a function of the multiset only, so the order of the draws cannot change a bit. The answers are the BITS of the double and a code: 0, or 1 where the
+// statistic is beyond the double (a variance above the largest) or undefined (n below 2 for a variance).
+
+fn float_of_bits(bits: int) -> [] float {
+    var key = bits;
+    if bits < 0 {
+        key = bits ^ 0x7fffffffffffffff;
+    }
+    return flt.float_of_key(key);
+}
+
+fn bits_of_key(k: int) -> [] int {
+    if k < 0 {
+        return k ^ 0x7fffffffffffffff;
+    }
+    return k;
+}
+
+// mean (stat 0) or variance (stat 2) or sd (stat 3) of the n keys in `picked`, from exact power sums rounded once
+fn moment_bits[&h, &p](heap: &!h Heap, picked: &p [int], n: int, stat: int) -> [heap] (int, int) {
+    let l1 = psum.limbs(1);
+    let l2 = psum.limbs(2);
+    let a1 = box_slice(heap, psum.size(1) + 1, 0);
+    let a2 = box_slice(heap, psum.size(2) + 1, 0);
+    let wk = box_slice(heap, psum.scratch() + 1, 0);
+    let s1 = box_slice(heap, l1 + 1, 0);
+    let s2 = box_slice(heap, l2 + 1, 0);
+    let nl = box_slice(heap, 4, 0);
+    var bits = 0;
+    var code = 0;
+    borrow mut a1 as &!x1 in {
+        borrow mut a2 as &!x2 in {
+            borrow mut wk as &!xw in {
+                var i = 0;
+                while i < n {
+                    let b = bits_of_key(picked[i]);
+                    psum.add(contents(x1)[0..psum.size(1)], 1, b, contents(xw));
+                    if stat >= 2 {
+                        psum.add(contents(x2)[0..psum.size(2)], 2, b, contents(xw));
+                    }
+                    i = i + 1;
+                }
+            }
+        }
+    }
+    borrow a1 as &r1 in {
+        borrow a2 as &r2 in {
+            borrow mut s1 as &!w1 in {
+                borrow mut s2 as &!w2 in {
+                    borrow mut nl as &!wn in {
+                        let neg1 = psum.magnitude(contents(r1)[0..psum.size(1)], 1, contents(w1)) < 0;
+                        central.limbs_of(n, contents(wn));
+                        if stat == 0 {
+                            let (mb, mc) = central.ratio_bits(heap, contents(w1), l1, contents(wn), 3, 0 - 1074, neg1);
+                            bits = mb;
+                            code = mc;
+                        } else if n < 2 {
+                            code = 1;
+                        } else {
+                            psum.magnitude(contents(r2)[0..psum.size(2)], 2, contents(w2));
+                            // N = n sum(x^2) - sum(x)^2, exact, in units of 2^-2148, over n (n - 1)
+                            let a = box_slice(heap, l2 + 5, 0);
+                            let b = box_slice(heap, 2 * l1 + 2, 0);
+                            let dl = box_slice(heap, 4, 0);
+                            borrow mut a as &!aw in {
+                                borrow mut b as &!bw in {
+                                    borrow mut dl as &!dw in {
+                                        bigint.mul(contents(aw), contents(w2), l2, contents(wn), 3);
+                                        bigint.mul(contents(bw), contents(w1), l1, contents(w1), l1);
+                                        bigint.sub_in(contents(aw), l2 + 5, contents(bw), 2 * l1 + 2);
+                                        central.limbs_of(n * (n - 1), contents(dw));
+                                        let (vb, vc) = central.ratio_bits(heap, contents(aw), l2 + 5, contents(dw), 3, 0 - 2148, false);
+                                        bits = vb;
+                                        code = vc;
+                                    }
+                                }
+                            }
+                            unbox_slice(heap, a);
+                            unbox_slice(heap, b);
+                            unbox_slice(heap, dl);
+                            if stat == 3 && code == 0 {
+                                bits = bits_of(sqrt(float_of_bits(bits)));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    unbox_slice(heap, a1);
+    unbox_slice(heap, a2);
+    unbox_slice(heap, wk);
+    unbox_slice(heap, s1);
+    unbox_slice(heap, s2);
+    unbox_slice(heap, nl);
+    return (bits, code);
+}
+
+// the median (the exact half-sum of the two middle values for an even n, rounded once) of the n keys in `picked`
+fn median_bits[&h, &p](heap: &!h Heap, picked: &p [int], n: int) -> [heap] (int, int) {
+    let keys = box_slice(heap, n + 1, 0);
+    let tmp = box_slice(heap, n + 1, 0);
+    let cnt = box_slice(heap, 256, 0);
+    var bits = 0;
+    var code = 0;
+    borrow mut keys as &!kw in {
+        borrow mut tmp as &!tw in {
+            borrow mut cnt as &!cw in {
+                var i = 0;
+                while i < n {
+                    contents(kw)[i] = picked[i];
+                    i = i + 1;
+                }
+                rank.sort_range(contents(kw), contents(tw), contents(cw), 0, n);
+                let (qb, qc) = quantile.at(heap, contents(kw), n, 7, 5, 1);
+                bits = qb;
+                code = qc;
+            }
+        }
+    }
+    unbox_slice(heap, keys);
+    unbox_slice(heap, tmp);
+    unbox_slice(heap, cnt);
+    return (bits, code);
+}
+
+// the statistic of the n keys in `picked`, as the bits of a double
+pub fn stat_bits[&h, &p](heap: &!h Heap, picked: &p [int], n: int, stat: int) -> [heap] (int, int) {
+    if stat == 1 {
+        return median_bits(heap, picked, n);
+    }
+    return moment_bits(heap, picked, n, stat);
+}
+
+// the order key of the bits of a double (the same involution)
+pub fn key_of_bits(bits: int) -> [] int {
+    return bits_of_key(bits);
+}
+
+// Replicate b of the n keys in `vals`: draw j of its stream picks the row (z >> 1) mod n, z = mix(s_b + (j + 1) gold), s_b = derive(derive(seed, 1), b) (docs/resample.md section 12). Fills `picked` with the n keys drawn.
+pub fn draw[&v, &o](vals: &v [int], n: int, seed: int, b: int, picked: &!o [int]) -> [] int {
+    let sb = rng.derive(rng.derive(seed, 1), b);
+    var j = 0;
+    while j < n {
+        let z = rng.mix(wrapping_add(sb, wrapping_mul(j + 1, rng.gold())));
+        picked[j] = vals[rng.uniform(z, n)];
+        j = j + 1;
+    }
+    return 0;
+}
+
+// The `reps` replicates, as order keys, sorted, in `out` (reps + 1 ints). Answers 0, or 1 at the first replicate whose statistic is beyond the double.
+pub fn replicates[&h, &v, &o](heap: &!h Heap, vals: &v [int], n: int, stat: int, seed: int, reps: int, out: &!o [int]) -> [heap] int {
+    let picked = box_slice(heap, n + 1, 0);
+    var code = 0;
+    borrow mut picked as &!pw in {
+        var b = 0;
+        while b < reps && code == 0 {
+            draw(vals, n, seed, b, contents(pw));
+            let (bits, c) = stat_bits(heap, contents(pw), n, stat);
+            code = c;
+            out[b] = bits_of_key(bits);
+            b = b + 1;
+        }
+    }
+    unbox_slice(heap, picked);
+    if code == 0 {
+        let tmp = box_slice(heap, reps + 1, 0);
+        let cnt = box_slice(heap, 256, 0);
+        borrow mut tmp as &!tw in {
+            borrow mut cnt as &!cw in {
+                rank.sort_range(out, contents(tw), contents(cw), 0, reps);
+            }
+        }
+        unbox_slice(heap, tmp);
+        unbox_slice(heap, cnt);
+    }
+    return code;
+}

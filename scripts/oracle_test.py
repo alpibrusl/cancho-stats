@@ -911,6 +911,8 @@ def boot_stat(name, vals):
         s1 = sum(f, Fraction(0))
         s2 = sum((v * v for v in f), Fraction(0))
         var = rounded((n * s2 - s1 * s1) / (n * (n - 1)))
+        if var is None:
+            return None
         return var if name == "variance" else math.sqrt(var)
     if name == "median":
         g = sorted(f)
