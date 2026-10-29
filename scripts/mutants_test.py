@@ -47,7 +47,7 @@ M = [
     ("level-one-allowed", F, "lv_num >= quantile.pow10(lv_k)", "lv_num > quantile.pow10(lv_k)"),
     ("level-zero-allowed", F, "!lv_ok || lv_num == 0 ||", "!lv_ok || lv_num == 99 ||"),
     ("mu0-check", F, "if mu_status != 0 {", "if mu_status == 99 {"),
-    ("non-numeric-allowed", F, "if sel[j] == 1 && !numeric && ok {", "if sel[j] == 7 && !numeric && ok {"),
+    ("non-numeric-allowed", "lib/csvx/pick.cho", "if sel[j] == 1 && !numeric && ok {", "if sel[j] == 7 && !numeric && ok {"),
     ("dispatch", F, "                    } else if is_test {\n                        let (w2, e2) = test_one(", "                    } else if false {\n                        let (w2, e2) = test_one("),
     ("file-operand-index", F, "cli.operand_index(parsed, fidx)", "cli.operand_index(parsed, 1)"),
 ]
