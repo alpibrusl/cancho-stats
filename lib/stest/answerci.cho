@@ -3,7 +3,9 @@ edition 5;
 module stest.answerci;
 
 import std.json;
+import std.math;
 import std.vec;
+import corr.pearson;
 import flt;
 import special.quantile;
 import stest.answer;
@@ -321,6 +323,86 @@ pub fn put_diff[&h, &n, &en, &ka, &kb](heap: &!h Heap, w0: json.Writer, names: &
     w = json.put_key(heap, w, "b");
     w = json.put_int(heap, w, r.n2);
     w = json.end_object(heap, w);
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}
+
+// atanh(r) for |r| < 1 as 0.5 log1p(2 r / (1 - r)) for r >= 0 and its odd extension: no cancellation for small r (log of 1 + 2r would lose the digits of r), the difference 1 - r exact for r in [0.5, 1) (Sterbenz)
+fn atanh(r: float) -> [] float {
+    if r < 0.0 {
+        return 0.0 - 0.5 * math.log1p(2.0 * (0.0 - r) / (1.0 + r));
+    }
+    return 0.5 * math.log1p(2.0 * r / (1.0 - r));
+}
+
+// tanh(x) as expm1(2 |x|) / (expm1(2 |x|) + 2) with the sign of x, which keeps the digits of a small x; 1 beyond |x| = 20, where the difference from 1 is below 1e-17
+fn tanh(x: float) -> [] float {
+    var a = x;
+    if a < 0.0 {
+        a = 0.0 - a;
+    }
+    var t = 1.0;
+    if a < 20.0 {
+        let e = math.expm1(2.0 * a);
+        t = e / (e + 2.0);
+    }
+    if x < 0.0 {
+        return 0.0 - t;
+    }
+    return t;
+}
+
+// `stats ci corr` (docs/resample.md section 3): Pearson's r of the pair of columns (the exact one of `corr`, stest-free: corr.pearson.pair), and the Fisher z interval  tanh(atanh r -+ q / sqrt(n - 3)),  q the normal quantile of
+// (1 + level) / 2, for n >= 4; |r| = 1 has no interval (`perfect-correlation`), a constant column none (`constant-column`), n < 4 none (`too-few-rows`). The interval is a function of the DOUBLE r.
+pub fn put_corr[&h, &n, &en, &k, &m](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], store: &k vec.Vec[int], ncols: int, ja: int, jb: int, rows: int, mask: &m [int], lnum: int, lk: int, level: float) -> [heap] json.Writer {
+    var w = w0;
+    let (n, status, rb, rc, tb, tc, exact) = pearson.pair(heap, store, ncols, ja, jb, rows, mask);
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "x");
+    w = answer.put_name(heap, w, names, ends, ja);
+    w = json.put_key(heap, w, "y");
+    w = answer.put_name(heap, w, names, ends, jb);
+    w = json.put_key(heap, w, "n");
+    w = json.put_int(heap, w, n);
+    var reason = "";
+    var ok = false;
+    var lo = 0.0;
+    var hi = 0.0;
+    let r = float_of_bits(rb);
+    if status != 0 {
+        reason = "constant-column";
+    } else if exact == 1 {
+        reason = "perfect-correlation";
+    } else if n < 4 {
+        reason = "too-few-rows";
+    } else {
+        let (q, qcode) = answer4.critical(lnum, lk);
+        if qcode == 0 {
+            let z = atanh(r);
+            let h = q / sqrt(float_of(n - 3));
+            lo = tanh(z - h);
+            hi = tanh(z + h);
+            ok = true;
+        } else {
+            reason = "interval-not-computed";
+        }
+    }
+    w = json.put_key(heap, w, "estimate");
+    if status == 0 {
+        w = json.put_float(heap, w, r);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "interval");
+    if ok {
+        w = answer4.put_interval(heap, w, "correlation", "fisher-z", level, r, lo, hi);
+    } else {
+        w = json.put_null(heap, w);
+    }
     if len(reason) > 0 {
         w = json.put_key(heap, w, "reason");
         w = json.put_string(heap, w, reason);

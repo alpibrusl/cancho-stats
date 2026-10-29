@@ -726,8 +726,10 @@ fn describe_one[&h, &g, &p, &f, &r, &sh, &fu, &k](heap: &!h Heap, args: &g Args,
 // ------------------------------------------------------------------------------------------------ corr (docs/corr.md)
 
 // The pairs of the numeric columns of one file (or of --cols), Pearson. The same file reader as describe: the order-preserving keys of the cells are in `store`.
-fn corr_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
+fn corr_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], ci: bool, w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
     let table = flag_table();
+    let (lnum, lk, lok) = cat.parse_p(cli.text(args, parsed, table, "level"));
+    let level = float_of(lnum) / float_of(quantile.pow10(lk));
     var w = w0;
     var e = errs;
     match place.open_operand(fs, root, rel, full) {
@@ -854,14 +856,24 @@ fn corr_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed:
                                 borrow mask as &mr in {
                                     borrow names as &nb in {
                                         borrow ends as &eb in {
+                                            if ci {
+                                                w = json.put_key(heap, w, "ci");
+                                                w = json.put_string(heap, w, "corr");
+                                            }
                                             w = json.put_key(heap, w, "rows");
                                             w = json.put_int(heap, w, info.rows);
+                                            if ci {
+                                                w = json.put_key(heap, w, "level");
+                                                w = json.put_float(heap, w, level);
+                                            }
                                             w = json.put_key(heap, w, "method");
                                             w = json.put_string(heap, w, cli.text(args, parsed, table, "method"));
                                             w = json.put_key(heap, w, "missing");
                                             w = json.put_string(heap, w, cli.text(args, parsed, table, "missing"));
-                                            w = json.put_key(heap, w, "adjustment");
-                                            w = json.put_string(heap, w, "none");
+                                            if !ci {
+                                                w = json.put_key(heap, w, "adjustment");
+                                                w = json.put_string(heap, w, "none");
+                                            }
                                             w = json.put_key(heap, w, "columns");
                                             w = json.begin_array(heap, w);
                                             var k = 0;
@@ -870,7 +882,11 @@ fn corr_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed:
                                                 k = k + 1;
                                             }
                                             w = json.end_array(heap, w);
-                                            w = json.put_key(heap, w, "pairs");
+                                            if ci {
+                                                w = json.put_key(heap, w, "intervals");
+                                            } else {
+                                                w = json.put_key(heap, w, "pairs");
+                                            }
                                             w = json.begin_array(heap, w);
                                             var method = 0;
                                             if bytes.equal(cli.text(args, parsed, table, "method"), "spearman") {
@@ -889,7 +905,9 @@ fn corr_one[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed:
                                             while ia < m {
                                                 var ib = ia + 1;
                                                 while ib < m {
-                                                    if method == 2 {
+                                                    if ci {
+                                                        w = answerci.put_corr(heap, w, buffer.bytes(nb), eb, sb, nc, contents(ir)[ia], contents(ir)[ib], info.rows, contents(mr), lnum, lk, level);
+                                                    } else if method == 2 {
                                                         let (w3, no_exact) = answer.put_pair_kendall(heap, w, buffer.bytes(nb), eb, sb, nc, contents(ir)[ia], contents(ir)[ib], info.rows, contents(mr), exact_mode);
                                                         w = w3;
                                                         if no_exact {
@@ -1349,8 +1367,8 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
         fidx = 2;
         if cli.operand_count(parsed) < 2 {
             e = rule.refuse(heap, e, "args.missing-operand", "no kind of interval: the second operand names it", "stats ci prop --cols A --success yes FILE", "", "");
-        } else if !bytes.equal(cli.operand(args, parsed, 1), "prop") && !bytes.equal(cli.operand(args, parsed, 1), "mean") && !bytes.equal(cli.operand(args, parsed, 1), "diff") {
-            e = rule.refuse(heap, e, "args.bad-value", "the kind of interval is not one this tool has", "the kinds so far are: prop, mean, diff", "kind", cli.operand(args, parsed, 1));
+        } else if !bytes.equal(cli.operand(args, parsed, 1), "prop") && !bytes.equal(cli.operand(args, parsed, 1), "mean") && !bytes.equal(cli.operand(args, parsed, 1), "diff") && !bytes.equal(cli.operand(args, parsed, 1), "corr") {
+            e = rule.refuse(heap, e, "args.bad-value", "the kind of interval is not one this tool has", "the kinds so far are: prop, mean, diff, corr", "kind", cli.operand(args, parsed, 1));
         } else if cli.operand_count(parsed) != 3 {
             e = rule.refuse(heap, e, "args.missing-operand", "ci names one kind and one FILE", "stats ci prop --cols A --success yes FILE", "", "");
         }
@@ -1463,6 +1481,9 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
     if !valid_list(cli.text(args, parsed, table, "quantiles")) {
         e = rule.refuse(heap, e, "args.bad-value", "--quantiles takes at most 99 comma separated decimals from 0 to 1 with at most 9 decimals", "--quantiles 0.25,0.5,0.75", "flag", "--quantiles");
     }
+    if is_ci && bytes.equal(cli.operand(args, parsed, 1), "corr") && cli.has(parsed, table, "method") && !bytes.equal(cli.text(args, parsed, table, "method"), "pearson") {
+        e = rule.refuse(heap, e, "args.bad-value", "ci corr is Pearson's r only: Fisher's z interval has no Spearman or Kendall version in this tool", "drop --method, or use --method pearson", "method", cli.text(args, parsed, table, "method"));
+    }
     if cli.operand_count(parsed) >= 1 && bytes.equal(cli.operand(args, parsed, 0), "corr") && cli.has(parsed, table, "method") && !bytes.equal(cli.text(args, parsed, table, "method"), "pearson") && !bytes.equal(cli.text(args, parsed, table, "method"), "spearman") && !bytes.equal(cli.text(args, parsed, table, "method"), "kendall") {
         e = rule.refuse(heap, e, "args.bad-value", "corr takes --method pearson, spearman or kendall", "the other methods are for stats ci", "method", cli.text(args, parsed, table, "method"));
     }
@@ -1513,6 +1534,10 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
                         let (w2, e2) = test_one(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), cli.has(parsed, table, "pairs"), false, true, w, e);
                         w = w2;
                         e = e2;
+                    } else if is_ci && bytes.equal(cli.operand(args, parsed, 1), "corr") {
+                        let (w2, e2) = corr_one(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), true, w, e);
+                        w = w2;
+                        e = e2;
                     } else if is_ci && bytes.equal(cli.operand(args, parsed, 1), "diff") {
                         let (w2, e2) = t2_one(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), true, w, e);
                         w = w2;
@@ -1555,7 +1580,7 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
                         w = w2;
                         e = e2;
                     } else if bytes.equal(cli.operand(args, parsed, 0), "corr") {
-                        let (w2, e2) = corr_one(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), w, e);
+                        let (w2, e2) = corr_one(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), false, w, e);
                         w = w2;
                         e = e2;
                     } else if !cli.has(parsed, table, "by") {

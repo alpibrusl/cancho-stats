@@ -37,6 +37,7 @@ import gate_ks  # noqa: E402
 import gate_fisher  # noqa: E402
 import gate_corr_exact  # noqa: E402
 import gate_ci_prop  # noqa: E402
+import gate_ci_corr  # noqa: E402
 import gate_test2  # noqa: E402
 import gate_test  # noqa: E402
 import gate_wilcoxon  # noqa: E402
@@ -473,6 +474,32 @@ def ci_mean_lines(stats):
     return out
 
 
+def ci_corr_lines(stats):
+    """`stats ci corr` on 8 seeded CSV files (the numeric shapes of scripts/gate_corr.py, correlated pairs, missing cells, huge and tiny values), --missing pairwise and listwise: the hash of the bytes of the answers. The Fisher z interval is
+    `atanh`, `tanh` and the normal quantile of the platform's `std.math`, which is what these lines check across platforms."""
+    out = []
+    r = gate_special.SM64(131)
+    shapes_all = ["uniform", "ints", "lin", "offset", "offset-neg", "wide", "tiny", "huge", "const", "gappy", "lin", "lin", "ints", "uniform"]
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        for k in range(8):
+            ncols = 2 + int(r.next() % 3)
+            shapes = [shapes_all[int(r.next() % len(shapes_all))] for _ in range(ncols)]
+            n = [4, 5, 20, 100, 400][int(r.next() % 5)]
+            cols = []
+            for j, sh in enumerate(shapes):
+                cols.append(gate_corr.column(r, sh, n, cols[j - 1] if j else []))
+            names = ["c%d_%s" % (j, sh) for j, sh in enumerate(shapes)]
+            rows = [[cols[j][i] for j in range(ncols)] for i in range(n)]
+            level = gate_ci_corr.LEVELS[int(r.next() % len(gate_ci_corr.LEVELS))]
+            h = hashlib.sha256()
+            for mode in ("pairwise", "listwise"):
+                p = gate_ci_corr.run(stats, tmp, names, rows, ["--missing", mode, "--level", level])
+                h.update(("exit %d %s" % (p.returncode, p.stdout)).encode())
+            out.append("ci-corr\tfile%02d\t%d\t%s" % (k, n, h.hexdigest()))
+    return out
+
+
 def wilcoxon_lines(stats):
     """`stats test wilcoxon` on 8 seeded CSV files (pairs of columns with zero differences and heavy ties, sizes up to 200, the shapes of scripts/gate_wilcoxon.py), with the three methods for zeros, `--exact no` and
     `--continuity none`, and the one-sample form: the hash of the bytes of the answers."""
@@ -535,6 +562,7 @@ def fingerprint(driver, acc, threads_check=True, stats=None):
         lines += corr_exact_lines(stats)
         lines += ci_prop_lines(stats)
         lines += ci_mean_lines(stats)
+        lines += ci_corr_lines(stats)
     return lines, bad
 
 
