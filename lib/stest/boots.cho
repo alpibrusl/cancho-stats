@@ -252,3 +252,29 @@ pub fn replicates[&h, &v, &o](heap: &!h Heap, vals: &v [int], n: int, stat: int,
     }
     return (code, undefined);
 }
+
+// The n leave-one-out statistics of the n keys in `vals` (the exact statistic of the other n - 1 values, rounded once), as order keys in `out`. Answers 0, or the first nonzero code (1 beyond the double, 2 not defined) of a statistic.
+pub fn jackknife[&h, &v, &o](heap: &!h Heap, vals: &v [int], n: int, stat: int, qt: int, pn: int, pk: int, out: &!o [int]) -> [heap] int {
+    let picked = box_slice(heap, n + 1, 0);
+    var code = 0;
+    borrow mut picked as &!pw in {
+        var i = 0;
+        while i < n && code == 0 {
+            var j = 0;
+            var m = 0;
+            while j < n {
+                if j != i {
+                    contents(pw)[m] = vals[j];
+                    m = m + 1;
+                }
+                j = j + 1;
+            }
+            let (bits, c) = stat_bits(heap, contents(pw), n - 1, stat, qt, pn, pk);
+            code = c;
+            out[i] = bits_of_key(bits);
+            i = i + 1;
+        }
+    }
+    unbox_slice(heap, picked);
+    return code;
+}
