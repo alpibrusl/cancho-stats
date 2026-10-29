@@ -464,6 +464,24 @@ CASES = [
     ('ci: boot seed with a slash', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1/','--replicates','100','f.csv'], 'args.bad-value', 2),
     ('ci: boot one value under a small max-work', b'a\n1\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--max-work','50','f.csv'], None, 0),
     ('ci: boot 100000 replicates', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100000','f.csv'], None, 0),
+    ('ci: boot skewness', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--statistic','skewness','f.csv'], None, 0),
+    ('ci: boot kurtosis', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--statistic','kurtosis','f.csv'], None, 0),
+    ('ci: boot quantile', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--statistic','quantile','--prob','0.9','f.csv'], None, 0),
+    ('ci: boot quantile type 1 at 0', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--statistic','quantile','--prob','0','--quantile-type','1','f.csv'], None, 0),
+    ('ci: boot quantile at 1', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--statistic','quantile','--prob','1','f.csv'], None, 0),
+    ('ci: boot quantile no --prob', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--statistic','quantile','f.csv'], 'args.bad-value', 2),
+    ('ci: boot quantile --prob 1.5', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--statistic','quantile','--prob','1.5','f.csv'], 'args.bad-value', 2),
+    ('ci: boot quantile --prob text', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--statistic','quantile','--prob','half','f.csv'], 'args.bad-value', 2),
+    ('ci: boot quantile type 10', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--statistic','quantile','--prob','0.5','--quantile-type','10','f.csv'], 'args.bad-value', 2),
+    ('ci: boot --prob with the mean', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--prob','0.5','f.csv'], 'args.bad-value', 2),
+    ('ci: boot trimmed mean', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--statistic','trimmed-mean','f.csv'], None, 0),
+    ('ci: boot trimmed mean trim 0', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--statistic','trimmed-mean','--trim','0','f.csv'], None, 0),
+    ('ci: boot trimmed mean trim 0.49', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--statistic','trimmed-mean','--trim','0.49','f.csv'], None, 0),
+    ('ci: boot trimmed mean trim 0.5', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--statistic','trimmed-mean','--trim','0.5','f.csv'], 'args.bad-value', 2),
+    ('ci: boot trimmed mean trim text', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--statistic','trimmed-mean','--trim','some','f.csv'], 'args.bad-value', 2),
+    ('ci: boot --trim with the mean', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--trim','0.1','f.csv'], 'args.bad-value', 2),
+    ('ci: boot skewness of a constant column', b'a\n4\n4\n4\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--statistic','skewness','f.csv'], None, 0),
+    ('ci: boot kurtosis of three values', b'a\n1\n2\n5\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--statistic','kurtosis','f.csv'], None, 0),
     # --correct and --max-tests (docs/test.md section 12)
     ("test: t1 holm", b"a,b,c\n1,5,3\n2,5,3\n4,1,3\n", ["test", "t1", "--cols", "a,b,c", "--correct", "holm", "f.csv"], None, 0),
     ("test: t1 bh with a constant column", b"a,b\n1,3\n2,3\n4,3\n", ["test", "t1", "--cols", "a,b", "--correct", "bh", "f.csv"], None, 0),
@@ -618,7 +636,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 66)
+            k = int(r.next() % 70)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -733,6 +751,14 @@ def main():
                 argv = ["ci", "boot", "--cols", "a", "--statistic", "sd", "--seed", "4611686018427387903", "--replicates", "100", "--max-work", "300", "f.csv"]
             elif k == 65:
                 argv = ["ci", "boot", "--cols", "a,b", "--statistic", "variance", "--seed", "9", "--replicates", "100", "--level", "0.5", "f.csv"]
+            elif k == 66:
+                argv = ["ci", "boot", "--cols", "a,b", "--statistic", "skewness", "--seed", "2", "--replicates", "100", "f.csv"]
+            elif k == 67:
+                argv = ["ci", "boot", "--cols", "a", "--statistic", "quantile", "--prob", "0.%d" % int(r.next() % 1000), "--quantile-type", str(1 + int(r.next() % 9)), "--seed", "5", "--replicates", "100", "f.csv"]
+            elif k == 68:
+                argv = ["ci", "boot", "--cols", "b", "--statistic", "trimmed-mean", "--trim", "0.%d" % int(r.next() % 100), "--seed", "6", "--replicates", "100", "f.csv"]
+            elif k == 69:
+                argv = ["ci", "boot", "--cols", "a,b", "--statistic", "kurtosis", "--seed", "7", "--replicates", "100", "--max-rows", "4", "f.csv"]
             elif k == 27:
                 argv = ["test", "prop", "--cols", "a", "--success", "1", "f.csv"]
             elif k == 28:

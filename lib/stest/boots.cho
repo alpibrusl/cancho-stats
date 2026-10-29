@@ -12,8 +12,8 @@ import metrics.rank;
 import ml.rng;
 
 // The replicates of `stats ci boot` (docs/resample.md section 12): the statistic of a resample, exact, and the n draws that make a resample. The values are order keys (flt.key_of) of the n present cells of a column in file
-// order; `stat` is 0 mean, 1 median, 2 variance, 3 sd. A statistic is a function of the multiset only, so the order of the draws cannot change a bit. The answers are the BITS of the double and a code: 0, or 1 where the
-// statistic is beyond the double (a variance above the largest) or undefined (n below 2 for a variance).
+// order; `stat` is 0 mean, 1 median, 2 variance, 3 sd, 4 skewness, 5 kurtosis, 6 quantile (type qt, probability pn / 10^pk), 7 trimmed mean (trim pn / 10^pk). A statistic is a function of the multiset only, so the order of the draws cannot change a bit. The answers are the BITS of the double and a code: 0, 1 where the
+// statistic is beyond the double (a variance above the largest), 2 where it is undefined (n below 2 for a variance; a resample of one value for the skewness and the kurtosis).
 
 fn float_of_bits(bits: int) -> [] float {
     var key = bits;
@@ -69,7 +69,7 @@ fn moment_bits[&h, &p](heap: &!h Heap, picked: &p [int], n: int, stat: int) -> [
                             bits = mb;
                             code = mc;
                         } else if n < 2 {
-                            code = 1;
+                            code = 2;
                         } else {
                             psum.magnitude(contents(r2)[0..psum.size(2)], 2, contents(w2));
                             // N = n sum(x^2) - sum(x)^2, exact, in units of 2^-2148, over n (n - 1)
@@ -110,8 +110,9 @@ fn moment_bits[&h, &p](heap: &!h Heap, picked: &p [int], n: int, stat: int) -> [
     return (bits, code);
 }
 
-// the median (the exact half-sum of the two middle values for an even n, rounded once) of the n keys in `picked`
-fn median_bits[&h, &p](heap: &!h Heap, picked: &p [int], n: int) -> [heap] (int, int) {
+// the sorted statistics of the n keys in `picked`: the median (1, the quantile of type 7 at 1/2, the exact half-sum of the two middle values for an even n, rounded once), the quantile of type `qt` at pn / 10^pk (6) and the
+// trimmed mean (7: g = floor(n pn / 10^pk) values dropped at each end, the exact sum of the others over n - 2g)
+fn sorted_bits[&h, &p](heap: &!h Heap, picked: &p [int], n: int, stat: int, qt: int, pn: int, pk: int) -> [heap] (int, int) {
     let keys = box_slice(heap, n + 1, 0);
     let tmp = box_slice(heap, n + 1, 0);
     let cnt = box_slice(heap, 256, 0);
@@ -126,9 +127,20 @@ fn median_bits[&h, &p](heap: &!h Heap, picked: &p [int], n: int) -> [heap] (int,
                     i = i + 1;
                 }
                 rank.sort_range(contents(kw), contents(tw), contents(cw), 0, n);
-                let (qb, qc) = quantile.at(heap, contents(kw), n, 7, 5, 1);
-                bits = qb;
-                code = qc;
+                if stat == 7 {
+                    let g = n * pn / quantile.pow10(pk);
+                    let (tb, tc) = moment_bits(heap, contents(kw)[g..n - g], n - 2 * g, 0);
+                    bits = tb;
+                    code = tc;
+                } else if stat == 1 {
+                    let (qb, qc) = quantile.at(heap, contents(kw), n, 7, 5, 1);
+                    bits = qb;
+                    code = qc;
+                } else {
+                    let (qb, qc) = quantile.at(heap, contents(kw), n, qt, pn, pk);
+                    bits = qb;
+                    code = qc;
+                }
             }
         }
     }
@@ -138,10 +150,53 @@ fn median_bits[&h, &p](heap: &!h Heap, picked: &p [int], n: int) -> [heap] (int,
     return (bits, code);
 }
 
+// the skewness (4) or the excess kurtosis (5) of the n keys in `picked`, from the four exact power sums
+fn shape_bits[&h, &p](heap: &!h Heap, picked: &p [int], n: int, stat: int) -> [heap] (int, int) {
+    let o2 = psum.size(1);
+    let o3 = o2 + psum.size(2);
+    let o4 = o3 + psum.size(3);
+    let end = o4 + psum.size(4);
+    let accs = box_slice(heap, end + 1, 0);
+    let wk = box_slice(heap, psum.scratch() + 1, 0);
+    borrow mut accs as &!aw in {
+        borrow mut wk as &!xw in {
+            var i = 0;
+            while i < n {
+                let b = bits_of_key(picked[i]);
+                psum.add(contents(aw)[0..o2], 1, b, contents(xw));
+                psum.add(contents(aw)[o2..o3], 2, b, contents(xw));
+                psum.add(contents(aw)[o3..o4], 3, b, contents(xw));
+                psum.add(contents(aw)[o4..end], 4, b, contents(xw));
+                i = i + 1;
+            }
+        }
+    }
+    var bits = 0;
+    var code = 0;
+    borrow accs as &ar in {
+        let (sb, sc, kb, kc, st) = central.skew_kurt(heap, contents(ar)[0..end], n);
+        if st != 0 {
+            code = 2;
+        } else if stat == 4 {
+            bits = sb;
+            code = sc;
+        } else {
+            bits = kb;
+            code = kc;
+        }
+    }
+    unbox_slice(heap, accs);
+    unbox_slice(heap, wk);
+    return (bits, code);
+}
+
 // the statistic of the n keys in `picked`, as the bits of a double
-pub fn stat_bits[&h, &p](heap: &!h Heap, picked: &p [int], n: int, stat: int) -> [heap] (int, int) {
-    if stat == 1 {
-        return median_bits(heap, picked, n);
+pub fn stat_bits[&h, &p](heap: &!h Heap, picked: &p [int], n: int, stat: int, qt: int, pn: int, pk: int) -> [heap] (int, int) {
+    if stat == 1 || stat >= 6 {
+        return sorted_bits(heap, picked, n, stat, qt, pn, pk);
+    }
+    if stat >= 4 {
+        return shape_bits(heap, picked, n, stat);
     }
     return moment_bits(heap, picked, n, stat);
 }
@@ -163,22 +218,28 @@ pub fn draw[&v, &o](vals: &v [int], n: int, seed: int, b: int, picked: &!o [int]
     return 0;
 }
 
-// The `reps` replicates, as order keys, sorted, in `out` (reps + 1 ints). Answers 0, or 1 at the first replicate whose statistic is beyond the double.
-pub fn replicates[&h, &v, &o](heap: &!h Heap, vals: &v [int], n: int, stat: int, seed: int, reps: int, out: &!o [int]) -> [heap] int {
+// The `reps` replicates, as order keys, sorted, in `out` (reps + 1 ints). Answers (code, undefined): the code is 0, or 1 at the first replicate whose statistic is beyond the double; `undefined` counts the replicates whose
+// statistic does not exist (the skewness and the kurtosis of a resample of one value); the replicates are sorted only when both are 0.
+pub fn replicates[&h, &v, &o](heap: &!h Heap, vals: &v [int], n: int, stat: int, qt: int, pn: int, pk: int, seed: int, reps: int, out: &!o [int]) -> [heap] (int, int) {
     let picked = box_slice(heap, n + 1, 0);
     var code = 0;
+    var undefined = 0;
     borrow mut picked as &!pw in {
         var b = 0;
         while b < reps && code == 0 {
             draw(vals, n, seed, b, contents(pw));
-            let (bits, c) = stat_bits(heap, contents(pw), n, stat);
-            code = c;
+            let (bits, c) = stat_bits(heap, contents(pw), n, stat, qt, pn, pk);
+            if c == 2 {
+                undefined = undefined + 1;
+            } else {
+                code = c;
+            }
             out[b] = bits_of_key(bits);
             b = b + 1;
         }
     }
     unbox_slice(heap, picked);
-    if code == 0 {
+    if code == 0 && undefined == 0 {
         let tmp = box_slice(heap, reps + 1, 0);
         let cnt = box_slice(heap, 256, 0);
         borrow mut tmp as &!tw in {
@@ -189,5 +250,5 @@ pub fn replicates[&h, &v, &o](heap: &!h Heap, vals: &v [int], n: int, stat: int,
         unbox_slice(heap, tmp);
         unbox_slice(heap, cnt);
     }
-    return code;
+    return (code, undefined);
 }
