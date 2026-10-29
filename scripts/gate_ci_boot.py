@@ -74,6 +74,8 @@ def safe_stat(name, vals, **kw):
         v = ot.boot_stat(name, vals, **kw)
     except (OverflowError, ValueError):
         return float("inf")
+    except ZeroDivisionError:
+        return "undefined"
     return float("inf") if v is None else v
 
 
