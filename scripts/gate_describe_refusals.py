@@ -463,6 +463,7 @@ CASES = [
     ('ci: boot seed with a colon', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1:','--replicates','100','f.csv'], 'args.bad-value', 2),
     ('ci: boot seed with a slash', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1/','--replicates','100','f.csv'], 'args.bad-value', 2),
     ('ci: boot one value under a small max-work', b'a\n1\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--max-work','50','f.csv'], None, 0),
+    ('ci: boot 100000 replicates', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100000','f.csv'], None, 0),
     # --correct and --max-tests (docs/test.md section 12)
     ("test: t1 holm", b"a,b,c\n1,5,3\n2,5,3\n4,1,3\n", ["test", "t1", "--cols", "a,b,c", "--correct", "holm", "f.csv"], None, 0),
     ("test: t1 bh with a constant column", b"a,b\n1,3\n2,3\n4,3\n", ["test", "t1", "--cols", "a,b", "--correct", "bh", "f.csv"], None, 0),

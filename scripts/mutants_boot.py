@@ -68,7 +68,9 @@ M = [
     ("main-level", F, "boot_seed, boot_reps, boot_stat, lv_num, lv_k, float_of(lv_num) / float_of(quantile.pow10(lv_k))", "boot_seed, boot_reps, boot_stat, lv_num, lv_k, 0.95"),
 ]
 
-EXPLAINED = {}
+EXPLAINED = {
+    "seed-empty": "equivalent: toolbox.cli refuses a flag with an empty value (args.bad-value) before parse_seed is called, so the empty-text guard is never the one that fires",
+}
 
 
 def gates(binary, files):

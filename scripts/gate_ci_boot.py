@@ -186,6 +186,13 @@ def main():
                 d3 = {x["column"]: x for x in json.loads(p3.stdout)["data"]["intervals"]}
                 if [x["column"] for x in json.loads(p3.stdout)["data"]["intervals"]] != [names[j] for j in num] or any(d3[x["column"]] != x for x in d["intervals"]):
                     bad.append((fi, "--cols in another order changes an entry or the order of the entries"))
+        # a column of one value: the estimate of the data for the mean and the median, null for the variance and the sd; never an interval
+        for st in STATS:
+            p1 = run(a.bin, tmp, ["x", "y"], [["3.5", "1"], ["", "2"], ["", "3"]], ["ci", "boot", "--cols", "x", "--statistic", st, "--seed", "5", "--replicates", "100"])
+            g1 = json.loads(p1.stdout)["data"]["intervals"][0]
+            want_est = 3.5 if st in ("mean", "median") else None
+            if g1["estimate"] != want_est or g1["interval"] is not None or g1.get("reason") != "too-few-rows" or g1["n"] != {"n": 1, "missing": 2}:
+                bad.append((-3, "one value, %s: %r" % (st, g1)))
     for k, (differs, total) in sorted(ctl.items()):
         if total and differs * 10 < total:
             bad.append((-1, "control %s left the answer on only %d of %d cases: the gate cannot tell it from the program" % (k, differs, total)))
