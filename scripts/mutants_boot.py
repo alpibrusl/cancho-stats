@@ -97,6 +97,7 @@ M = [
 ]
 
 EXPLAINED = {
+    "undefined-reset": "equivalent: a replicate is undefined only for the skewness and the kurtosis (a resample of one value), and those are never beyond the double (|skewness| <= sqrt(n), kurtosis <= n), so a column never has both an undefined and a beyond-double replicate, and the count is already 0 where the reason is statistic-beyond-double",
     "seed-empty": "equivalent: toolbox.cli refuses a flag with an empty value (args.bad-value) before parse_seed is called, so the empty-text guard is never the one that fires",
 }
 
