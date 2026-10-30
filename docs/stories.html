@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cancho-stats: six stories, one bakery</title>
+<meta name="description" content="Six end-to-end examples of cancho-stats, in increasing complexity, told as one story about a bakery: every number and every figure is drawn from a real run.">
+<meta name="color-scheme" content="light dark">
+<style>
+:root {
+  --bg: #fbfcfd; --fg: #14181a; --muted: #55606a; --line: #dfe5e7; --surface: #ffffff; --soft: #eff4f4;
+  --accent: #1f5fa6; --accent-fg: #ffffff; --good: #0f7b5f; --bad: #b42d27; --warn: #92400e;
+  --term-bg: #0f1519; --term-fg: #d6e2e6; --term-dim: #7d8f96; --term-good: #5fd3a6; --term-bad: #ff8a80; --term-acc: #8ec0ff;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0b0f14; --fg: #e7ebec; --muted: #9aa8ae; --line: #212a2d; --surface: #131a1c; --soft: #172022;
+    --accent: #7fb2ff; --accent-fg: #07162c; --good: #4fd1a5; --bad: #ff7b73; --warn: #f3c77a; --term-bg: #0a1013; }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; scroll-padding-top: 4rem; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 1rem/1.6 var(--font); }
+a { color: var(--accent); text-underline-offset: .15em; }
+.wrap { width: 100%; max-width: 64rem; margin: 0 auto; padding: 0 16px; }
+header.top { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+header.top .wrap { display: flex; align-items: center; gap: 1.5rem; height: 3.4rem; }
+.brand { font: 700 1rem var(--mono); color: var(--fg); text-decoration: none; }
+nav { display: flex; gap: 1.2rem; margin-left: auto; }
+nav a { color: var(--muted); text-decoration: none; font-size: .93rem; }
+nav a:hover { color: var(--fg); }
+@media (max-width: 40rem) { nav a.opt { display: none; } }
+.hero { padding: 3.5rem 0 2rem; text-align: center; }
+.hero h1 { font-size: clamp(2rem, 6vw, 3.4rem); line-height: 1.1; margin: 0 auto 1rem; letter-spacing: -.03em; max-width: 18ch; }
+.hero .sub { font-size: 1.2rem; color: var(--muted); max-width: 36rem; margin: 0 auto 1.6rem; }
+.cta { display: flex; gap: .8rem; justify-content: center; flex-wrap: wrap; }
+.btn { display: inline-block; padding: .65rem 1.2rem; border-radius: 8px; font-weight: 600; text-decoration: none; border: 1px solid var(--line); color: var(--fg); background: var(--surface); }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+section { margin: 0; padding: 3rem 0; }
+section.alt { background: var(--soft); }
+h2 { font-size: clamp(1.4rem, 3vw, 1.9rem); margin: 0 0 .6rem; letter-spacing: -.02em; text-align: center; }
+.lead { text-align: center; color: var(--muted); max-width: 38rem; margin: 0 auto 2rem; }
+.term { background: var(--term-bg); color: var(--term-fg); border-radius: 12px; border: 1px solid var(--line); max-width: 46rem; margin: 0 auto; box-shadow: 0 10px 30px rgba(0,0,0,.18); overflow: hidden; }
+.term .bar { display: flex; align-items: center; gap: .4rem; padding: .55rem .8rem; border-bottom: 1px solid #1f2a30; font: .78rem var(--mono); color: var(--term-dim); }
+.term .bar i { width: .7rem; height: .7rem; border-radius: 50%; background: #2c3a41; display: inline-block; }
+.term .bar button { margin-left: auto; font: .78rem var(--mono); color: var(--term-fg); background: #1b262c; border: 1px solid #2c3a41; border-radius: 6px; padding: .2rem .6rem; cursor: pointer; }
+.term pre { margin: 0; padding: 1rem 1.1rem; min-height: 17.5rem; overflow-x: auto; font: .85rem/1.55 var(--mono); white-space: pre-wrap; word-break: break-all; }
+.term .g { color: var(--term-good); } .term .b { color: var(--term-bad); } .term .d { color: var(--term-dim); } .term .a { color: var(--term-acc); }
+.caption { text-align: center; color: var(--muted); font-size: .88rem; max-width: 46rem; margin: .8rem auto 0; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 1rem; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 1.2rem; }
+.card h3 { margin: 0 0 .4rem; font-size: 1.05rem; }
+.card p { margin: 0; color: var(--muted); font-size: .95rem; }
+.card .ic { font-size: 1.5rem; margin-bottom: .4rem; }
+.diagram { max-width: 52rem; margin: 0 auto; }
+.diagram svg { width: 100%; height: auto; display: block; }
+.diagram .box { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+.diagram .boxa { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+.diagram .ok { fill: var(--surface); stroke: var(--good); stroke-width: 2; }
+.diagram .no { fill: var(--surface); stroke: var(--bad); stroke-width: 2; }
+.diagram text { fill: var(--fg); font: 600 15px var(--font); }
+.diagram .sm { font: 13px var(--font); fill: var(--muted); font-weight: 400; }
+.diagram .arrow { stroke: var(--muted); stroke-width: 1.8; fill: none; marker-end: url(#ah); }
+.diagram .arrow.bad { stroke: var(--bad); stroke-dasharray: 5 4; }
+.nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 1rem; text-align: center; }
+.num b { display: block; font-size: 2.3rem; letter-spacing: -.03em; color: var(--accent); }
+.num span { color: var(--muted); font-size: .92rem; }
+.fine { max-width: 46rem; margin: 1.5rem auto 0; color: var(--muted); font-size: .88rem; text-align: center; }
+pre.code { background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: .9rem 1rem; overflow-x: auto; font: .85rem/1.5 var(--mono); max-width: 46rem; margin: 0 auto 1rem; }
+code { font: .9em var(--mono); }
+.steps { max-width: 46rem; margin: 0 auto; padding-left: 1.2rem; }
+.steps li { margin: .4rem 0; }
+footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2rem; color: var(--muted); font-size: .9rem; text-align: center; }
+
+.hero.small { padding: 3rem 0 1rem; }
+.story { padding: 3rem 0; }
+.story .wrap { max-width: 50rem; }
+.story h2 { text-align: left; margin-bottom: .3rem; }
+.badge { display: inline-flex; gap: .4rem; flex-wrap: wrap; margin: 0 0 1rem; }
+.badge span { font: .78rem var(--mono); color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: .1rem .6rem; background: var(--surface); }
+.badge .lvl { color: var(--accent); border-color: var(--accent); }
+.said { border-left: 3px solid var(--accent); padding: .2rem 0 .2rem 1rem; margin: 1rem 0; color: var(--muted); font-style: italic; }
+.story .term { max-width: none; margin: 1rem 0; box-shadow: none; }
+.story .term pre { min-height: 0; white-space: pre; word-break: normal; font-size: .8rem; }
+.story pre .cm { color: var(--term-acc); }
+.read { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.2rem; margin: 1rem 0; }
+.read b { color: var(--accent); }
+figure.fig { margin: 1rem 0; }
+figure.fig svg { width: 100%; height: auto; display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.fig .ax { stroke: var(--muted); stroke-width: 1; }
+.fig .tk { fill: var(--muted); font: 12px var(--font); }
+.fig .lb { fill: var(--muted); font: 13px var(--font); }
+.fig .nm { fill: var(--fg); font: 600 13px var(--font); }
+.fig .wh { stroke-width: 2; } .fig .wh.pa, .fig .bx.pa { stroke: var(--accent); } .fig .wh.pb, .fig .bx.pb { stroke: var(--good); }
+.fig .bx { fill: var(--soft); stroke-width: 2; }
+.fig .md { stroke: var(--fg); stroke-width: 3; }
+.fig .mn { fill: var(--warn); }
+.fig .zero { stroke: var(--bad); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.fig .ciline { stroke: var(--accent); stroke-width: 3; }
+.fig .pt { fill: var(--accent); }
+.fig .band { stroke: var(--line); stroke-width: 1; }
+.fig .dot.pa { fill: var(--accent); opacity: .8; } .fig .dot.pb { fill: var(--good); opacity: .8; }
+.fig .ring { fill: none; stroke: var(--bad); stroke-width: 2; }
+.fig .pbar.pa { fill: var(--accent); } .fig .pbar.pb { fill: var(--good); } .fig .pbar.warn { fill: var(--warn); }
+.fig .link { stroke: var(--muted); stroke-width: 1.5; }
+.fig .raw { fill: var(--surface); stroke: var(--accent); stroke-width: 2.5; } .fig .adj { fill: var(--accent); }
+.fig .cell { fill: var(--soft); stroke: var(--line); } .fig .cell.hit { fill: var(--bad); stroke: var(--bad); }
+.fig .seg { fill: var(--good); } .fig .seg.bad { fill: var(--bad); }
+.fig .hash { fill: var(--soft); stroke: var(--good); stroke-width: 1.5; }
+.fig .hx { fill: var(--fg); font: 12px var(--mono); }
+.toc { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: center; margin-top: 1.2rem; }
+.toc a { text-decoration: none; border: 1px solid var(--line); border-radius: 99px; padding: .25rem .9rem; background: var(--surface); font-size: .9rem; }
+.data { color: var(--muted); font-size: .9rem; text-align: center; margin-top: 1rem; }
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href=".">cancho-stats</a>
+  <nav><a class="opt" href="#s1">1</a> <a class="opt" href="#s2">2</a> <a class="opt" href="#s3">3</a> <a class="opt" href="#s4">4</a> <a class="opt" href="#s5">5</a> <a class="opt" href="#s6">6</a><a href=".">Overview</a><a href="https://github.com/alpibrusl/cancho-stats">GitHub</a></nav>
+</div></header>
+<div class="wrap hero small">
+  <h1>Six stories, one bakery.</h1>
+  <p class="sub">Marta has bought a second oven and wants to know whether it was a good idea. Each story asks a little more of the tool than the last. Every number and every figure below is drawn from a real run of <code>stats</code> on the data you can download. The data are invented, with effects planted on purpose (B bakes faster and rises higher, three of its batches run long, the crust, weight and salt do not differ, A has more defects); the runs are real, and the narration is checked against the numbers whenever the page is generated.</p>
+  <div class="toc"><a href="#s1">1 &middot; Look</a><a href="#s2">2 &middot; One question</a><a href="#s3">3 &middot; Outliers</a><a href="#s4">4 &middot; Six tests</a><a href="#s5">5 &middot; Exact counts</a><a href="#s6">6 &middot; Same bytes</a></div>
+  <p class="data">Data (invented, seeded): <a href="stories/bakery.csv">bakery.csv</a> (80 batches), <a href="stories/pilot.csv">pilot.csv</a> (the first four batches of each oven). Rebuild this page: <code>python3 scripts/gen_stories.py</code>.</p>
+</div>
+<section class=" story" id="s1"><div class="wrap"><h2>1 &middot; Before anything else, look</h2><div class="badge"><span class="lvl">start here</span><span>describe</span></div><p class="said">&#8220;I bought a second oven. Is it any good?&#8221; &#8212; Marta, who bakes for a street of cafes</p><p>Marta kept a note of every batch for two months: which oven, how many minutes, how high it rose, how the crust scored, whether a loaf came out defective. Eighty batches, forty per oven. Before she asks anything, she looks at the one number she cares about most, the baking time.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats describe --by oven --cols bake_min --bins 6 bakery.csv</span>
+{
+  &quot;by&quot;: &quot;oven&quot;,
+  &quot;groups&quot;: [
+    {
+      &quot;value&quot;: &quot;A&quot;,
+      &quot;bake_min&quot;: {
+        &quot;count&quot;: 40,
+        &quot;mean&quot;: 42.910000000000004,
+        &quot;sd&quot;: 4.183962053071044,
+        &quot;skewness&quot;: 0.24065314457699766,
+        &quot;quantiles&quot;: [
+          {&quot;p&quot;: &quot;0&quot;, &quot;value&quot;: 34.5},
+          {&quot;p&quot;: &quot;0.25&quot;, &quot;value&quot;: 40.875},
+          {&quot;p&quot;: &quot;0.5&quot;, &quot;value&quot;: 42.35},
+          {&quot;p&quot;: &quot;0.75&quot;, &quot;value&quot;: 45.3},
+          {&quot;p&quot;: &quot;1&quot;, &quot;value&quot;: 51.7}
+        ]
+      }
+    },
+    {
+      &quot;value&quot;: &quot;B&quot;,
+      &quot;bake_min&quot;: {
+        &quot;count&quot;: 40,
+        &quot;mean&quot;: 40.9325,
+        &quot;sd&quot;: 5.440653594786341,
+        &quot;skewness&quot;: 1.9255015258246615,
+        &quot;quantiles&quot;: [
+          {&quot;p&quot;: &quot;0&quot;, &quot;value&quot;: 33.2},
+          {&quot;p&quot;: &quot;0.25&quot;, &quot;value&quot;: 37.775},
+          {&quot;p&quot;: &quot;0.5&quot;, &quot;value&quot;: 39.8},
+          {&quot;p&quot;: &quot;0.75&quot;, &quot;value&quot;: 42.1},
+          {&quot;p&quot;: &quot;1&quot;, &quot;value&quot;: 58.8}
+        ]
+      }
+    }
+  ]
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 200" role="img" aria-label="Box plots of the baking time of each oven"><line class="ax" x1="60" y1="150" x2="610" y2="150"/>
+<line class="ax" x1="60" y1="150" x2="60" y2="155"/><text class="tk" x="60" y="169" text-anchor="middle">30</text>
+<line class="ax" x1="145.938" y1="150" x2="145.938" y2="155"/><text class="tk" x="145.938" y="169" text-anchor="middle">35</text>
+<line class="ax" x1="231.875" y1="150" x2="231.875" y2="155"/><text class="tk" x="231.875" y="169" text-anchor="middle">40</text>
+<line class="ax" x1="317.812" y1="150" x2="317.812" y2="155"/><text class="tk" x="317.812" y="169" text-anchor="middle">45</text>
+<line class="ax" x1="403.75" y1="150" x2="403.75" y2="155"/><text class="tk" x="403.75" y="169" text-anchor="middle">50</text>
+<line class="ax" x1="489.688" y1="150" x2="489.688" y2="155"/><text class="tk" x="489.688" y="169" text-anchor="middle">55</text>
+<line class="ax" x1="575.625" y1="150" x2="575.625" y2="155"/><text class="tk" x="575.625" y="169" text-anchor="middle">60</text>
+<text class="lb" x="335" y="188" text-anchor="middle">minutes in the oven</text>
+<text class="nm" x="52" y="45" text-anchor="end">oven A</text>
+<line class="wh pa" x1="137.344" y1="40" x2="432.969" y2="40"/>
+<line class="wh pa" x1="137.344" y1="33" x2="137.344" y2="47"/><line class="wh pa" x1="432.969" y1="33" x2="432.969" y2="47"/>
+<rect class="bx pa" x="246.914" y="29" width="76.0547" height="22" rx="3"/>
+<line class="md" x1="272.266" y1="29" x2="272.266" y2="51"/>
+<path class="mn" d="M281.891 27 l5 5 l-5 5 l-5 -5 z"/>
+<text class="tk" x="432.969" y="26" text-anchor="middle">max 51.7</text>
+<text class="nm" x="52" y="100" text-anchor="end">oven B</text>
+<line class="wh pb" x1="115" y1="95" x2="555" y2="95"/>
+<line class="wh pb" x1="115" y1="88" x2="115" y2="102"/><line class="wh pb" x1="555" y1="88" x2="555" y2="102"/>
+<rect class="bx pb" x="193.633" y="84" width="74.3359" height="22" rx="3"/>
+<line class="md" x1="228.437" y1="84" x2="228.437" y2="106"/>
+<path class="mn" d="M247.902 82 l5 5 l-5 5 l-5 -5 z"/>
+<text class="tk" x="555" y="81" text-anchor="middle">max 58.8</text>
+<text class="tk" x="610" y="14" text-anchor="end">box: quartiles &#183; bar: median &#183; diamond: mean &#183; whiskers: min and max</text></svg></figure><div class="read"><b>Reading it.</b> The mean of oven A is 42.91 minutes (sd 4.184); oven B&#8217;s is 40.932 (sd 5.441). B&#8217;s median is lower, and its box sits left of A&#8217;s. But B has a long right whisker (its slowest batch took 58.8 minutes) and a skewness of 1.93 against 0.241 for A. The sums behind these means are exact and rounded once, so the digits are the same on any machine. Something about oven B&#8217;s tail is worth a second look, later.</div></div></section>
+<section class="alt story" id="s2"><div class="wrap"><h2>2 &middot; Is the new oven faster?</h2><div class="badge"><span class="lvl">one question</span><span>test t2</span><span>ci diff</span></div><p class="said">&#8220;Eyeballing it, B is quicker. Show me it is not my imagination.&#8221;</p><p>The textbook answer is Welch&#8217;s t test: compare the two means, allow the spreads to differ. The tool prints the statistic, the degrees of freedom, the p-value, an effect size and the interval of the difference. The same interval is available alone with <code>ci diff</code>, byte for byte.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test t2 --cols bake_min --group oven bakery.csv</span>
+{
+  &quot;levels&quot;: {&quot;a&quot;: &quot;A&quot;, &quot;b&quot;: &quot;B&quot;},
+  &quot;tests&quot;: [
+    {
+      &quot;statistic&quot;: 1.8222469060619957,
+      &quot;df&quot;: 73.1757032479013,
+      &quot;p_value&quot;: 0.0725033707662692,
+      &quot;effect_size&quot;: {&quot;name&quot;: &quot;cohen_d&quot;, &quot;value&quot;: 0.4074667953743296},
+      &quot;interval&quot;: {
+        &quot;of&quot;: &quot;difference of means&quot;,
+        &quot;level&quot;: 0.95,
+        &quot;estimate&quot;: 1.9775000000000005,
+        &quot;low&quot;: -0.18521043371277957,
+        &quot;high&quot;: 4.140210433712781,
+        &quot;rounding&quot;: &quot;double&quot;
+      },
+      &quot;n&quot;: {&quot;a&quot;: 40, &quot;b&quot;: 40}
+    }
+  ]
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 160" role="img" aria-label="The difference of mean baking times with its 95% interval and the line of no difference"><line class="ax" x1="60" y1="110" x2="610" y2="110"/>
+<line class="ax" x1="60" y1="110" x2="60" y2="115"/><text class="tk" x="60" y="129" text-anchor="middle">-2</text>
+<line class="ax" x1="121.111" y1="110" x2="121.111" y2="115"/><text class="tk" x="121.111" y="129" text-anchor="middle">-1</text>
+<line class="ax" x1="182.222" y1="110" x2="182.222" y2="115"/><text class="tk" x="182.222" y="129" text-anchor="middle">0</text>
+<line class="ax" x1="243.333" y1="110" x2="243.333" y2="115"/><text class="tk" x="243.333" y="129" text-anchor="middle">1</text>
+<line class="ax" x1="304.444" y1="110" x2="304.444" y2="115"/><text class="tk" x="304.444" y="129" text-anchor="middle">2</text>
+<line class="ax" x1="365.556" y1="110" x2="365.556" y2="115"/><text class="tk" x="365.556" y="129" text-anchor="middle">3</text>
+<line class="ax" x1="426.667" y1="110" x2="426.667" y2="115"/><text class="tk" x="426.667" y="129" text-anchor="middle">4</text>
+<line class="ax" x1="487.778" y1="110" x2="487.778" y2="115"/><text class="tk" x="487.778" y="129" text-anchor="middle">5</text>
+<line class="ax" x1="548.889" y1="110" x2="548.889" y2="115"/><text class="tk" x="548.889" y="129" text-anchor="middle">6</text>
+<line class="ax" x1="610" y1="110" x2="610" y2="115"/><text class="tk" x="610" y="129" text-anchor="middle">7</text>
+<text class="lb" x="335" y="148" text-anchor="middle">mean of A minus mean of B, in minutes</text>
+<line class="zero" x1="182.222" y1="30" x2="182.222" y2="110"/><text class="tk" x="182.222" y="24" text-anchor="middle">no difference</text>
+<line class="ciline" x1="170.904" y1="70" x2="435.235" y2="70"/><line class="ciline" x1="170.904" y1="62" x2="170.904" y2="78"/><line class="ciline" x1="435.235" y1="62" x2="435.235" y2="78"/>
+<circle class="pt" cx="303.069" cy="70" r="6"/>
+<text class="tk" x="303.069" y="56" text-anchor="middle">1.98</text>
+<text class="tk" x="166.904" y="94" text-anchor="end">-0.19</text><text class="tk" x="435.235" y="94" text-anchor="middle">4.14</text></svg></figure><div class="read"><b>Reading it.</b> A is 1.98 minutes slower on average, with a 95% interval from -0.185 to 4.14 and p = 0.0725. The interval reaches across zero, so at the 5% level this does not show a difference. (<code>ci diff</code> prints the same interval: -0.185 &#8211; 4.14.) Marta is not convinced, and she is not wrong to be careful &#8212; but the pictures in story 1 suggested something. What is it that a mean cannot see?</div></div></section>
+<section class=" story" id="s3"><div class="wrap"><h2>3 &middot; Three loaves ran long</h2><div class="badge"><span class="lvl">when the data misbehave</span><span>test mannwhitney</span><span>resample perm</span></div><p class="said">&#8220;Three batches in oven B took over fifty minutes. The timer stuck, I think. I did not throw them away.&#8221;</p><p>Every batch as a dot shows what the means hid: oven B&#8217;s typical batch is faster than A&#8217;s, and three batches &#8212; ringed &#8212; are far to the right. A mean is pulled by such points; a test that compares <em>ranks</em> is not. The Mann&#8211;Whitney test asks whether a batch from one oven tends to beat a batch from the other. The permutation test below asks the question of the means directly, by shuffling which batch went to which oven.</p><figure class="fig"><svg viewBox="0 0 640 215" role="img" aria-label="Every batch as a dot, by oven, with the batches that ran long ringed"><line class="ax" x1="60" y1="170" x2="610" y2="170"/>
+<line class="ax" x1="60" y1="170" x2="60" y2="175"/><text class="tk" x="60" y="189" text-anchor="middle">30</text>
+<line class="ax" x1="145.938" y1="170" x2="145.938" y2="175"/><text class="tk" x="145.938" y="189" text-anchor="middle">35</text>
+<line class="ax" x1="231.875" y1="170" x2="231.875" y2="175"/><text class="tk" x="231.875" y="189" text-anchor="middle">40</text>
+<line class="ax" x1="317.812" y1="170" x2="317.812" y2="175"/><text class="tk" x="317.812" y="189" text-anchor="middle">45</text>
+<line class="ax" x1="403.75" y1="170" x2="403.75" y2="175"/><text class="tk" x="403.75" y="189" text-anchor="middle">50</text>
+<line class="ax" x1="489.688" y1="170" x2="489.688" y2="175"/><text class="tk" x="489.688" y="189" text-anchor="middle">55</text>
+<line class="ax" x1="575.625" y1="170" x2="575.625" y2="175"/><text class="tk" x="575.625" y="189" text-anchor="middle">60</text>
+<text class="lb" x="335" y="208" text-anchor="middle">minutes in the oven</text>
+<text class="nm" x="52" y="60" text-anchor="end">oven A</text>
+<line class="band" x1="60" y1="55" x2="610" y2="55"/>
+<circle class="dot pa" cx="137.344" cy="45" r="3.6"/>
+<circle class="dot pa" cx="145.938" cy="65" r="3.6"/>
+<circle class="dot pa" cx="147.656" cy="63" r="3.6"/>
+<circle class="dot pa" cx="195.781" cy="61" r="3.6"/>
+<circle class="dot pa" cx="207.813" cy="59" r="3.6"/>
+<circle class="dot pa" cx="212.969" cy="57" r="3.6"/>
+<circle class="dot pa" cx="214.688" cy="55" r="3.6"/>
+<circle class="dot pa" cx="226.719" cy="53" r="3.6"/>
+<circle class="dot pa" cx="238.75" cy="51" r="3.6"/>
+<circle class="dot pa" cx="245.625" cy="49" r="3.6"/>
+<circle class="dot pa" cx="247.344" cy="47" r="3.6"/>
+<circle class="dot pa" cx="252.5" cy="45" r="3.6"/>
+<circle class="dot pa" cx="252.5" cy="65" r="3.6"/>
+<circle class="dot pa" cx="259.375" cy="63" r="3.6"/>
+<circle class="dot pa" cx="261.094" cy="61" r="3.6"/>
+<circle class="dot pa" cx="261.094" cy="59" r="3.6"/>
+<circle class="dot pa" cx="262.812" cy="57" r="3.6"/>
+<circle class="dot pa" cx="262.812" cy="55" r="3.6"/>
+<circle class="dot pa" cx="266.25" cy="53" r="3.6"/>
+<circle class="dot pa" cx="269.688" cy="51" r="3.6"/>
+<circle class="dot pa" cx="274.844" cy="49" r="3.6"/>
+<circle class="dot pa" cx="285.156" cy="47" r="3.6"/>
+<circle class="dot pa" cx="286.875" cy="45" r="3.6"/>
+<circle class="dot pa" cx="286.875" cy="65" r="3.6"/>
+<circle class="dot pa" cx="292.031" cy="63" r="3.6"/>
+<circle class="dot pa" cx="293.75" cy="61" r="3.6"/>
+<circle class="dot pa" cx="293.75" cy="59" r="3.6"/>
+<circle class="dot pa" cx="295.469" cy="57" r="3.6"/>
+<circle class="dot pa" cx="307.5" cy="55" r="3.6"/>
+<circle class="dot pa" cx="322.969" cy="53" r="3.6"/>
+<circle class="dot pa" cx="322.969" cy="51" r="3.6"/>
+<circle class="dot pa" cx="324.688" cy="49" r="3.6"/>
+<circle class="dot pa" cx="324.688" cy="47" r="3.6"/>
+<circle class="dot pa" cx="350.469" cy="45" r="3.6"/>
+<circle class="dot pa" cx="364.219" cy="65" r="3.6"/>
+<circle class="dot pa" cx="405.469" cy="63" r="3.6"/>
+<circle class="dot pa" cx="405.469" cy="61" r="3.6"/>
+<circle class="dot pa" cx="415.781" cy="59" r="3.6"/>
+<circle class="dot pa" cx="420.938" cy="57" r="3.6"/>
+<circle class="dot pa" cx="432.969" cy="55" r="3.6"/>
+<text class="nm" x="52" y="120" text-anchor="end">oven B</text>
+<line class="band" x1="60" y1="115" x2="610" y2="115"/>
+<circle class="dot pb" cx="115" cy="105" r="3.6"/>
+<circle class="dot pb" cx="127.031" cy="125" r="3.6"/>
+<circle class="dot pb" cx="161.406" cy="123" r="3.6"/>
+<circle class="dot pb" cx="161.406" cy="121" r="3.6"/>
+<circle class="dot pb" cx="170" cy="119" r="3.6"/>
+<circle class="dot pb" cx="187.187" cy="117" r="3.6"/>
+<circle class="dot pb" cx="187.187" cy="115" r="3.6"/>
+<circle class="dot pb" cx="190.625" cy="113" r="3.6"/>
+<circle class="dot pb" cx="190.625" cy="111" r="3.6"/>
+<circle class="dot pb" cx="192.344" cy="109" r="3.6"/>
+<circle class="dot pb" cx="194.062" cy="107" r="3.6"/>
+<circle class="dot pb" cx="197.5" cy="105" r="3.6"/>
+<circle class="dot pb" cx="200.938" cy="125" r="3.6"/>
+<circle class="dot pb" cx="209.531" cy="123" r="3.6"/>
+<circle class="dot pb" cx="212.969" cy="121" r="3.6"/>
+<circle class="dot pb" cx="214.688" cy="119" r="3.6"/>
+<circle class="dot pb" cx="216.406" cy="117" r="3.6"/>
+<circle class="dot pb" cx="216.406" cy="115" r="3.6"/>
+<circle class="dot pb" cx="225" cy="113" r="3.6"/>
+<circle class="dot pb" cx="226.719" cy="111" r="3.6"/>
+<circle class="dot pb" cx="230.156" cy="109" r="3.6"/>
+<circle class="dot pb" cx="230.156" cy="107" r="3.6"/>
+<circle class="dot pb" cx="238.75" cy="105" r="3.6"/>
+<circle class="dot pb" cx="238.75" cy="125" r="3.6"/>
+<circle class="dot pb" cx="243.906" cy="123" r="3.6"/>
+<circle class="dot pb" cx="249.062" cy="121" r="3.6"/>
+<circle class="dot pb" cx="252.5" cy="119" r="3.6"/>
+<circle class="dot pb" cx="254.219" cy="117" r="3.6"/>
+<circle class="dot pb" cx="264.531" cy="115" r="3.6"/>
+<circle class="dot pb" cx="267.969" cy="113" r="3.6"/>
+<circle class="dot pb" cx="267.969" cy="111" r="3.6"/>
+<circle class="dot pb" cx="267.969" cy="109" r="3.6"/>
+<circle class="dot pb" cx="281.719" cy="107" r="3.6"/>
+<circle class="dot pb" cx="292.031" cy="105" r="3.6"/>
+<circle class="dot pb" cx="304.063" cy="125" r="3.6"/>
+<circle class="dot pb" cx="326.406" cy="123" r="3.6"/>
+<circle class="dot pb" cx="331.562" cy="121" r="3.6"/>
+<circle class="dot pb" cx="482.812" cy="119" r="3.6"/>
+<circle class="ring" cx="482.812" cy="119" r="8"/>
+<circle class="dot pb" cx="539.531" cy="117" r="3.6"/>
+<circle class="ring" cx="539.531" cy="117" r="8"/>
+<circle class="dot pb" cx="555" cy="115" r="3.6"/>
+<circle class="ring" cx="555" cy="115" r="8"/>
+<text class="tk" x="610" y="14" text-anchor="end">ringed: the three batches that ran past 53 minutes</text></svg></figure><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test mannwhitney --cols bake_min --group oven bakery.csv</span>
+{
+  &quot;tests&quot;: [
+    {
+      &quot;statistic&quot;: 1107.0,
+      &quot;p_value&quot;: 0.0031799854079099642,
+      &quot;p_method&quot;: &quot;normal&quot;,
+      &quot;effect_size&quot;: {&quot;name&quot;: &quot;rank_biserial&quot;, &quot;value&quot;: 0.38375},
+      &quot;n&quot;: {&quot;a&quot;: 40, &quot;b&quot;: 40}
+    }
+  ]
+}</pre></div><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats resample perm --cols bake_min --group oven --seed 7 --permutations 9999 \
+    bakery.csv</span>
+{
+  &quot;p_method&quot;: &quot;monte-carlo&quot;,
+  &quot;seed&quot;: 7,
+  &quot;tests&quot;: [
+    {
+      &quot;statistic&quot;: 1.9775000000000005,
+      &quot;p&quot;: 0.0703,
+      &quot;extreme&quot;: 702,
+      &quot;permutations&quot;: 9999,
+      &quot;mc_error&quot;: 0.0025566471489950364
+    }
+  ]
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 228" role="img" aria-label="The p-values of the tests on a logarithmic axis against the line at 0.05"><line class="ax" x1="210" y1="176" x2="600" y2="176"/>
+<line class="ax" x1="245.565" y1="176" x2="245.565" y2="181"/><text class="tk" x="245.565" y="195" text-anchor="middle">0.001</text>
+<line class="ax" x1="363.71" y1="176" x2="363.71" y2="181"/><text class="tk" x="363.71" y="195" text-anchor="middle">0.01</text>
+<line class="ax" x1="481.855" y1="176" x2="481.855" y2="181"/><text class="tk" x="481.855" y="195" text-anchor="middle">0.1</text>
+<line class="ax" x1="600" y1="176" x2="600" y2="181"/><text class="tk" x="600" y="195" text-anchor="middle">1</text>
+<text class="lb" x="405" y="214" text-anchor="middle">p-value (log scale)</text>
+<line class="zero" x1="446.29" y1="22" x2="446.29" y2="176"/><text class="tk" x="446.29" y="16" text-anchor="middle">0.05</text>
+<text class="nm" x="200" y="45" text-anchor="end">Welch t test</text>
+<rect class="pbar pa" x="210" y="32" width="398.566" height="16" rx="3"/>
+<text class="tk" x="614.566" y="45">0.0725</text>
+<text class="nm" x="200" y="79" text-anchor="end">pooled t test</text>
+<rect class="pbar pa" x="210" y="66" width="398.536" height="16" rx="3"/>
+<text class="tk" x="614.536" y="79">0.0723</text>
+<text class="nm" x="200" y="113" text-anchor="end">permutation, means</text>
+<rect class="pbar warn" x="210" y="100" width="398.306" height="16" rx="3"/>
+<text class="tk" x="614.306" y="113">0.0703</text>
+<text class="nm" x="200" y="147" text-anchor="end">Mann–Whitney</text>
+<rect class="pbar pb" x="210" y="134" width="390.376" height="16" rx="3"/>
+<text class="tk" x="606.376" y="147">0.0032</text></svg></figure><div class="read"><b>Reading it.</b> The tests that use the <em>mean</em> (both t tests, and the permutation test of the mean difference) all say &#8220;not shown&#8221;, because three long batches inflate B&#8217;s mean and its spread. The rank test, which looks at the bulk of the batches, says p = 0.00318. Neither is &#8220;the right one&#8221;: they answer different questions, and the answer says which one it answered. The permutation test's count is exact (702 of 9999 shuffles were as extreme; the Monte Carlo error is printed, 0.0026), and every one of those numbers can be reproduced by an independent program from the seed. What Marta now knows: <em>the typical batch of B is faster; the average is dragged by three exceptions she can investigate.</em></div></div></section>
+<section class="alt story" id="s4"><div class="wrap"><h2>4 &middot; Six questions at once</h2><div class="badge"><span class="lvl">many tests, one decision</span><span>test t2</span><span>--correct holm</span></div><p class="said">&#8220;While I am at it: height, crust, weight, moisture, salt. Did the new oven change any of them?&#8221;</p><p>Ask six questions at the 5% level and the chance that at least one comes out &#8220;significant&#8221; by luck alone is about one in four. The honest way to run a family of tests is to say so up front. <code>--correct holm</code> declares the six tests a family and prints each p-value both as computed and after Holm&#8217;s step-down correction; the tool refuses a family larger than <code>--max-tests</code>, so a fishing trip has to be declared.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test t2 --cols bake_min,height_cm,crust,weight_g,moisture_pct,salt_pct --group \
+    oven --correct holm bakery.csv</span>
+{
+  &quot;adjustment&quot;: &quot;holm&quot;,
+  &quot;family&quot;: {
+    &quot;size&quot;: 6,
+    &quot;correction&quot;: &quot;holm&quot;,
+    &quot;p_adjusted&quot;: [
+      0.2900134830650768,
+      0.0010895185787315627,
+      1.0,
+      1.0,
+      0.0005220022161199081,
+      1.0
+    ]
+  },
+  &quot;tests&quot;: [
+    {&quot;column&quot;: &quot;bake_min&quot;, &quot;p_value&quot;: 0.0725033707662692},
+    {&quot;column&quot;: &quot;height_cm&quot;, &quot;p_value&quot;: 0.00021790371574631254},
+    {&quot;column&quot;: &quot;crust&quot;, &quot;p_value&quot;: 0.5766632775939438},
+    {&quot;column&quot;: &quot;weight_g&quot;, &quot;p_value&quot;: 0.5962294964274081},
+    {&quot;column&quot;: &quot;moisture_pct&quot;, &quot;p_value&quot;: 8.700036935331803e-05},
+    {&quot;column&quot;: &quot;salt_pct&quot;, &quot;p_value&quot;: 0.6300676855585874}
+  ]
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 306" role="img" aria-label="For each measure the p-value before and after the correction for six tests"><line class="ax" x1="210" y1="244" x2="600" y2="244"/>
+<line class="ax" x1="245.565" y1="244" x2="245.565" y2="249"/><text class="tk" x="245.565" y="263" text-anchor="middle">0.001</text>
+<line class="ax" x1="363.71" y1="244" x2="363.71" y2="249"/><text class="tk" x="363.71" y="263" text-anchor="middle">0.01</text>
+<line class="ax" x1="481.855" y1="244" x2="481.855" y2="249"/><text class="tk" x="481.855" y="263" text-anchor="middle">0.1</text>
+<line class="ax" x1="600" y1="244" x2="600" y2="249"/><text class="tk" x="600" y="263" text-anchor="middle">1</text>
+<text class="lb" x="405" y="282" text-anchor="middle">p-value (log scale)</text>
+<line class="zero" x1="446.29" y1="22" x2="446.29" y2="244"/><text class="tk" x="446.29" y="16" text-anchor="middle">0.05</text>
+<text class="nm" x="200" y="45" text-anchor="end">bake_min</text>
+<line class="link" x1="465.357" y1="40" x2="536.487" y2="40"/>
+<circle class="raw" cx="465.357" cy="40" r="6"/><circle class="adj" cx="536.487" cy="40" r="6"/>
+<text class="nm" x="200" y="79" text-anchor="end">height_cm</text>
+<line class="link" x1="210" y1="74" x2="249.964" y2="74"/>
+<circle class="raw" cx="210" cy="74" r="6"/><circle class="adj" cx="249.964" cy="74" r="6"/>
+<text class="nm" x="200" y="113" text-anchor="end">crust</text>
+<line class="link" x1="571.754" y1="108" x2="600" y2="108"/>
+<circle class="raw" cx="571.754" cy="108" r="6"/><circle class="adj" cx="600" cy="108" r="6"/>
+<text class="nm" x="200" y="147" text-anchor="end">weight_g</text>
+<line class="link" x1="573.466" y1="142" x2="600" y2="142"/>
+<circle class="raw" cx="573.466" cy="142" r="6"/><circle class="adj" cx="600" cy="142" r="6"/>
+<text class="nm" x="200" y="181" text-anchor="end">moisture_pct</text>
+<line class="link" x1="210" y1="176" x2="212.21" y2="176"/>
+<circle class="raw" cx="210" cy="176" r="6"/><circle class="adj" cx="212.21" cy="176" r="6"/>
+<text class="nm" x="200" y="215" text-anchor="end">salt_pct</text>
+<line class="link" x1="576.299" y1="210" x2="600" y2="210"/>
+<circle class="raw" cx="576.299" cy="210" r="6"/><circle class="adj" cx="600" cy="210" r="6"/>
+<text class="tk" x="600" y="296" text-anchor="end">&#9675; p as computed &#183; &#9679; p after Holm&#8217;s correction</text></svg></figure><div class="read"><b>Reading it.</b> Height and moisture still stand out after the correction; the crust, the weight and the salt do not, and neither does the baking-time mean (the story 3 problem again). The hollow and filled circles are the same test before and after the family is accounted for. Marta can now say which of her improvements are real and which could be six coin flips.</div></div></section>
+<section class=" story" id="s5"><div class="wrap"><h2>5 &middot; Is it luck? Count it</h2><div class="badge"><span class="lvl">exact answers to small questions</span><span>resample perm --permutations all</span><span>test fisher</span></div><p class="said">&#8220;In the first week I only had four batches from each oven. Could four and four have told me anything?&#8221;</p><p>With eight batches, &#8220;by luck&#8221; can be counted. Hand any four of the eight batches to oven A and the other four to oven B: there are 70 ways. For each, compute the difference of the means; the p-value is the fraction of ways at least as far from zero as the real one. <code>--permutations all</code> does exactly that, and the comparison is made on exact integers, with no tolerance. The first four batches of each oven were 41.2, 38.9, 43.2, 40.8 minutes in A and 33.9, 40.7, 43.5, 42.9 in B: not obviously different, and the count will say how different &#8220;not obviously&#8221; is.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats resample perm --cols bake_min --group oven --permutations all pilot.csv</span>
+{
+  &quot;p_method&quot;: &quot;exact&quot;,
+  &quot;tests&quot;: [
+    {
+      &quot;statistic&quot;: 0.7750000000000004,
+      &quot;p&quot;: 0.8,
+      &quot;extreme&quot;: 56,
+      &quot;permutations&quot;: 70,
+      &quot;n&quot;: {&quot;a&quot;: 4, &quot;b&quot;: 4, &quot;missing&quot;: 0}
+    }
+  ]
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 162" role="img" aria-label="56 of the 70 ways to split the pilot batches between the ovens are as extreme as the real one"><rect class="cell hit" x="60" y="14" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="84" y="14" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="108" y="14" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="132" y="14" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="156" y="14" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="180" y="14" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="204" y="14" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="228" y="14" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="252" y="14" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="276" y="14" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="300" y="14" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="324" y="14" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="348" y="14" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="372" y="14" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="60" y="38" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="84" y="38" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="108" y="38" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="132" y="38" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="156" y="38" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="180" y="38" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="204" y="38" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="228" y="38" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="252" y="38" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="276" y="38" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="300" y="38" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="324" y="38" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="348" y="38" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="372" y="38" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="60" y="62" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="84" y="62" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="108" y="62" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="132" y="62" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="156" y="62" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="180" y="62" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="204" y="62" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="228" y="62" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="252" y="62" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="276" y="62" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="300" y="62" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="324" y="62" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="348" y="62" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="372" y="62" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="60" y="86" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="84" y="86" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="108" y="86" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="132" y="86" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="156" y="86" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="180" y="86" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="204" y="86" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="228" y="86" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="252" y="86" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="276" y="86" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="300" y="86" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="324" y="86" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="348" y="86" width="19" height="19" rx="3"/>
+<rect class="cell hit" x="372" y="86" width="19" height="19" rx="3"/>
+<rect class="cell " x="60" y="110" width="19" height="19" rx="3"/>
+<rect class="cell " x="84" y="110" width="19" height="19" rx="3"/>
+<rect class="cell " x="108" y="110" width="19" height="19" rx="3"/>
+<rect class="cell " x="132" y="110" width="19" height="19" rx="3"/>
+<rect class="cell " x="156" y="110" width="19" height="19" rx="3"/>
+<rect class="cell " x="180" y="110" width="19" height="19" rx="3"/>
+<rect class="cell " x="204" y="110" width="19" height="19" rx="3"/>
+<rect class="cell " x="228" y="110" width="19" height="19" rx="3"/>
+<rect class="cell " x="252" y="110" width="19" height="19" rx="3"/>
+<rect class="cell " x="276" y="110" width="19" height="19" rx="3"/>
+<rect class="cell " x="300" y="110" width="19" height="19" rx="3"/>
+<rect class="cell " x="324" y="110" width="19" height="19" rx="3"/>
+<rect class="cell " x="348" y="110" width="19" height="19" rx="3"/>
+<rect class="cell " x="372" y="110" width="19" height="19" rx="3"/>
+<text class="nm" x="60" y="148">56 of the 70 ways to split the eight batches (red) are as extreme as the real split</text></svg></figure><p>Why not do the same on all eighty batches? Because there are about 10<sup>23</sup> ways to split them, and the tool says so instead of trying:</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats resample perm --cols bake_min --group oven --permutations all bakery.csv</span>
+exit 8
+{
+  &quot;code&quot;: &quot;PRECONDITION_FAILED&quot;,
+  &quot;rule&quot;: &quot;limit.exact-too-large&quot;,
+  &quot;message&quot;: &quot;more arrangements of the labels than the exact test enumerates&quot;,
+  &quot;hint&quot;: &quot;use --permutations N for the Monte Carlo test&quot;,
+  &quot;detail&quot;: {&quot;limit&quot;: 1048576, &quot;values&quot;: 80}
+}</pre></div><div class="read"><b>Reading it.</b> 56 of 70 arrangements are as extreme as the real one (the red squares), so p = 0.8 &#8212; the exact permutation p-value, not an approximation. Four against four cannot show a difference this small, and the count says so in the plainest way there is. There is no seed in this answer because nothing was drawn.</div><p>The same idea decides the yes/no question. Over all eighty batches, 12 of 40 loaves from oven A had a defect and 1 of 40 from B. Fisher&#8217;s exact test enumerates every table with the same margins:</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test fisher --cols defect --vs oven bakery.csv</span>
+{
+  &quot;tests&quot;: [
+    {
+      &quot;p_value&quot;: 0.0014946381722911106,
+      &quot;p_method&quot;: &quot;exact, probabilities not larger than the observed&quot;,
+      &quot;effect_size&quot;: {&quot;name&quot;: &quot;odds_ratio&quot;, &quot;value&quot;: 0.05982905982905983},
+      &quot;assumptions&quot;: {
+        &quot;levels&quot;: {&quot;column&quot;: [&quot;n&quot;, &quot;y&quot;], &quot;vs&quot;: [&quot;A&quot;, &quot;B&quot;]},
+        &quot;table&quot;: [28, 39, 12, 1]
+      }
+    }
+  ]
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 130" role="img" aria-label="Defective loaves out of the batches of each oven"><text class="nm" x="90" y="36" text-anchor="end">oven A</text>
+<rect class="seg" x="100" y="22" width="252" height="22" rx="3"/>
+<rect class="seg bad" x="352" y="22" width="108" height="22" rx="3"/>
+<text class="tk" x="470" y="37">12 of 40 defective</text>
+<text class="nm" x="90" y="86" text-anchor="end">oven B</text>
+<rect class="seg" x="100" y="72" width="351" height="22" rx="3"/>
+<rect class="seg bad" x="451" y="72" width="9" height="22" rx="3"/>
+<text class="tk" x="470" y="87">1 of 40 defective</text></svg></figure><div class="read"><b>Reading it.</b> p = 0.00149, from enumerating the tables, not from a formula that is only good for large counts: oven B has far fewer defective loaves, and this is the question on which the evidence is clearest. The odds ratio is printed too.</div></div></section>
+<section class="alt story" id="s6"><div class="wrap"><h2>6 &middot; Would anyone get the same numbers?</h2><div class="badge"><span class="lvl">the point of the tool</span><span>test t2</span><span>resample perm</span><span>sha256</span></div><p class="said">&#8220;My accountant will run this on her laptop, and the cafe&#8217;s analyst on a server. Will they get my numbers?&#8221;</p><p>The sums are exact, so the order in which rows are added cannot change a bit; the exact permutation test depends only on which values are in each group. Here is the proof you can run yourself: the same questions on the same data with the rows in three orders, and the SHA-256 of everything the tool printed.</p><figure class="fig"><svg viewBox="0 0 640 242" role="img" aria-label="The digests of the answers of the same question asked with the rows in different orders"><text class="nm" x="205" y="33" text-anchor="end">as recorded  t2</text><rect class="hash" x="215" y="18" width="395" height="22" rx="4"/><text class="hx" x="225" y="33">9a0ee67faa8c7063cbfb3d7080e86b4dba4b65123f1ea514</text>
+<text class="nm" x="205" y="67" text-anchor="end">rows shuffled  t2</text><rect class="hash" x="215" y="52" width="395" height="22" rx="4"/><text class="hx" x="225" y="67">9a0ee67faa8c7063cbfb3d7080e86b4dba4b65123f1ea514</text>
+<text class="nm" x="205" y="101" text-anchor="end">rows reversed  t2</text><rect class="hash" x="215" y="86" width="395" height="22" rx="4"/><text class="hx" x="225" y="101">9a0ee67faa8c7063cbfb3d7080e86b4dba4b65123f1ea514</text>
+<text class="nm" x="205" y="135" text-anchor="end">as recorded  perm</text><rect class="hash" x="215" y="120" width="395" height="22" rx="4"/><text class="hx" x="225" y="135">798dbdb8452ceac972836d79647957f8575982009a4509d6</text>
+<text class="nm" x="205" y="169" text-anchor="end">rows shuffled  perm</text><rect class="hash" x="215" y="154" width="395" height="22" rx="4"/><text class="hx" x="225" y="169">798dbdb8452ceac972836d79647957f8575982009a4509d6</text>
+<text class="nm" x="205" y="203" text-anchor="end">rows reversed  perm</text><rect class="hash" x="215" y="188" width="395" height="22" rx="4"/><text class="hx" x="225" y="203">798dbdb8452ceac972836d79647957f8575982009a4509d6</text></svg></figure><div class="read"><b>Reading it.</b> All three digests of each question are identical. Across platforms it is the same: the project&#8217;s CI runs these answers on Linux x86-64, Linux arm64 and macOS arm64 and compares their hashes to the file <code>docs/xplat_fp.txt</code>. (One thing that <em>does</em> depend on row order, by design: a bootstrap resamples row positions, so <code>ci boot</code> is a function of the file&#8217;s bytes and the seed. The answer says so.)</div></div></section>
+<footer><div class="wrap">cancho-stats &middot; EUPL-1.2 &middot; the data are invented; the runs, the digits and the figures are real &middot; <a href=".">overview</a></div></footer>
+</body>
+</html>

@@ -291,6 +291,11 @@ jobs:
         run: |
           python3 scripts/gate_resample_perm.py --files 150
 
+      - name: The stories page is what the tool prints (the answers are the same bytes everywhere)
+        if: steps.stores.outputs.fetchable == 'yes'
+        run: |
+          python3 scripts/gen_stories.py --check
+
       - name: stats test wilcoxon against Fractions and mpmath, the exact p-values bit for bit, and the size of its test
         if: steps.stores.outputs.fetchable == 'yes'
         run: |
