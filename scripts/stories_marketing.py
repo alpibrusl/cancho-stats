@@ -10,6 +10,9 @@ def num(x, k):
     return "%.*f" % (k, x)
 
 
+BIG = {}  # the data files above the 2,000-line limit of a committed file: regenerated on demand (`gen_stories.py --data-out DIR`), never committed
+
+
 # ------------------------------------------------------------------------------------------------ the invented data
 def make_holdout():
     """8000 users, alternately shown the ads or held out (a coin the marketer controls); 6.2% and 5.0% convert; a converter spends a lognormal amount"""
@@ -87,8 +90,8 @@ def stories(R, folder, files):
     sections = []
     # 12 -------------------------------------------------------------------------------------------------------
     holdout = make_holdout()
-    files["holdout.csv"] = csv_rows("user,arm,converted,revenue", holdout)
-    (folder / "holdout.csv").write_text(files["holdout.csv"])
+    BIG["holdout.csv"] = csv_rows("user,arm,converted,revenue", holdout)
+    (folder / "holdout.csv").write_text(BIG["holdout.csv"])
     h1 = ["ci", "prop", "--cols", "converted", "--success", "1", "--group", "arm"]
     h2 = ["test", "prop", "--cols", "converted", "--success", "1", "--group", "arm"]
     h3 = ["ci", "diff", "--cols", "revenue", "--group", "arm"]
@@ -124,11 +127,11 @@ def stories(R, folder, files):
              num(i3["estimate"], 2), n_ads, num(inc_rev, 0), num(spend, 0), num(inc_rev / spend, 2), num(i3["interval"]["low"], 2), num(t4["p"], 3), num(t4["mc_error"], 3))]))
     # 13 -------------------------------------------------------------------------------------------------------
     observed = make_observed()
-    files["observed.csv"] = csv_rows("user,arm,sessions,converted", observed)
-    (folder / "observed.csv").write_text(files["observed.csv"])
+    BIG["observed.csv"] = csv_rows("user,arm,sessions,converted", observed)
+    (folder / "observed.csv").write_text(BIG["observed.csv"])
     for name, keep in (("quiet", lambda r: r[2] <= 3), ("busy", lambda r: r[2] > 3)):
-        files["observed_%s.csv" % name] = csv_rows("user,arm,sessions,converted", [r for r in observed if keep(r)])
-        (folder / ("observed_%s.csv" % name)).write_text(files["observed_%s.csv" % name])
+        BIG["observed_%s.csv" % name] = csv_rows("user,arm,sessions,converted", [r for r in observed if keep(r)])
+        (folder / ("observed_%s.csv" % name)).write_text(BIG["observed_%s.csv" % name])
     o1 = ["ci", "prop", "--cols", "converted", "--success", "1", "--group", "arm"]
     o2 = ["describe", "--by", "arm", "--cols", "sessions"]
     d1, _ = R.run(o1, "observed.csv")

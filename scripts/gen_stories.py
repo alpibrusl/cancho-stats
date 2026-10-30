@@ -612,7 +612,7 @@ def page(sections):
   <h1>Fourteen stories, from a bakery to the lab.</h1>
   <p class="sub">Marta has bought a second oven and wants to know whether it was a good idea; six stories follow her, each asking a little more of the tool than the last. Then four short ones from the sciences: biology, chemistry, physics and a social survey. Last, three from marketing, on its hardest question: what would have happened without the campaign (a randomized holdout, the dashboard that lies, and a geo experiment). Every number and every figure below is drawn from a real run of <code>stats</code> on the data you can download. The data are invented, with effects planted on purpose (B bakes faster and rises higher, three of its batches run long, the crust, weight and salt do not differ, A has more defects); the runs are real, and the narration is checked against the numbers whenever the page is generated.</p>
   <div class="toc">%s</div>
-  <p class="data">Data (invented, seeded): <a href="stories/bakery.csv">bakery.csv</a> (80 batches), <a href="stories/pilot.csv">pilot.csv</a> (the first four batches of each oven), and for part II <a href="stories/bio.csv">bio.csv</a>, <a href="stories/chem.csv">chem.csv</a>, <a href="stories/detectors.csv">detectors.csv</a>, <a href="stories/clock.csv">clock.csv</a>, <a href="stories/town.csv">town.csv</a>, and for part III <a href="stories/holdout.csv">holdout.csv</a>, <a href="stories/observed.csv">observed.csv</a> (with the quiet and busy halves <a href="stories/observed_quiet.csv">observed_quiet.csv</a>, <a href="stories/observed_busy.csv">observed_busy.csv</a>) and <a href="stories/geo.csv">geo.csv</a>. Rebuild this page: <code>python3 scripts/gen_stories.py</code>.</p>
+  <p class="data">Data (invented, seeded): <a href="stories/bakery.csv">bakery.csv</a> (80 batches), <a href="stories/pilot.csv">pilot.csv</a> (the first four batches of each oven), and for part II <a href="stories/bio.csv">bio.csv</a>, <a href="stories/chem.csv">chem.csv</a>, <a href="stories/detectors.csv">detectors.csv</a>, <a href="stories/clock.csv">clock.csv</a>, <a href="stories/town.csv">town.csv</a>, and for part III <a href="stories/geo.csv">geo.csv</a>; the three larger files (<code>holdout.csv</code>, 8000 users; <code>observed.csv</code>, 6000, and its two halves) are not committed: <code>python3 scripts/gen_stories.py --data-out DIR</code> writes them, from the same seeds. Rebuild this page: <code>python3 scripts/gen_stories.py</code>.</p>
 </div>
 %s
 <footer><div class="wrap">cancho-stats &middot; EUPL-1.2 &middot; the data are invented; the runs, the digits and the figures are real &middot; <a href=".">overview</a></div></footer>
@@ -625,8 +625,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bin", default=str(ROOT / "build" / "stats"))
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--data-out", help="also write the data files too large to commit into this directory")
     a = ap.parse_args()
     sections, files = build(a.bin)
+    if a.data_out:
+        pathlib.Path(a.data_out).mkdir(parents=True, exist_ok=True)
+        for name, text in stories_marketing.BIG.items():
+            (pathlib.Path(a.data_out) / name).write_text(text)
     out = {DOCS / "stories.html": page(sections)}
     for name, text in files.items():
         out[DOCS / "stories" / name] = text
