@@ -462,7 +462,7 @@ def build(binary):
             digests.append((label + "  t2", hashlib.sha256(rawtext.encode()).hexdigest()[:48]))
         # exact permutation of the pilot, rows of the pilot in another order
         pil_rows = a_first + b_first
-        pil_alt = {"as recorded": pil_rows, "rows shuffled": random.Random(3).sample(pil_rows, len(pil_rows)), "rows reversed": list(reversed(pil_rows))}
+        pil_alt = {"as recorded": pil_rows, "rows shuffled": [pil_rows[i] for i in (5, 2, 7, 0, 3, 6, 1, 4)], "rows reversed": list(reversed(pil_rows))}
         pil_digests = []
         for label, rr in pil_alt.items():
             (folder / "variant.csv").write_text(csv_text(rr, ["oven", "bake_min"]))
