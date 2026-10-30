@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>cancho-stats: fourteen stories, from a bakery to the lab</title>
-<meta name="description" content="Fourteen end-to-end examples of cancho-stats, in increasing complexity: a bakery, then biology, chemistry, physics, a social survey and marketing incrementality. Every number and every figure is drawn from a real run.">
+<title>cancho-stats: seventeen stories, from a bakery to the lab</title>
+<meta name="description" content="Seventeen end-to-end examples of cancho-stats, in increasing complexity: a bakery, then biology, chemistry, physics, a social survey, marketing incrementality, medicine and finance. Every number and every figure is drawn from a real run.">
 <meta name="color-scheme" content="light dark">
 <style>
 :root {
@@ -115,22 +115,38 @@ figure.fig svg { width: 100%; height: auto; display: block; background: var(--su
 .fig .lk { fill: #fff; font: 600 12px var(--font); }
 .part { padding: 2.5rem 0 .5rem; text-align: center; border-top: 1px solid var(--line); }
 .part h2 { text-align: center; }
-.toc { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: center; margin-top: 1.2rem; }
-.toc a { text-decoration: none; border: 1px solid var(--line); border-radius: 99px; padding: .25rem .9rem; background: var(--surface); font-size: .9rem; }
+.toc { display: flex; flex-direction: column; gap: .7rem; align-items: center; margin-top: 1.2rem; }
+.tg { display: flex; flex-wrap: wrap; gap: .45rem; justify-content: center; align-items: center; }
+.tg a { text-decoration: none; border: 1px solid var(--line); border-radius: 99px; padding: .2rem .8rem; background: var(--surface); font-size: .88rem; }
+.tg a.tn { border: 0; background: none; font-weight: 700; color: var(--fg); padding-left: 0; }
+.grp { padding: 2.5rem 0 .2rem; text-align: center; border-top: 1px solid var(--line); background: var(--bg); }
+.grp h2 { text-align: center; margin: 0 0 .3rem; }
+.grp .lead { color: var(--muted); max-width: 40rem; margin: 0 auto; }
+details.dd { position: relative; }
+details.dd summary { white-space: nowrap; cursor: pointer; color: var(--muted); font-size: .93rem; list-style: none; padding: .3rem .2rem; }
+details.dd summary::-webkit-details-marker { display: none; }
+details.dd summary::after { content: " ▾"; }
+details.dd[open] summary { color: var(--fg); }
+details.dd .menu { position: absolute; right: 0; top: 2.2rem; z-index: 9; min-width: 15rem; max-height: 75vh; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: .4rem 0; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+details.dd .menu a { display: block; padding: .25rem 1rem; color: var(--fg); }
+details.dd .menu a:hover { background: var(--soft); }
+@media (max-width: 40rem) { details.dd .menu { position: fixed; left: 8px; right: 8px; top: 3.6rem; max-height: 80vh; } }
+details.dd .menu a.gh { font-weight: 700; margin-top: .35rem; color: var(--accent); }
 .data { color: var(--muted); font-size: .9rem; text-align: center; margin-top: 1rem; }
 </style>
 </head>
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href=".">cancho-stats</a>
-  <nav><a class="opt" href="#s1">1</a> <a class="opt" href="#s2">2</a> <a class="opt" href="#s3">3</a> <a class="opt" href="#s4">4</a> <a class="opt" href="#s5">5</a> <a class="opt" href="#s6">6</a> <a class="opt" href="#s7">7</a> <a class="opt" href="#s8">8</a> <a class="opt" href="#s9">9</a> <a class="opt" href="#s10">10</a> <a class="opt" href="#s11">11</a> <a class="opt" href="#s12">12</a> <a class="opt" href="#s13">13</a> <a class="opt" href="#s14">14</a><a href=".">Overview</a><a href="https://github.com/alpibrusl/cancho-stats">GitHub</a></nav>
+  <nav><details class="dd"><summary>Stories</summary><div class="menu"><a class="gh" href="#g-basics">Foundations</a><a href="#s1">1 &middot; Look</a><a href="#s2">2 &middot; One question</a><a href="#s3">3 &middot; Outliers</a><a href="#s4">4 &middot; Six tests</a><a href="#s5">5 &middot; Exact counts</a><a href="#s6">6 &middot; Same bytes</a><a class="gh" href="#g-medicine">Medicine and biology</a><a href="#s7">7 &middot; Mice</a><a href="#s8">8 &middot; A drug trial</a><a href="#s9">9 &middot; Side effects</a><a class="gh" href="#g-physics">Chemistry and physics</a><a href="#s10">10 &middot; Chemistry</a><a href="#s11">11 &middot; Detectors</a><a class="gh" href="#g-social">Social science</a><a href="#s12">12 &middot; Survey</a><a class="gh" href="#g-marketing">Marketing</a><a href="#s13">13 &middot; Holdout</a><a href="#s14">14 &middot; Dashboard</a><a href="#s15">15 &middot; Regions</a><a class="gh" href="#g-finance">Finance</a><a href="#s16">16 &middot; Bad days</a><a href="#s17">17 &middot; Six backtests</a></div></details><a href=".">Overview</a><a href="https://github.com/alpibrusl/cancho-stats">GitHub</a></nav>
 </div></header>
 <div class="wrap hero small">
-  <h1>Fourteen stories, from a bakery to the lab.</h1>
-  <p class="sub">Marta has bought a second oven and wants to know whether it was a good idea; six stories follow her, each asking a little more of the tool than the last. Then four short ones from the sciences: biology, chemistry, physics and a social survey. Last, three from marketing, on its hardest question: what would have happened without the campaign (a randomized holdout, the dashboard that lies, and a geo experiment). Every number and every figure below is drawn from a real run of <code>stats</code> on the data you can download. The data are invented, with effects planted on purpose (B bakes faster and rises higher, three of its batches run long, the crust, weight and salt do not differ, A has more defects); the runs are real, and the narration is checked against the numbers whenever the page is generated.</p>
-  <div class="toc"><a href="#s1">1 &middot; Look</a><a href="#s2">2 &middot; One question</a><a href="#s3">3 &middot; Outliers</a><a href="#s4">4 &middot; Six tests</a><a href="#s5">5 &middot; Exact counts</a><a href="#s6">6 &middot; Same bytes</a><a href="#s7">7 &middot; Mice</a><a href="#s8">8 &middot; Chemistry</a><a href="#s9">9 &middot; Detectors</a><a href="#s10">10 &middot; Survey</a><a href="#s11">11 &middot; Holdout</a><a href="#s12">12 &middot; Dashboard</a><a href="#s13">13 &middot; Geo</a></div>
+  <h1>Seventeen stories, from a bakery to the lab.</h1>
+  <p class="sub">Marta has bought a second oven and wants to know whether it was a good idea; six stories follow her, each asking a little more of the tool than the last. Then the same tool on other fields, grouped by topic (use the <b>Stories</b> menu): medicine and biology, chemistry and physics, a social survey, marketing incrementality (what would have happened without the campaign) and finance. Every number and every figure below is drawn from a real run of <code>stats</code> on data you can download. The data are invented, with effects planted on purpose; the runs are real, and the narration is checked against the numbers whenever the page is generated.</p>
+  <div class="toc"><div class="toc"><div class="tg"><a class="tn" href="#g-basics">Foundations</a><a href="#s1">1 &middot; Look</a><a href="#s2">2 &middot; One question</a><a href="#s3">3 &middot; Outliers</a><a href="#s4">4 &middot; Six tests</a><a href="#s5">5 &middot; Exact counts</a><a href="#s6">6 &middot; Same bytes</a></div><div class="tg"><a class="tn" href="#g-medicine">Medicine and biology</a><a href="#s7">7 &middot; Mice</a><a href="#s8">8 &middot; A drug trial</a><a href="#s9">9 &middot; Side effects</a></div><div class="tg"><a class="tn" href="#g-physics">Chemistry and physics</a><a href="#s10">10 &middot; Chemistry</a><a href="#s11">11 &middot; Detectors</a></div><div class="tg"><a class="tn" href="#g-social">Social science</a><a href="#s12">12 &middot; Survey</a></div><div class="tg"><a class="tn" href="#g-marketing">Marketing</a><a href="#s13">13 &middot; Holdout</a><a href="#s14">14 &middot; Dashboard</a><a href="#s15">15 &middot; Regions</a></div><div class="tg"><a class="tn" href="#g-finance">Finance</a><a href="#s16">16 &middot; Bad days</a><a href="#s17">17 &middot; Six backtests</a></div></div></div>
   <p class="data">Data (invented, seeded): <a href="stories/bakery.csv">bakery.csv</a> (80 batches), <a href="stories/pilot.csv">pilot.csv</a> (the first four batches of each oven), and for part II <a href="stories/bio.csv">bio.csv</a>, <a href="stories/chem.csv">chem.csv</a>, <a href="stories/detectors.csv">detectors.csv</a>, <a href="stories/clock.csv">clock.csv</a>, <a href="stories/town.csv">town.csv</a>, and for part III <a href="stories/geo.csv">geo.csv</a>; the three larger files (<code>holdout.csv</code>, 8000 users; <code>observed.csv</code>, 6000, and its two halves) are not committed: <code>python3 scripts/gen_stories.py --data-out DIR</code> writes them, from the same seeds. Rebuild this page: <code>python3 scripts/gen_stories.py</code>.</p>
 </div>
+<section class="grp" id="g-basics"><div class="wrap"><h2>Foundations</h2><p class="lead">A bakery with two ovens: look at the data, ask one question, meet outliers, many tests, exact counts, and the same bytes everywhere.</p></div></section>
 <section class=" story" id="s1"><div class="wrap"><h2>1 &middot; Before anything else, look</h2><div class="badge"><span class="lvl">start here</span><span>describe</span></div><p class="said">&#8220;I bought a second oven. Is it any good?&#8221; &#8212; Marta, who bakes for a street of cafes</p><p>Marta kept a note of every batch for two months: which oven, how many minutes, how high it rose, how the crust scored, whether a loaf came out defective. Eighty batches, forty per oven. Before she asks anything, she looks at the one number she cares about most, the baking time.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats describe --by oven --cols bake_min --bins 6 bakery.csv</span>
 {
   &quot;by&quot;: &quot;oven&quot;,
@@ -536,7 +552,7 @@ exit 8
 <text class="nm" x="205" y="135" text-anchor="end">as recorded  perm</text><rect class="hash" x="215" y="120" width="395" height="22" rx="4"/><text class="hx" x="225" y="135">798dbdb8452ceac972836d79647957f8575982009a4509d6</text>
 <text class="nm" x="205" y="169" text-anchor="end">rows shuffled  perm</text><rect class="hash" x="215" y="154" width="395" height="22" rx="4"/><text class="hx" x="225" y="169">798dbdb8452ceac972836d79647957f8575982009a4509d6</text>
 <text class="nm" x="205" y="203" text-anchor="end">rows reversed  perm</text><rect class="hash" x="215" y="188" width="395" height="22" rx="4"/><text class="hx" x="225" y="203">798dbdb8452ceac972836d79647957f8575982009a4509d6</text></svg></figure><div class="read"><b>Reading it.</b> All three digests of each question are identical. Across platforms it is the same: the project&#8217;s CI runs these answers on Linux x86-64, Linux arm64 and macOS arm64 and compares their hashes to the file <code>docs/xplat_fp.txt</code>. (One thing that <em>does</em> depend on row order, by design: a bootstrap resamples row positions, so <code>ci boot</code> is a function of the file&#8217;s bytes and the seed. The answer says so.)</div></div></section>
-<section class="part" id="lab"><div class="wrap"><h2>Part II &middot; In the lab and in the field</h2><p class="lead">The same tool on four small datasets from the sciences: a gene in mice, a chemistry method comparison, two particle detectors, a town survey. The data are invented; the runs are real; each story is built around a different habit of the field.</p></div></section>
+<section class="grp" id="g-medicine"><div class="wrap"><h2>Medicine and biology</h2><p class="lead">Small samples, exact answers, a randomized trial with three endpoints, and what zero side effects can and cannot say.</p></div></section>
 <section class=" story" id="s7"><div class="wrap"><h2>7 &middot; Six mice against six</h2><div class="badge"><span class="lvl">biology: small samples, exact answers</span><span>test t2</span><span>test mannwhitney</span><span>resample perm --permutations all</span></div><p class="said">&#8220;Six wild-type and six knockout mice, one liver sample each. The knockout looks higher. One animal is very high. Is the gene doing something?&#8221; &#8212; a postdoc, late on a Friday</p><p>Twelve animals is a small sample, and an assumption that the data are bell-shaped cannot be checked on twelve points. Three questions, from the most assumption-laden to the least: Welch&#8217;s t test (needs the means to be roughly normal), the Mann&#8211;Whitney test (ranks only; with no ties and so few animals the tool computes the <em>exact</em> p-value, <code>p_method: exact</code>, not the normal approximation), and a permutation test of the means over all 924 ways to hand six of the twelve animals to the knockout group.</p><figure class="fig"><svg viewBox="0 0 640 200" role="img" aria-label="Every animal as a dot, by genotype"><line class="ax" x1="120" y1="160" x2="610" y2="160"/>
 <line class="ax" x1="160.833" y1="160" x2="160.833" y2="165"/><text class="tk" x="160.833" y="179" text-anchor="middle">7</text>
 <line class="ax" x1="242.5" y1="160" x2="242.5" y2="165"/><text class="tk" x="242.5" y="179" text-anchor="middle">8</text>
@@ -597,7 +613,111 @@ exit 8
 <text class="nm" x="200" y="113" text-anchor="end">permutation, exact</text>
 <rect class="pbar pb" x="210" y="100" width="312.236" height="16" rx="3"/>
 <text class="tk" x="528.236" y="113">0.0238</text></svg></figure><div class="read"><b>Reading it.</b> Welch&#8217;s p is 0.0705: the one very high knockout animal inflates the knockout&#8217;s variance, and the test is cautious. The exact rank test gives p = 0.026 and the exact permutation test p = 0.0238 (22 of 924 arrangements as extreme). None of these is a Monte Carlo estimate: there is no seed because nothing was drawn. In a small experiment the honest sentence is the one with the method in it: <em>by an exact permutation test, p = 0.0238</em>.</div></div></section>
-<section class="alt story" id="s8"><div class="wrap"><h2>8 &middot; Two methods, one sample set</h2><div class="badge"><span class="lvl">chemistry: correlation is not agreement</span><span>test paired</span><span>ci corr</span></div><p class="said">&#8220;The UV method is ten times cheaper and it correlates almost perfectly with the HPLC. Can we switch?&#8221; &#8212; the lab manager</p><p>Twelve caffeine samples were measured by both methods. A correlation coefficient asks whether the two move together; it says nothing about whether they give the <em>same number</em>. The tool answers both questions on the same file: <code>ci corr</code> with a Fisher-z interval for the correlation, and a paired test of the differences, whose mean is the bias between the methods.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci corr --cols hplc,uv chem.csv</span>
+<section class=" story" id="s8"><div class="wrap"><h2>8 &middot; Did the drug lower the blood pressure?</h2><div class="badge"><span class="lvl">medicine: a randomized trial, three endpoints</span><span>test t2</span><span>ci diff</span><span>--correct holm</span></div><p class="said">&#8220;Eight weeks, 120 patients, half on the drug and half on a placebo, assigned by a coin. The primary question is the systolic pressure. We also looked at the diastolic pressure and the heart rate.&#8221; &#8212; the trial statistician, before unblinding the report</p><p>One question was written down before the trial: does the drug change the systolic pressure more than the placebo does? One test answers it, and an interval says by how much.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test t2 --cols sbp_change --group arm trial.csv</span>
+{
+  &quot;levels&quot;: {&quot;a&quot;: &quot;drug&quot;, &quot;b&quot;: &quot;placebo&quot;},
+  &quot;tests&quot;: [
+    {
+      &quot;statistic&quot;: -3.2318462005889708,
+      &quot;df&quot;: 117.75621854173842,
+      &quot;p_value&quot;: 0.0015952704334033319,
+      &quot;effect_size&quot;: {&quot;name&quot;: &quot;cohen_d&quot;, &quot;value&quot;: -0.5900516888166484},
+      &quot;n&quot;: {&quot;a&quot;: 60, &quot;b&quot;: 60}
+    }
+  ]
+}</pre></div><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci diff --cols sbp_change --group arm trial.csv</span>
+{
+  &quot;intervals&quot;: [
+    {
+      &quot;estimate&quot;: -5.8116666666666665,
+      &quot;interval&quot;: {&quot;low&quot;: -9.372767142085737, &quot;high&quot;: -2.250566191247597}
+    }
+  ]
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 114" role="img" aria-label="Estimates with their 95% intervals and the line of no effect"><line class="ax" x1="190" y1="74" x2="610" y2="74"/>
+<line class="ax" x1="190" y1="74" x2="190" y2="79"/><text class="tk" x="190" y="93" text-anchor="middle">-12</text>
+<line class="ax" x1="280" y1="74" x2="280" y2="79"/><text class="tk" x="280" y="93" text-anchor="middle">-9</text>
+<line class="ax" x1="370" y1="74" x2="370" y2="79"/><text class="tk" x="370" y="93" text-anchor="middle">-6</text>
+<line class="ax" x1="460" y1="74" x2="460" y2="79"/><text class="tk" x="460" y="93" text-anchor="middle">-3</text>
+<line class="ax" x1="550" y1="74" x2="550" y2="79"/><text class="tk" x="550" y="93" text-anchor="middle">0</text>
+<text class="lb" x="400" y="112" text-anchor="middle">change in systolic pressure, mmHg (95% interval)</text>
+<line class="zero" x1="550" y1="30" x2="550" y2="74"/><text class="tk" x="550" y="24" text-anchor="middle">no effect</text>
+<text class="nm" x="182" y="58" text-anchor="end">drug minus placebo, mmHg</text>
+<line class="ciline" x1="268.817" y1="54" x2="482.483" y2="54"/><circle class="pt" cx="375.65" cy="54" r="5"/>
+<text class="tk" x="375.65" y="45" text-anchor="middle">-5.8</text></svg></figure><div class="read"><b>Reading it.</b> The drug lowers the systolic pressure by 5.8 mmHg more than the placebo (95% interval 2.3 to 9.4; Welch&#8217;s t test p = 0.0016). That is the pre-specified answer, and it does not need a correction: it is one question.</div><p>The two other measurements are another matter. Three questions asked of the same patients, at the 5% level each, and the chance that at least one comes out significant by luck alone is about one in seven. Holm&#8217;s correction keeps that chance at 5% for the family: the smallest p-value is multiplied by the number of tests, the next by one fewer, and so on.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test t2 --cols sbp_change,dbp_change,hr_change --group arm --correct holm \
+    trial.csv</span>
+{
+  &quot;tests&quot;: [
+    {&quot;column&quot;: &quot;sbp_change&quot;, &quot;p_value&quot;: 0.0015952704334033319},
+    {&quot;column&quot;: &quot;dbp_change&quot;, &quot;p_value&quot;: 0.0439353947110954},
+    {&quot;column&quot;: &quot;hr_change&quot;, &quot;p_value&quot;: 0.856703410390581}
+  ],
+  &quot;family&quot;: {
+    &quot;size&quot;: 3,
+    &quot;correction&quot;: &quot;holm&quot;,
+    &quot;p_adjusted&quot;: [0.004785811300209996, 0.0878707894221908, 0.856703410390581]
+  }
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 182" role="img" aria-label="Raw and Holm-adjusted p-values against the 0.05 level"><line class="ax" x1="190" y1="142" x2="610" y2="142"/>
+<line class="ax" x1="190" y1="142" x2="190" y2="147"/><text class="tk" x="190" y="161" text-anchor="middle">0</text>
+<line class="ax" x1="211" y1="142" x2="211" y2="147"/><text class="tk" x="211" y="161" text-anchor="middle">0.05</text>
+<line class="ax" x1="295" y1="142" x2="295" y2="147"/><text class="tk" x="295" y="161" text-anchor="middle">0.25</text>
+<line class="ax" x1="400" y1="142" x2="400" y2="147"/><text class="tk" x="400" y="161" text-anchor="middle">0.5</text>
+<line class="ax" x1="505" y1="142" x2="505" y2="147"/><text class="tk" x="505" y="161" text-anchor="middle">0.75</text>
+<line class="ax" x1="610" y1="142" x2="610" y2="147"/><text class="tk" x="610" y="161" text-anchor="middle">1</text>
+<text class="lb" x="400" y="180" text-anchor="middle">p-value (raw: hollow, after Holm: filled)</text>
+<line class="zero" x1="211" y1="20" x2="211" y2="142"/>
+<text class="nm" x="182" y="30" text-anchor="end">systolic</text>
+<line class="band" x1="190.67" y1="26" x2="192.01" y2="26"/>
+<circle cx="190.67" cy="26" r="5" fill="none" stroke="currentColor" style="stroke:var(--accent);stroke-width:2"/>
+<circle class="pt" cx="192.01" cy="26" r="5"/>
+<text class="nm" x="182" y="64" text-anchor="end">diastolic</text>
+<line class="band" x1="208.453" y1="60" x2="226.906" y2="60"/>
+<circle cx="208.453" cy="60" r="5" fill="none" stroke="currentColor" style="stroke:var(--accent);stroke-width:2"/>
+<circle class="pt" cx="226.906" cy="60" r="5"/>
+<text class="nm" x="182" y="98" text-anchor="end">heart rate</text>
+<line class="band" x1="549.815" y1="94" x2="549.815" y2="94"/>
+<circle cx="549.815" cy="94" r="5" fill="none" stroke="currentColor" style="stroke:var(--accent);stroke-width:2"/>
+<circle class="pt" cx="549.815" cy="94" r="5"/></svg></figure><div class="read"><b>Reading it.</b> The systolic result stands after the correction (p = 0.0048). The diastolic pressure has p = 0.044 on its own, which would pass 0.05, and 0.088 after Holm, which does not: with three endpoints looked at, that result is what a family of tests would produce by chance one time in several, and the report should call it suggestive, not shown. The heart rate shows nothing (p = 0.86). Which questions were pre-specified, and how many were asked, is part of the result.</div></div></section>
+<section class="story" id="s9"><div class="wrap"><h2>9 &middot; No serious events: how safe is that?</h2><div class="badge"><span class="lvl">medicine: side effects and the zero that proves little</span><span>test fisher</span><span>ci prop --method clopper-pearson</span></div><p class="said">&#8220;Nausea was more common on the drug. And nobody had a serious adverse event, so the drug is safe.&#8221; &#8212; a sentence from a first draft of the safety section</p><p>Side effects are counts, often small ones, and the arithmetic of small counts is exactly what Fisher&#8217;s exact test is for: it lists every table with the same margins and adds up those at least as unlikely as the observed one.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test fisher --cols nausea --vs arm events.csv</span>
+{
+  &quot;tests&quot;: [
+    {
+      &quot;p_value&quot;: 0.01944841662107582,
+      &quot;p_method&quot;: &quot;exact, probabilities not larger than the observed&quot;,
+      &quot;effect_size&quot;: {&quot;name&quot;: &quot;odds_ratio&quot;, &quot;value&quot;: 0.23469387755102042},
+      &quot;interval&quot;: null
+    }
+  ]
+}</pre></div><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test fisher --cols dizziness --vs arm events.csv</span>
+{
+  &quot;tests&quot;: [
+    {
+      &quot;p_value&quot;: 1.0,
+      &quot;p_method&quot;: &quot;exact, probabilities not larger than the observed&quot;
+    }
+  ]
+}</pre></div><div class="read"><b>Reading it.</b> Nausea: 14 of 60 on the drug against 4 of 60 on the placebo, Fisher p = 0.0194. Dizziness: 1 against 2, p = 1.000, no difference that 120 patients can show. The nausea result is a real signal to put in the label; the dizziness one is not a signal in either direction.</div><p>Then the sentence from the draft. Zero events in 120 patients. The exact (Clopper&#8211;Pearson) interval for a proportion says what rates are still compatible with seeing none:</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci prop --cols serious --success y --method clopper-pearson events.csv</span>
+{
+  &quot;intervals&quot;: [
+    {
+      &quot;estimate&quot;: 0.0,
+      &quot;interval&quot;: {&quot;method&quot;: &quot;clopper-pearson&quot;, &quot;low&quot;: 0.0, &quot;high&quot;: 0.03027297257742006},
+      &quot;n&quot;: {&quot;n&quot;: 120, &quot;successes&quot;: 0, &quot;missing&quot;: 0}
+    }
+  ]
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 114" role="img" aria-label="Estimates with their 95% intervals and the line of no effect"><line class="ax" x1="190" y1="74" x2="610" y2="74"/>
+<line class="ax" x1="260" y1="74" x2="260" y2="79"/><text class="tk" x="260" y="93" text-anchor="middle">0</text>
+<line class="ax" x1="330" y1="74" x2="330" y2="79"/><text class="tk" x="330" y="93" text-anchor="middle">1</text>
+<line class="ax" x1="400" y1="74" x2="400" y2="79"/><text class="tk" x="400" y="93" text-anchor="middle">2</text>
+<line class="ax" x1="470" y1="74" x2="470" y2="79"/><text class="tk" x="470" y="93" text-anchor="middle">3</text>
+<line class="ax" x1="540" y1="74" x2="540" y2="79"/><text class="tk" x="540" y="93" text-anchor="middle">4</text>
+<line class="ax" x1="610" y1="74" x2="610" y2="79"/><text class="tk" x="610" y="93" text-anchor="middle">5</text>
+<text class="lb" x="400" y="112" text-anchor="middle">percent of patients with a serious adverse event (95% interval)</text>
+<line class="zero" x1="260" y1="30" x2="260" y2="74"/><text class="tk" x="260" y="24" text-anchor="middle">none</text>
+<text class="nm" x="182" y="58" text-anchor="end">serious events, % of patients</text>
+<line class="ciline" x1="260" y1="54" x2="471.911" y2="54"/><circle class="pt" cx="260" cy="54" r="5"/>
+<text class="tk" x="260" y="45" text-anchor="middle">0.0</text></svg></figure><div class="read"><b>Reading it.</b> No serious event in 120 patients is compatible with a true rate of up to 3.0%, about three in a hundred (the &#8220;rule of three&#8221;: three divided by the number of patients). A serious event that happens to one patient in a hundred could easily go unseen in a trial this size. The honest sentence is &#8220;no serious adverse event was observed; the data cannot exclude a rate up to 3.0%&#8221;, and a drug taken by millions needs a monitoring plan for what 120 patients cannot see.</div></div></section>
+<section class="grp" id="g-physics"><div class="wrap"><h2>Chemistry and physics</h2><p class="lead">Agreement is not correlation; shapes that means cannot see; digits that cancel.</p></div></section>
+<section class="alt story" id="s10"><div class="wrap"><h2>10 &middot; Two methods, one sample set</h2><div class="badge"><span class="lvl">chemistry: correlation is not agreement</span><span>test paired</span><span>ci corr</span></div><p class="said">&#8220;The UV method is ten times cheaper and it correlates almost perfectly with the HPLC. Can we switch?&#8221; &#8212; the lab manager</p><p>Twelve caffeine samples were measured by both methods. A correlation coefficient asks whether the two move together; it says nothing about whether they give the <em>same number</em>. The tool answers both questions on the same file: <code>ci corr</code> with a Fisher-z interval for the correlation, and a paired test of the differences, whose mean is the bias between the methods.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci corr --cols hplc,uv chem.csv</span>
 {
   &quot;intervals&quot;: [
     {
@@ -688,7 +808,7 @@ exit 8
 <circle class="dot pb" cx="552.523" cy="132.857" r="4"/>
 <circle class="dot pb" cx="567.923" cy="295.714" r="4"/>
 <text class="tk" x="620" y="345" text-anchor="end">band: 95% interval of the mean difference, -1.32 to -0.10</text></svg></figure><div class="read"><b>Reading it.</b> The correlation is 0.99933, with a 95% interval 0.99754 to 0.99982: the methods move together almost perfectly. The paired differences have a mean of -0.711 mg with a 95% interval from -1.32 to -0.102, which excludes zero (p = 0.0261): the UV method reads systematically higher, here by 1.6 per cent of the mean amount. A calibration against the HPLC would fix a bias like this; a correlation of 0.999 could never have shown it. The figure on the right is the same finding as a picture.</div></div></section>
-<section class=" story" id="s9"><div class="wrap"><h2>9 &middot; Same source, two detectors</h2><div class="badge"><span class="lvl">physics: shape, and digits that cancel</span><span>test t2</span><span>test ks --exact yes</span><span>describe</span></div><p class="said">&#8220;Both detectors see the 662 keV line of the same caesium source. Their average energies agree. Why does the second one look broader?&#8221; &#8212; a detector physicist</p><p>Thirty counts on each detector. The second detector&#8217;s gain drifted during the run, so its line is split into two close peaks. A comparison of means cannot see that; the two-sample Kolmogorov&#8211;Smirnov test compares the whole distributions, and with 60 values and no ties the tool computes its p-value exactly (<code>--exact yes</code> refuses if it cannot).</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test t2 --cols energy_keV --group detector detectors.csv</span>
+<section class=" story" id="s11"><div class="wrap"><h2>11 &middot; Same source, two detectors</h2><div class="badge"><span class="lvl">physics: shape, and digits that cancel</span><span>test t2</span><span>test ks --exact yes</span><span>describe</span></div><p class="said">&#8220;Both detectors see the 662 keV line of the same caesium source. Their average energies agree. Why does the second one look broader?&#8221; &#8212; a detector physicist</p><p>Thirty counts on each detector. The second detector&#8217;s gain drifted during the run, so its line is split into two close peaks. A comparison of means cannot see that; the two-sample Kolmogorov&#8211;Smirnov test compares the whole distributions, and with 60 values and no ties the tool computes its p-value exactly (<code>--exact yes</code> refuses if it cannot).</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test t2 --cols energy_keV --group detector detectors.csv</span>
 {
   &quot;tests&quot;: [
     {
@@ -743,7 +863,8 @@ exit 8
     }
   ]
 }</pre></div><div class="read"><b>Reading it.</b> The tool&#8217;s variance is 8.93504e-12 s&sup2;, which is the exact variance of the twenty recorded numbers rounded once (checked against exact fractions when this page is generated). The one-pass formula in doubles, run on the same twenty numbers, answers 538.947: the two terms it subtracts are about 2.9&times;10<sup>18</sup> and agree to the last digit that a double holds, so what is left is rounding noise, here about 10<sup>14</sup> times too large. The sums in <code>stats</code> are exact, so the offset costs nothing.</div></div></section>
-<section class="alt story" id="s10"><div class="wrap"><h2>10 &middot; What does the town think?</h2><div class="badge"><span class="lvl">social science: ordinal answers and honest intervals</span><span>ci prop</span><span>test kruskal</span><span>test chisq</span></div><p class="said">&#8220;A hundred and fifty residents answered. Does the town support the new bus line? Do the districts feel the same?&#8221; &#8212; a council analyst</p><p>Survey data are counts and ordinal scales, and the usual mistakes are treating a Likert score as a measurement on a ruler and quoting a share without its uncertainty. First the share: the Wilson interval is the default, and Clopper&#8211;Pearson (the exact binomial interval) is one flag away and always the wider.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci prop --cols support --success yes town.csv</span>
+<section class="grp" id="g-social"><div class="wrap"><h2>Social science</h2><p class="lead">Ordinal answers and honest intervals.</p></div></section>
+<section class="alt story" id="s12"><div class="wrap"><h2>12 &middot; What does the town think?</h2><div class="badge"><span class="lvl">social science: ordinal answers and honest intervals</span><span>ci prop</span><span>test kruskal</span><span>test chisq</span></div><p class="said">&#8220;A hundred and fifty residents answered. Does the town support the new bus line? Do the districts feel the same?&#8221; &#8212; a council analyst</p><p>Survey data are counts and ordinal scales, and the usual mistakes are treating a Likert score as a measurement on a ruler and quoting a share without its uncertainty. First the share: the Wilson interval is the default, and Clopper&#8211;Pearson (the exact binomial interval) is one flag away and always the wider.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci prop --cols support --success yes town.csv</span>
 {
   &quot;intervals&quot;: [
     {
@@ -859,7 +980,8 @@ exit 8
     }
   ]
 }</pre></div><div class="read"><b>Reading it.</b> The districts differ clearly (Kruskal&#8211;Wallis p = 3.85e-05): satisfaction rises from the North to the South, as the bars show. Support for the line shows no sign of depending on education (chi-square p = 0.966). Two different questions, two answers, and each with the test that suits the kind of data.</div></div></section>
-<section class="alt story" id="s12"><div class="wrap"><h2>12 &middot; Did the ads cause the sales?</h2><div class="badge"><span class="lvl">marketing: the randomized holdout</span><span>ci prop --group</span><span>test prop</span><span>ci diff</span><span>resample perm</span></div><p class="said">&#8220;The dashboard says 6.4% of the people we showed the ad to bought. Is that the ad?&#8221; &#8212; the head of growth, who has a budget meeting on Thursday</p><p>The percentage on the dashboard cannot say. Some of those buyers would have bought anyway; what the ad is worth is the <em>extra</em> buyers, and the only way to see people who were never shown the ad is to withhold it from some of them at random. The team did that: 8000 users, alternately assigned (the assignment is the marketer&#8217;s coin, not the user&#8217;s choice) to see the ads or to be held out. A user row is: arm, bought (0 or 1), and revenue (0 for a user who did not buy).</p><p>First the conversion rate in each arm and the difference between them, with the Newcombe interval for a difference of two proportions (the one that stays sensible when the rates are small):</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci prop --cols converted --success 1 --group arm holdout.csv</span>
+<section class="grp" id="g-marketing"><div class="wrap"><h2>Marketing</h2><p class="lead">Incrementality: what would have happened without the campaign. A randomized holdout, the dashboard that overstates, and a regional experiment.</p></div></section>
+<section class="story" id="s13"><div class="wrap"><h2>13 &middot; Did the ads cause the sales?</h2><div class="badge"><span class="lvl">marketing: the randomized holdout</span><span>ci prop --group</span><span>test prop</span><span>ci diff</span><span>resample perm</span></div><p class="said">&#8220;The dashboard says 6.4% of the people we showed the ad to bought. Is that the ad?&#8221; &#8212; the head of growth, who has a budget meeting on Thursday</p><p>The percentage on the dashboard cannot say. Some of those buyers would have bought anyway; what the ad is worth is the <em>extra</em> buyers, and the only way to see people who were never shown the ad is to withhold it from some of them at random. The team did that: 8000 users, alternately assigned (the assignment is the marketer&#8217;s coin, not the user&#8217;s choice) to see the ads or to be held out. A user row is: arm, bought (0 or 1), and revenue (0 for a user who did not buy).</p><p>First the conversion rate in each arm and the difference between them, with the Newcombe interval for a difference of two proportions (the one that stays sensible when the rates are small):</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci prop --cols converted --success 1 --group arm holdout.csv</span>
 {
   &quot;intervals&quot;: [
     {
@@ -930,7 +1052,7 @@ exit 8
 <text class="nm" x="182" y="58" text-anchor="end">revenue per user, euros</text>
 <line class="ciline" x1="294.432" y1="54" x2="553.19" y2="54"/><circle class="pt" cx="423.811" cy="54" r="5"/>
 <text class="tk" x="423.811" y="45" text-anchor="middle">0.61</text></svg></figure><div class="read"><b>Reading it.</b> The point estimate is 0.61 euros extra per user: for the 4000 users shown the ad, 2454 euros of incremental revenue, against 1200 euros of media spend at an assumed 0.30 euros a user. That is a return of 2.04 on each euro, if the estimate is right. But the interval for revenue includes zero (its low end is -0.00) and the shuffle test agrees (p = 0.054, give or take 0.002 from the shuffling): at this sample size the lift in <em>money</em> is not distinguished from none, even though the lift in <em>buyers</em> is. The honest sentence for Thursday is &#8220;the ad brings buyers; whether it pays for itself needs more users or a longer test&#8221;. (The arithmetic on the printed numbers is the page&#8217;s, not the tool&#8217;s: the media cost is invented.)</div></div></section>
-<section class=" story" id="s13"><div class="wrap"><h2>13 &middot; The dashboard that was too good to be true</h2><div class="badge"><span class="lvl">marketing: why exposed-versus-not is not a lift</span><span>ci prop --group</span><span>describe --by</span></div><p class="said">&#8220;We did not run a holdout for the autumn campaign, but we know who saw the ad and who did not. Why not just compare them?&#8221; &#8212; a marketer, with a spreadsheet</p><p>The autumn campaign was targeted: the platform shows the ad to users who are active, because active users click. 6000 users, 2177 of them reached. Comparing buyers among the reached with buyers among the rest is the comparison every ad dashboard makes:</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci prop --cols converted --success 1 --group arm observed.csv</span>
+<section class=" story" id="s14"><div class="wrap"><h2>14 &middot; The dashboard that was too good to be true</h2><div class="badge"><span class="lvl">marketing: why exposed-versus-not is not a lift</span><span>ci prop --group</span><span>describe --by</span></div><p class="said">&#8220;We did not run a holdout for the autumn campaign, but we know who saw the ad and who did not. Why not just compare them?&#8221; &#8212; a marketer, with a spreadsheet</p><p>The autumn campaign was targeted: the platform shows the ad to users who are active, because active users click. 6000 users, 2177 of them reached. Comparing buyers among the reached with buyers among the rest is the comparison every ad dashboard makes:</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci prop --cols converted --success 1 --group arm observed.csv</span>
 {
   &quot;intervals&quot;: [
     {
@@ -1023,10 +1145,10 @@ exit 8
 <text class="nm" x="182" y="126" text-anchor="end">busy users only</text>
 <line class="ciline" x1="342.476" y1="122" x2="515.526" y2="122"/><circle class="pt" cx="430.293" cy="122" r="5"/>
 <text class="tk" x="430.293" y="113" text-anchor="middle">3.9</text>
-<text class="nm" x="182" y="160" text-anchor="end">holdout (story 12)</text>
+<text class="nm" x="182" y="160" text-anchor="end">the holdout, above</text>
 <line class="ciline" x1="308.434" y1="156" x2="379.741" y2="156"/><circle class="pt" cx="344" cy="156" r="5"/>
 <text class="tk" x="344" y="147" text-anchor="middle">1.4</text></svg></figure><div class="read"><b>Reading it.</b> Inside the bands the lift falls from 5.3 points to 2.8 (quiet users) and 3.9 (busy users). Comparing like with like moved the answer toward the experiment, and both estimates are still above the whole interval of the holdout (0.4 to 2.4): inside a band the busier users are still the ones reached, so some of the bias stays. That is the lesson. Adjustment narrows the gap and does not close it; only the experiment closes it. A campaign worth a large budget deserves a holdout, and a small one (even 5% of the audience) costs far less than being wrong about the return.</div></div></section>
-<section class="alt story" id="s14"><div class="wrap"><h2>14 &middot; Twelve regions and a TV campaign</h2><div class="badge"><span class="lvl">marketing: a geo experiment, difference in differences</span><span>test t2</span><span>resample perm --permutations all</span><span>ci diff</span></div><p class="said">&#8220;We cannot hold out individual viewers of a TV spot. We can hold out whole regions.&#8221; &#8212; a media planner</p><p>Television reaches a region, not a user, so the unit of the experiment is the region. Twelve sales regions; six were drawn at random to get the campaign for a month. Comparing the TV regions with the others <em>after</em> the month would mix the campaign with the fact that some regions are simply bigger. What does not depend on size is the <em>change</em> in each region: sales after minus sales before, in thousands of euros a week. Comparing changes between the two groups is the difference in differences, and here it is one column, <code>change_keur</code>, compared between two groups of six.</p><figure class="fig"><svg viewBox="0 0 640 250" role="img" aria-label="Weekly sales of twelve regions before and after the campaign month"><line class="ax" x1="200" y1="24" x2="200" y2="214"/><line class="ax" x1="480" y1="24" x2="480" y2="214"/>
+<section class="story" id="s15"><div class="wrap"><h2>15 &middot; Twelve regions and a TV campaign</h2><div class="badge"><span class="lvl">marketing: a geo experiment, difference in differences</span><span>test t2</span><span>resample perm --permutations all</span><span>ci diff</span></div><p class="said">&#8220;We cannot hold out individual viewers of a TV spot. We can hold out whole regions.&#8221; &#8212; a media planner</p><p>Television reaches a region, not a user, so the unit of the experiment is the region. Twelve sales regions; six were drawn at random to get the campaign for a month. Comparing the TV regions with the others <em>after</em> the month would mix the campaign with the fact that some regions are simply bigger. What does not depend on size is the <em>change</em> in each region: sales after minus sales before, in thousands of euros a week. Comparing changes between the two groups is the difference in differences, and here it is one column, <code>change_keur</code>, compared between two groups of six.</p><figure class="fig"><svg viewBox="0 0 640 250" role="img" aria-label="Weekly sales of twelve regions before and after the campaign month"><line class="ax" x1="200" y1="24" x2="200" y2="214"/><line class="ax" x1="480" y1="24" x2="480" y2="214"/>
 <text class="tk" x="192" y="206.824" text-anchor="end">90</text>
 <text class="tk" x="192" y="162.118" text-anchor="end">110</text>
 <text class="tk" x="192" y="117.412" text-anchor="end">130</text>
@@ -1097,6 +1219,169 @@ exit 8
 <text class="nm" x="182" y="58" text-anchor="end">TV effect, k euros</text>
 <line class="ciline" x1="257.92" y1="54" x2="564.989" y2="54"/><circle class="pt" cx="411.455" cy="54" r="5"/>
 <text class="tk" x="411.455" y="45" text-anchor="middle">4.8</text></svg></figure><div class="read"><b>Reading it.</b> The TV regions grew 4.8 thousand euros a week more than the others (the tool prints the difference as none minus tv, hence the sign). The exact test says 30 of the 924 arrangements are at least this extreme: p = 0.032, the t test p = 0.025. The interval runs from 0.8 to 8.8 thousand euros a week: the campaign probably worked, and could have worked a lot or barely. With six regions a side a planner should say exactly that, and the exact count is the safer of the two p-values to quote.</div></div></section>
+<section class="grp" id="g-finance"><div class="wrap"><h2>Finance</h2><p class="lead">Returns have heavy tails; a backtest that searched has to count what it tried.</p></div></section>
+<section class=" story" id="s16"><div class="wrap"><h2>16 &middot; How bad is a bad day?</h2><div class="badge"><span class="lvl">finance: returns are not normal</span><span>describe</span><span>ci boot --statistic quantile</span><span>ci mean</span></div><p class="said">&#8220;The risk report says the daily volatility is 0.9%, so a really bad day, one in a hundred, is a loss of about 2.0%. And our average day is positive.&#8221; &#8212; a risk analyst, rereading the report with some suspicion</p><p>750 trading days of a share, in percent. Before any model, the shape: the skewness and the excess kurtosis (zero for a normal distribution) say how far from a bell this is.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats describe --cols ret_pct --bins 12 returns.csv</span>
+{
+  &quot;columns&quot;: [
+    {
+      &quot;count&quot;: 750,
+      &quot;mean&quot;: 0.028524,
+      &quot;sd&quot;: 0.879999703443936,
+      &quot;min&quot;: -4.6,
+      &quot;max&quot;: 3.09,
+      &quot;skewness&quot;: -0.43170622907447576,
+      &quot;kurtosis&quot;: 4.08930666708214
+    }
+  ]
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 240" role="img" aria-label="Histogram of daily return, percent"><line class="ax" x1="60" y1="190" x2="610" y2="190"/>
+<line class="ax" x1="60" y1="190" x2="60" y2="195"/><text class="tk" x="60" y="209" text-anchor="middle">-6</text>
+<line class="ax" x1="138.571" y1="190" x2="138.571" y2="195"/><text class="tk" x="138.571" y="209" text-anchor="middle">-4</text>
+<line class="ax" x1="217.143" y1="190" x2="217.143" y2="195"/><text class="tk" x="217.143" y="209" text-anchor="middle">-2</text>
+<line class="ax" x1="295.714" y1="190" x2="295.714" y2="195"/><text class="tk" x="295.714" y="209" text-anchor="middle">0</text>
+<line class="ax" x1="374.286" y1="190" x2="374.286" y2="195"/><text class="tk" x="374.286" y="209" text-anchor="middle">2</text>
+<line class="ax" x1="452.857" y1="190" x2="452.857" y2="195"/><text class="tk" x="452.857" y="209" text-anchor="middle">4</text>
+<line class="ax" x1="531.429" y1="190" x2="531.429" y2="195"/><text class="tk" x="531.429" y="209" text-anchor="middle">6</text>
+<line class="ax" x1="610" y1="190" x2="610" y2="195"/><text class="tk" x="610" y="209" text-anchor="middle">8</text>
+<text class="lb" x="335" y="228" text-anchor="middle">daily return, percent</text>
+<rect class="pbar pa" x="60.5" y="190" width="38.2857" height="0"/>
+<rect class="pbar pa" x="99.7857" y="189.115" width="38.2857" height="0.884956"/>
+<rect class="pbar pa" x="139.071" y="188.673" width="38.2857" height="1.32743"/>
+<rect class="pbar pa" x="178.357" y="185.133" width="38.2857" height="4.86726"/>
+<rect class="pbar pa" x="217.643" y="169.646" width="38.2857" height="20.354"/>
+<rect class="pbar pa" x="256.929" y="65.2212" width="38.2857" height="124.779"/>
+<rect class="pbar pa" x="296.214" y="40" width="38.2857" height="150"/>
+<rect class="pbar pa" x="335.5" y="167.434" width="38.2857" height="22.5664"/>
+<rect class="pbar pa" x="374.786" y="185.133" width="38.2857" height="4.86726"/>
+<rect class="pbar pa" x="414.071" y="187.788" width="38.2857" height="2.21239"/>
+<rect class="pbar pa" x="453.357" y="190" width="38.2857" height="0"/>
+<rect class="pbar pa" x="492.643" y="190" width="38.2857" height="0"/>
+<rect class="pbar pa" x="531.929" y="190" width="38.2857" height="0"/>
+<rect class="pbar pa" x="571.214" y="190" width="38.2857" height="0"/>
+<line class="zero" x1="295.714" y1="20" x2="295.714" y2="190"/></svg></figure><div class="read"><b>Reading it.</b> The excess kurtosis is 4.1 (a normal distribution has 0), and the skewness is -0.43: more days far into the tails than a bell has, and the long tail is on the loss side (the worst day is -4.6%, 5.3 standard deviations from the mean, a day that a bell with a volatility of 0.88% would make rarer than one in a million). It happened.</div><p>The average day first, because &#8220;our average day is positive&#8221; is the sentence people repeat. The interval for the mean, then the question that matters for risk: how bad is a really bad day, the loss that is exceeded one trading day in a hundred (the 1% quantile)? The bootstrap needs no assumption about the shape, and BCa corrects its bias and skew; the seed makes it repeatable.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci mean --cols ret_pct returns.csv</span>
+{
+  &quot;intervals&quot;: [
+    {
+      &quot;estimate&quot;: 0.028524,
+      &quot;interval&quot;: {&quot;low&quot;: -0.03455754792944781, &quot;high&quot;: 0.0916055479294478}
+    }
+  ]
+}</pre></div><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci boot --cols ret_pct --statistic quantile --prob 0.01 --method bca --seed 7 \
+    --replicates 2000 returns.csv</span>
+{
+  &quot;intervals&quot;: [
+    {
+      &quot;statistic&quot;: &quot;quantile&quot;,
+      &quot;p&quot;: 0.01,
+      &quot;estimate&quot;: -2.85806,
+      &quot;interval&quot;: {&quot;method&quot;: &quot;bootstrap-bca&quot;, &quot;low&quot;: -3.753, &quot;high&quot;: -2.32808}
+    }
+  ]
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 148" role="img" aria-label="Estimates with their 95% intervals and the line of no effect"><line class="ax" x1="190" y1="108" x2="610" y2="108"/>
+<line class="ax" x1="190" y1="108" x2="190" y2="113"/><text class="tk" x="190" y="127" text-anchor="middle">-4</text>
+<line class="ax" x1="274" y1="108" x2="274" y2="113"/><text class="tk" x="274" y="127" text-anchor="middle">-3</text>
+<line class="ax" x1="358" y1="108" x2="358" y2="113"/><text class="tk" x="358" y="127" text-anchor="middle">-2</text>
+<line class="ax" x1="442" y1="108" x2="442" y2="113"/><text class="tk" x="442" y="127" text-anchor="middle">-1</text>
+<line class="ax" x1="526" y1="108" x2="526" y2="113"/><text class="tk" x="526" y="127" text-anchor="middle">0</text>
+<line class="ax" x1="610" y1="108" x2="610" y2="113"/><text class="tk" x="610" y="127" text-anchor="middle">1</text>
+<text class="lb" x="400" y="146" text-anchor="middle">daily return, percent (95% intervals)</text>
+<line class="zero" x1="526" y1="30" x2="526" y2="108"/><text class="tk" x="526" y="24" text-anchor="middle">zero</text>
+<text class="nm" x="182" y="58" text-anchor="end">mean daily return, %</text>
+<line class="ciline" x1="523.097" y1="54" x2="533.695" y2="54"/><circle class="pt" cx="528.396" cy="54" r="5"/>
+<text class="tk" x="528.396" y="45" text-anchor="middle">0.03</text>
+<text class="nm" x="182" y="92" text-anchor="end">1% quantile, % (a bad day)</text>
+<line class="ciline" x1="210.748" y1="88" x2="330.441" y2="88"/><circle class="pt" cx="285.923" cy="88" r="5"/>
+<text class="tk" x="285.923" y="79" text-anchor="middle">-2.86</text></svg></figure><div class="read"><b>Reading it.</b> The mean daily return is 0.029% and its interval, -0.035 to 0.092, contains zero: after 750 days the data do not show that the average day is positive. The one-in-a-hundred bad day is -2.86%, with a 95% interval from -3.75 to -2.33: one day in a hundred loses more than about 2.9%, and the whole interval lies beyond the 2.0% that the bell of the report gives. The mean is hard to know and the tail is better known (and worse than the model said): a risk report should lead with the second.</div></div></section>
+<section class="story" id="s17"><div class="wrap"><h2>17 &middot; Six backtests, one winner</h2><div class="badge"><span class="lvl">finance: the strategy that looked good by luck</span><span>test paired</span><span>--correct holm</span></div><p class="said">&#8220;We tried six variants of the strategy against the index over the last 250 days. Number six beats it, p = 0.019. We should trade it.&#8221; &#8212; a portfolio manager, with a chart</p><p>Each strategy and the index have a return on each day, so the comparison is paired: the same days, the difference of the two, and a test of whether its mean is zero. The data are invented and built so that <em>none</em> of the six has any edge: each follows the index and adds noise.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test paired --pairs s1:index,s2:index,s3:index,s4:index,s5:index,s6:index \
+    strategies.csv</span>
+{
+  &quot;tests&quot;: [
+    {
+      &quot;pair&quot;: [&quot;s1&quot;, &quot;index&quot;],
+      &quot;p_value&quot;: 0.3259132034755653,
+      &quot;mean_difference&quot;: -0.028572
+    },
+    {
+      &quot;pair&quot;: [&quot;s2&quot;, &quot;index&quot;],
+      &quot;p_value&quot;: 0.2857239863003965,
+      &quot;mean_difference&quot;: -0.029279999999999997
+    },
+    {
+      &quot;pair&quot;: [&quot;s3&quot;, &quot;index&quot;],
+      &quot;p_value&quot;: 0.6078788115967801,
+      &quot;mean_difference&quot;: 0.014728
+    },
+    {
+      &quot;pair&quot;: [&quot;s4&quot;, &quot;index&quot;],
+      &quot;p_value&quot;: 0.1564535187909214,
+      &quot;mean_difference&quot;: 0.041092000000000004
+    },
+    {
+      &quot;pair&quot;: [&quot;s5&quot;, &quot;index&quot;],
+      &quot;p_value&quot;: 0.1816092081949331,
+      &quot;mean_difference&quot;: 0.039228000000000006
+    },
+    {
+      &quot;pair&quot;: [&quot;s6&quot;, &quot;index&quot;],
+      &quot;p_value&quot;: 0.019410814231605154,
+      &quot;mean_difference&quot;: -0.065608
+    }
+  ]
+}</pre></div><div class="read"><b>Reading it.</b> One of the six, <code>s6</code>, passes 0.05 on its own (p = 0.019, a mean advantage of -0.066 percentage points a day). The chance that the best of six unrelated strategies passes 0.05 is about one in four, so this result is what a search over variants produces, not evidence about <code>s6</code>.</div><p>The remedy is to count every strategy that was tried, not only the one that was kept: Holm&#8217;s correction over the six.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test paired --pairs s1:index,s2:index,s3:index,s4:index,s5:index,s6:index \
+    --correct holm strategies.csv</span>
+{
+  &quot;tests&quot;: [
+    {&quot;pair&quot;: [&quot;s1&quot;, &quot;index&quot;], &quot;p_value&quot;: 0.3259132034755653},
+    {&quot;pair&quot;: [&quot;s2&quot;, &quot;index&quot;], &quot;p_value&quot;: 0.2857239863003965},
+    {&quot;pair&quot;: [&quot;s3&quot;, &quot;index&quot;], &quot;p_value&quot;: 0.6078788115967801},
+    {&quot;pair&quot;: [&quot;s4&quot;, &quot;index&quot;], &quot;p_value&quot;: 0.1564535187909214},
+    {&quot;pair&quot;: [&quot;s5&quot;, &quot;index&quot;], &quot;p_value&quot;: 0.1816092081949331},
+    {&quot;pair&quot;: [&quot;s6&quot;, &quot;index&quot;], &quot;p_value&quot;: 0.019410814231605154}
+  ],
+  &quot;family&quot;: {
+    &quot;size&quot;: 6,
+    &quot;correction&quot;: &quot;holm&quot;,
+    &quot;p_adjusted&quot;: [
+      0.8571719589011896,
+      0.8571719589011896,
+      0.8571719589011896,
+      0.782267593954607,
+      0.782267593954607,
+      0.11646488538963093
+    ]
+  }
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 284" role="img" aria-label="Raw and Holm-adjusted p-values against the 0.05 level"><line class="ax" x1="190" y1="244" x2="610" y2="244"/>
+<line class="ax" x1="190" y1="244" x2="190" y2="249"/><text class="tk" x="190" y="263" text-anchor="middle">0</text>
+<line class="ax" x1="211" y1="244" x2="211" y2="249"/><text class="tk" x="211" y="263" text-anchor="middle">0.05</text>
+<line class="ax" x1="295" y1="244" x2="295" y2="249"/><text class="tk" x="295" y="263" text-anchor="middle">0.25</text>
+<line class="ax" x1="400" y1="244" x2="400" y2="249"/><text class="tk" x="400" y="263" text-anchor="middle">0.5</text>
+<line class="ax" x1="505" y1="244" x2="505" y2="249"/><text class="tk" x="505" y="263" text-anchor="middle">0.75</text>
+<line class="ax" x1="610" y1="244" x2="610" y2="249"/><text class="tk" x="610" y="263" text-anchor="middle">1</text>
+<text class="lb" x="400" y="282" text-anchor="middle">p-value (raw: hollow, after Holm: filled)</text>
+<line class="zero" x1="211" y1="20" x2="211" y2="244"/>
+<text class="nm" x="182" y="30" text-anchor="end">s1 vs index</text>
+<line class="band" x1="326.884" y1="26" x2="550.012" y2="26"/>
+<circle cx="326.884" cy="26" r="5" fill="none" stroke="currentColor" style="stroke:var(--accent);stroke-width:2"/>
+<circle class="pt" cx="550.012" cy="26" r="5"/>
+<text class="nm" x="182" y="64" text-anchor="end">s2 vs index</text>
+<line class="band" x1="310.004" y1="60" x2="550.012" y2="60"/>
+<circle cx="310.004" cy="60" r="5" fill="none" stroke="currentColor" style="stroke:var(--accent);stroke-width:2"/>
+<circle class="pt" cx="550.012" cy="60" r="5"/>
+<text class="nm" x="182" y="98" text-anchor="end">s3 vs index</text>
+<line class="band" x1="445.309" y1="94" x2="550.012" y2="94"/>
+<circle cx="445.309" cy="94" r="5" fill="none" stroke="currentColor" style="stroke:var(--accent);stroke-width:2"/>
+<circle class="pt" cx="550.012" cy="94" r="5"/>
+<text class="nm" x="182" y="132" text-anchor="end">s4 vs index</text>
+<line class="band" x1="255.71" y1="128" x2="518.552" y2="128"/>
+<circle cx="255.71" cy="128" r="5" fill="none" stroke="currentColor" style="stroke:var(--accent);stroke-width:2"/>
+<circle class="pt" cx="518.552" cy="128" r="5"/>
+<text class="nm" x="182" y="166" text-anchor="end">s5 vs index</text>
+<line class="band" x1="266.276" y1="162" x2="518.552" y2="162"/>
+<circle cx="266.276" cy="162" r="5" fill="none" stroke="currentColor" style="stroke:var(--accent);stroke-width:2"/>
+<circle class="pt" cx="518.552" cy="162" r="5"/>
+<text class="nm" x="182" y="200" text-anchor="end">s6 vs index</text>
+<line class="band" x1="198.153" y1="196" x2="238.915" y2="196"/>
+<circle cx="198.153" cy="196" r="5" fill="none" stroke="currentColor" style="stroke:var(--accent);stroke-width:2"/>
+<circle class="pt" cx="238.915" cy="196" r="5"/></svg></figure><div class="read"><b>Reading it.</b> After the correction the smallest p-value is 0.116 and nothing is left: six backtests, no evidence of an edge in any. A backtest searched over variants has to carry the number of variants tried; &#8220;we tried six and kept the best&#8221; is the sentence that makes the p-value mean what it says. (Out-of-sample days, kept aside before the search, are the other cure, and cost data.)</div></div></section>
 <footer><div class="wrap">cancho-stats &middot; EUPL-1.2 &middot; the data are invented; the runs, the digits and the figures are real &middot; <a href=".">overview</a></div></footer>
 </body>
 </html>
