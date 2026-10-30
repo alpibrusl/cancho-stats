@@ -605,6 +605,20 @@ GROUPS = [
 ]
 
 
+def stories_block(page_html):
+    """the home page's section on the stories: the page's own grouped table of contents, so the two cannot differ"""
+    toc = re.search(r'<div class="toc">(.*?)</div>\n', page_html, re.S)
+    groups = re.findall(r'<div class="tg"><a class="tn" href="#([^"]+)">([^<]+)</a>(.*?)</div>', page_html, re.S)
+    rows = []
+    for slug, name, chips in groups:
+        links = re.findall(r'<a href="#(s\d+)">([^<]+)</a>', chips)
+        rows.append('<div class="tg"><a class="tn" href="stories.html#%s">%s</a>%s</div>' % (slug, name, "".join('<a href="stories.html#%s">%s</a>' % (i, label) for i, label in links)))
+    n = len(re.findall(r'<section class="[^"]*story" id="s\d+"', page_html))
+    return ('<h2>From a first look to an exact test</h2>\n'
+            '<p class="lead">%d end-to-end stories, in increasing complexity, from a bakery to medicine, physics, a survey, marketing and finance. The same tool moves from describing data to testing hypotheses, correcting for many questions and bounding what a sample can show, and every number and figure comes from a real run.</p>\n'
+            '<div class="toc">%s</div>\n<p class="cta" style="margin-top:1.2rem"><a class="btn primary" href="stories.html">Read the stories</a></p>' % (n, "".join(rows)))
+
+
 def page(sections):
     index = (DOCS / "index.html").read_text()
     style = re.search(r"<style>(.*?)</style>", index, re.S).group(1)
@@ -649,6 +663,8 @@ def main():
         for name, text in stories_marketing.BIG.items():
             (pathlib.Path(a.data_out) / name).write_text(text)
     out = {DOCS / "stories.html": page(sections)}
+    home = (DOCS / "index.html").read_text()
+    out[DOCS / "index.html"] = re.sub(r"<!--stories-->.*?<!--/stories-->", lambda m: "<!--stories-->\n" + stories_block(out[DOCS / "stories.html"]) + "\n<!--/stories-->", home, flags=re.S)
     for name, text in files.items():
         out[DOCS / "stories" / name] = text
     if a.check:
