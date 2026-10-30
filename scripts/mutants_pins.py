@@ -26,7 +26,7 @@ MUTANTS = [
     ("rev-differs-in-one-block", TOML, "rev = \"%s\"\npath = \".cancho-vcs/flt\"" % REV_TAB, "rev = \"%s1\"\npath = \".cancho-vcs/flt\"" % REV_TAB[:39], "PN3"),
     ("rev-is-not-the-documented", DOC, "cancho-table rev: `%s`" % REV_TAB, "cancho-table rev: `%s`" % ("0" * 40), "PN3"),
     ("document-has-no-rev-line", DOC, "cancho-ml rev: `%s`" % REV_ML, "cancho-ml rev is somewhere else", "PN3"),
-    ("compiler-rev-moved", TOML, "cancho = \"a4572ea3b506e4bcec1c4be43deda1043c11ba9f\"", "cancho = \"e47d647e47d647e47d647e47d647e47d647e47d6\"", "PN3"),
+    ("compiler-rev-moved", TOML, "cancho = \"2bd251f7f9354fe43d48055b3d9fe4d4af007a5c\"", "cancho = \"e47d647e47d647e47d647e47d647e47d647e47d6\"", "PN3"),
     ("git-elsewhere", TOML, "git = \"https://github.com/alpibrusl/cancho-table\"\nrev = \"%s\"\npath = \".cancho-vcs/flt\"" % REV_TAB, "git = \"https://github.com/someone/cancho-table\"\nrev = \"%s\"\npath = \".cancho-vcs/flt\"" % REV_TAB, "PN4"),
     ("ml-git-elsewhere", TOML, FIRST, FIRST.replace("alpibrusl/cancho-ml", "someone/cancho-ml"), "PN4"),
     ("path-of-another-module", TOML, "path = \".cancho-vcs/flt\"", "path = \".cancho-vcs/pow\"", "PN5"),
