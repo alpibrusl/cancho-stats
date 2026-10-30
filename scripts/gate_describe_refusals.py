@@ -505,6 +505,7 @@ CASES = [
     ('resample: perm permutations 99', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','99','f.csv'], 'args.bad-value', 2),
     ('resample: perm permutations 1000001', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','1000001','f.csv'], 'args.bad-value', 2),
     ('resample: perm permutations text', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','many','f.csv'], 'args.bad-value', 2),
+    ('resample: perm permutations colon', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','1000:','f.csv'], 'args.bad-value', 2),
     ('resample: perm permutations 1000000', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','1000000','--max-work','6000000','f.csv'], None, 0),
     ('resample: perm no --cols', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--group','g','--seed','1','f.csv'], 'stats.test-columns', 2),
     ('resample: perm no --group', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--seed','1','f.csv'], 'stats.test-columns', 2),
