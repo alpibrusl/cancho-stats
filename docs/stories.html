@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>cancho-stats: ten stories, from a bakery to the lab</title>
-<meta name="description" content="Ten end-to-end examples of cancho-stats, in increasing complexity: a bakery, then biology, chemistry, physics and a social survey. Every number and every figure is drawn from a real run.">
+<title>cancho-stats: fourteen stories, from a bakery to the lab</title>
+<meta name="description" content="Fourteen end-to-end examples of cancho-stats, in increasing complexity: a bakery, then biology, chemistry, physics, a social survey and marketing incrementality. Every number and every figure is drawn from a real run.">
 <meta name="color-scheme" content="light dark">
 <style>
 :root {
@@ -123,13 +123,13 @@ figure.fig svg { width: 100%; height: auto; display: block; background: var(--su
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href=".">cancho-stats</a>
-  <nav><a class="opt" href="#s1">1</a> <a class="opt" href="#s2">2</a> <a class="opt" href="#s3">3</a> <a class="opt" href="#s4">4</a> <a class="opt" href="#s5">5</a> <a class="opt" href="#s6">6</a> <a class="opt" href="#s7">7</a> <a class="opt" href="#s8">8</a> <a class="opt" href="#s9">9</a> <a class="opt" href="#s10">10</a><a href=".">Overview</a><a href="https://github.com/alpibrusl/cancho-stats">GitHub</a></nav>
+  <nav><a class="opt" href="#s1">1</a> <a class="opt" href="#s2">2</a> <a class="opt" href="#s3">3</a> <a class="opt" href="#s4">4</a> <a class="opt" href="#s5">5</a> <a class="opt" href="#s6">6</a> <a class="opt" href="#s7">7</a> <a class="opt" href="#s8">8</a> <a class="opt" href="#s9">9</a> <a class="opt" href="#s10">10</a> <a class="opt" href="#s11">11</a> <a class="opt" href="#s12">12</a> <a class="opt" href="#s13">13</a> <a class="opt" href="#s14">14</a><a href=".">Overview</a><a href="https://github.com/alpibrusl/cancho-stats">GitHub</a></nav>
 </div></header>
 <div class="wrap hero small">
-  <h1>Ten stories, from a bakery to the lab.</h1>
-  <p class="sub">Marta has bought a second oven and wants to know whether it was a good idea; six stories follow her, each asking a little more of the tool than the last. Then four short ones from the sciences: biology, chemistry, physics and a social survey. Every number and every figure below is drawn from a real run of <code>stats</code> on the data you can download. The data are invented, with effects planted on purpose (B bakes faster and rises higher, three of its batches run long, the crust, weight and salt do not differ, A has more defects); the runs are real, and the narration is checked against the numbers whenever the page is generated.</p>
-  <div class="toc"><a href="#s1">1 &middot; Look</a><a href="#s2">2 &middot; One question</a><a href="#s3">3 &middot; Outliers</a><a href="#s4">4 &middot; Six tests</a><a href="#s5">5 &middot; Exact counts</a><a href="#s6">6 &middot; Same bytes</a><a href="#s7">7 &middot; Mice</a><a href="#s8">8 &middot; Chemistry</a><a href="#s9">9 &middot; Detectors</a><a href="#s10">10 &middot; Survey</a></div>
-  <p class="data">Data (invented, seeded): <a href="stories/bakery.csv">bakery.csv</a> (80 batches), <a href="stories/pilot.csv">pilot.csv</a> (the first four batches of each oven), and for part II <a href="stories/bio.csv">bio.csv</a>, <a href="stories/chem.csv">chem.csv</a>, <a href="stories/detectors.csv">detectors.csv</a>, <a href="stories/clock.csv">clock.csv</a>, <a href="stories/town.csv">town.csv</a>. Rebuild this page: <code>python3 scripts/gen_stories.py</code>.</p>
+  <h1>Fourteen stories, from a bakery to the lab.</h1>
+  <p class="sub">Marta has bought a second oven and wants to know whether it was a good idea; six stories follow her, each asking a little more of the tool than the last. Then four short ones from the sciences: biology, chemistry, physics and a social survey. Last, three from marketing, on its hardest question: what would have happened without the campaign (a randomized holdout, the dashboard that lies, and a geo experiment). Every number and every figure below is drawn from a real run of <code>stats</code> on the data you can download. The data are invented, with effects planted on purpose (B bakes faster and rises higher, three of its batches run long, the crust, weight and salt do not differ, A has more defects); the runs are real, and the narration is checked against the numbers whenever the page is generated.</p>
+  <div class="toc"><a href="#s1">1 &middot; Look</a><a href="#s2">2 &middot; One question</a><a href="#s3">3 &middot; Outliers</a><a href="#s4">4 &middot; Six tests</a><a href="#s5">5 &middot; Exact counts</a><a href="#s6">6 &middot; Same bytes</a><a href="#s7">7 &middot; Mice</a><a href="#s8">8 &middot; Chemistry</a><a href="#s9">9 &middot; Detectors</a><a href="#s10">10 &middot; Survey</a><a href="#s11">11 &middot; Holdout</a><a href="#s12">12 &middot; Dashboard</a><a href="#s13">13 &middot; Geo</a></div>
+  <p class="data">Data (invented, seeded): <a href="stories/bakery.csv">bakery.csv</a> (80 batches), <a href="stories/pilot.csv">pilot.csv</a> (the first four batches of each oven), and for part II <a href="stories/bio.csv">bio.csv</a>, <a href="stories/chem.csv">chem.csv</a>, <a href="stories/detectors.csv">detectors.csv</a>, <a href="stories/clock.csv">clock.csv</a>, <a href="stories/town.csv">town.csv</a>, and for part III <a href="stories/holdout.csv">holdout.csv</a>, <a href="stories/observed.csv">observed.csv</a> (with the quiet and busy halves <a href="stories/observed_quiet.csv">observed_quiet.csv</a>, <a href="stories/observed_busy.csv">observed_busy.csv</a>) and <a href="stories/geo.csv">geo.csv</a>. Rebuild this page: <code>python3 scripts/gen_stories.py</code>.</p>
 </div>
 <section class=" story" id="s1"><div class="wrap"><h2>1 &middot; Before anything else, look</h2><div class="badge"><span class="lvl">start here</span><span>describe</span></div><p class="said">&#8220;I bought a second oven. Is it any good?&#8221; &#8212; Marta, who bakes for a street of cafes</p><p>Marta kept a note of every batch for two months: which oven, how many minutes, how high it rose, how the crust scored, whether a loaf came out defective. Eighty batches, forty per oven. Before she asks anything, she looks at the one number she cares about most, the baking time.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats describe --by oven --cols bake_min --bins 6 bakery.csv</span>
 {
@@ -859,6 +859,244 @@ exit 8
     }
   ]
 }</pre></div><div class="read"><b>Reading it.</b> The districts differ clearly (Kruskal&#8211;Wallis p = 3.85e-05): satisfaction rises from the North to the South, as the bars show. Support for the line shows no sign of depending on education (chi-square p = 0.966). Two different questions, two answers, and each with the test that suits the kind of data.</div></div></section>
+<section class="alt story" id="s12"><div class="wrap"><h2>12 &middot; Did the ads cause the sales?</h2><div class="badge"><span class="lvl">marketing: the randomized holdout</span><span>ci prop --group</span><span>test prop</span><span>ci diff</span><span>resample perm</span></div><p class="said">&#8220;The dashboard says 6.4% of the people we showed the ad to bought. Is that the ad?&#8221; &#8212; the head of growth, who has a budget meeting on Thursday</p><p>The percentage on the dashboard cannot say. Some of those buyers would have bought anyway; what the ad is worth is the <em>extra</em> buyers, and the only way to see people who were never shown the ad is to withhold it from some of them at random. The team did that: 8000 users, alternately assigned (the assignment is the marketer&#8217;s coin, not the user&#8217;s choice) to see the ads or to be held out. A user row is: arm, bought (0 or 1), and revenue (0 for a user who did not buy).</p><p>First the conversion rate in each arm and the difference between them, with the Newcombe interval for a difference of two proportions (the one that stays sensible when the rates are small):</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci prop --cols converted --success 1 --group arm holdout.csv</span>
+{
+  &quot;intervals&quot;: [
+    {
+      &quot;estimate&quot;: 0.014,
+      &quot;interval&quot;: {
+        &quot;method&quot;: &quot;newcombe&quot;,
+        &quot;level&quot;: 0.95,
+        &quot;low&quot;: 0.003838320058398039,
+        &quot;high&quot;: 0.024211853052300038
+      },
+      &quot;levels&quot;: {&quot;a&quot;: &quot;ads&quot;, &quot;b&quot;: &quot;holdout&quot;},
+      &quot;n&quot;: {
+        &quot;a&quot;: {&quot;n&quot;: 4000, &quot;successes&quot;: 256},
+        &quot;b&quot;: {&quot;n&quot;: 4000, &quot;successes&quot;: 200},
+        &quot;missing&quot;: 0
+      }
+    }
+  ]
+}</pre></div><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test prop --cols converted --success 1 --group arm holdout.csv</span>
+{
+  &quot;tests&quot;: [
+    {
+      &quot;statistic&quot;: 2.7005346830182844,
+      &quot;p_value&quot;: 0.006922811852818816,
+      &quot;p_method&quot;: &quot;normal&quot;,
+      &quot;effect_size&quot;: {&quot;name&quot;: &quot;cohen_h&quot;, &quot;value&quot;: 0.06049619189781502, &quot;rounding&quot;: &quot;double&quot;}
+    }
+  ]
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 114" role="img" aria-label="Estimates with their 95% intervals and the line of no effect"><line class="ax" x1="190" y1="74" x2="610" y2="74"/>
+<line class="ax" x1="190" y1="74" x2="190" y2="79"/><text class="tk" x="190" y="93" text-anchor="middle">-1</text>
+<line class="ax" x1="295" y1="74" x2="295" y2="79"/><text class="tk" x="295" y="93" text-anchor="middle">0</text>
+<line class="ax" x1="400" y1="74" x2="400" y2="79"/><text class="tk" x="400" y="93" text-anchor="middle">1</text>
+<line class="ax" x1="505" y1="74" x2="505" y2="79"/><text class="tk" x="505" y="93" text-anchor="middle">2</text>
+<line class="ax" x1="610" y1="74" x2="610" y2="79"/><text class="tk" x="610" y="93" text-anchor="middle">3</text>
+<text class="lb" x="400" y="112" text-anchor="middle">extra buyers per 100 users shown the ad (95% interval)</text>
+<line class="zero" x1="295" y1="30" x2="295" y2="74"/><text class="tk" x="295" y="24" text-anchor="middle">no effect</text>
+<text class="nm" x="182" y="58" text-anchor="end">conversion lift, points</text>
+<line class="ciline" x1="335.302" y1="54" x2="549.224" y2="54"/><circle class="pt" cx="442" cy="54" r="5"/>
+<text class="tk" x="442" y="45" text-anchor="middle">1.40</text></svg></figure><div class="read"><b>Reading it.</b> 256 of 4000 users shown the ad bought, against 200 of 4000 held out: the ad adds 1.40 points (the interval runs from 0.38 to 2.42, and the test gives p = 0.007). The ad works. And the dashboard&#8217;s 6.4% was misleading: 78 of every 100 buyers would have bought anyway, and the incremental share is the 1.40 points.</div><p>Now money. The budget meeting wants revenue, not conversions, and revenue per user is a nasty column: most users spend nothing and a few spend a lot. The difference of the mean revenue per user, with an interval; then the same question answered by shuffling the arm labels 9999 times, which assumes nothing about the shape of the column:</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci diff --cols revenue --group arm holdout.csv</span>
+{
+  &quot;intervals&quot;: [
+    {
+      &quot;estimate&quot;: 0.613385,
+      &quot;interval&quot;: {&quot;low&quot;: -0.00270444107205825, &quot;high&quot;: 1.2294744410720582},
+      &quot;n&quot;: {&quot;a&quot;: 4000, &quot;b&quot;: 4000}
+    }
+  ]
+}</pre></div><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats resample perm --cols revenue --group arm --seed 3 --permutations 9999 \
+    holdout.csv</span>
+{
+  &quot;tests&quot;: [
+    {
+      &quot;statistic&quot;: 0.613385,
+      &quot;p&quot;: 0.0542,
+      &quot;extreme&quot;: 541,
+      &quot;permutations&quot;: 9999,
+      &quot;mc_error&quot;: 0.002264232469263588
+    }
+  ]
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 114" role="img" aria-label="Estimates with their 95% intervals and the line of no effect"><line class="ax" x1="190" y1="74" x2="610" y2="74"/>
+<line class="ax" x1="190" y1="74" x2="190" y2="79"/><text class="tk" x="190" y="93" text-anchor="middle">-0.5</text>
+<line class="ax" x1="295" y1="74" x2="295" y2="79"/><text class="tk" x="295" y="93" text-anchor="middle">0</text>
+<line class="ax" x1="400" y1="74" x2="400" y2="79"/><text class="tk" x="400" y="93" text-anchor="middle">0.5</text>
+<line class="ax" x1="505" y1="74" x2="505" y2="79"/><text class="tk" x="505" y="93" text-anchor="middle">1</text>
+<line class="ax" x1="610" y1="74" x2="610" y2="79"/><text class="tk" x="610" y="93" text-anchor="middle">1.5</text>
+<text class="lb" x="400" y="112" text-anchor="middle">extra revenue per user shown the ad, euros (95% interval)</text>
+<line class="zero" x1="295" y1="30" x2="295" y2="74"/><text class="tk" x="295" y="24" text-anchor="middle">no effect</text>
+<text class="nm" x="182" y="58" text-anchor="end">revenue per user, euros</text>
+<line class="ciline" x1="294.432" y1="54" x2="553.19" y2="54"/><circle class="pt" cx="423.811" cy="54" r="5"/>
+<text class="tk" x="423.811" y="45" text-anchor="middle">0.61</text></svg></figure><div class="read"><b>Reading it.</b> The point estimate is 0.61 euros extra per user: for the 4000 users shown the ad, 2454 euros of incremental revenue, against 1200 euros of media spend at an assumed 0.30 euros a user. That is a return of 2.04 on each euro, if the estimate is right. But the interval for revenue includes zero (its low end is -0.00) and the shuffle test agrees (p = 0.054, give or take 0.002 from the shuffling): at this sample size the lift in <em>money</em> is not distinguished from none, even though the lift in <em>buyers</em> is. The honest sentence for Thursday is &#8220;the ad brings buyers; whether it pays for itself needs more users or a longer test&#8221;. (The arithmetic on the printed numbers is the page&#8217;s, not the tool&#8217;s: the media cost is invented.)</div></div></section>
+<section class=" story" id="s13"><div class="wrap"><h2>13 &middot; The dashboard that was too good to be true</h2><div class="badge"><span class="lvl">marketing: why exposed-versus-not is not a lift</span><span>ci prop --group</span><span>describe --by</span></div><p class="said">&#8220;We did not run a holdout for the autumn campaign, but we know who saw the ad and who did not. Why not just compare them?&#8221; &#8212; a marketer, with a spreadsheet</p><p>The autumn campaign was targeted: the platform shows the ad to users who are active, because active users click. 6000 users, 2177 of them reached. Comparing buyers among the reached with buyers among the rest is the comparison every ad dashboard makes:</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci prop --cols converted --success 1 --group arm observed.csv</span>
+{
+  &quot;intervals&quot;: [
+    {
+      &quot;estimate&quot;: 0.05337973830756977,
+      &quot;interval&quot;: {&quot;low&quot;: 0.0395186436254866, &quot;high&quot;: 0.06805938407963742},
+      &quot;levels&quot;: {&quot;a&quot;: &quot;exposed&quot;, &quot;b&quot;: &quot;none&quot;},
+      &quot;n&quot;: {
+        &quot;a&quot;: {&quot;n&quot;: 2177, &quot;successes&quot;: 217},
+        &quot;b&quot;: {&quot;n&quot;: 3823, &quot;successes&quot;: 177},
+        &quot;missing&quot;: 0
+      }
+    }
+  ]
+}</pre></div><p>A lift of 5.3 points: nearly four times the 1.4 of the holdout, and its whole interval lies above the whole interval of the experiment. One column explains why. How active were the two groups?</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats describe --by arm --cols sessions observed.csv</span>
+{
+  &quot;by&quot;: &quot;arm&quot;,
+  &quot;groups&quot;: [
+    {
+      &quot;value&quot;: &quot;exposed&quot;,
+      &quot;sessions&quot;: {
+        &quot;count&quot;: 2177,
+        &quot;mean&quot;: 5.471290767110703,
+        &quot;sd&quot;: 3.9353960107546264,
+        &quot;quantiles&quot;: [
+          {&quot;p&quot;: &quot;0&quot;, &quot;value&quot;: 1.0},
+          {&quot;p&quot;: &quot;0.25&quot;, &quot;value&quot;: 3.0},
+          {&quot;p&quot;: &quot;0.5&quot;, &quot;value&quot;: 5.0},
+          {&quot;p&quot;: &quot;0.75&quot;, &quot;value&quot;: 7.0},
+          {&quot;p&quot;: &quot;1&quot;, &quot;value&quot;: 29.0}
+        ]
+      }
+    },
+    {
+      &quot;value&quot;: &quot;none&quot;,
+      &quot;sessions&quot;: {
+        &quot;count&quot;: 3823,
+        &quot;mean&quot;: 2.762751765629087,
+        &quot;sd&quot;: 2.2327784941952156,
+        &quot;quantiles&quot;: [
+          {&quot;p&quot;: &quot;0&quot;, &quot;value&quot;: 1.0},
+          {&quot;p&quot;: &quot;0.25&quot;, &quot;value&quot;: 1.0},
+          {&quot;p&quot;: &quot;0.5&quot;, &quot;value&quot;: 2.0},
+          {&quot;p&quot;: &quot;0.75&quot;, &quot;value&quot;: 4.0},
+          {&quot;p&quot;: &quot;1&quot;, &quot;value&quot;: 29.0}
+        ]
+      }
+    }
+  ]
+}</pre></div><div class="read"><b>Reading it.</b> The reached users had a mean of 5.47 sessions and the others 2.76. Busy users are reached more often <em>and</em> buy more often with or without the ad, so the comparison counts their habit as the ad&#8217;s doing. This is selection, and no interval, however narrow, cures it: the interval above only measures how well the biased difference is known.</div><p>What the data can do, with no holdout, is compare like with like: split the users into quiet (3 sessions or fewer) and busy (4 or more), and compare reached with not reached inside each band (here the split files are given; with cancho-table it is a filter):</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci prop --cols converted --success 1 --group arm observed_quiet.csv</span>
+{
+  &quot;intervals&quot;: [
+    {
+      &quot;estimate&quot;: 0.02796505979555166,
+      &quot;interval&quot;: {&quot;low&quot;: 0.011865633604674661, &quot;high&quot;: 0.04737470495433488},
+      &quot;n&quot;: {
+        &quot;a&quot;: {&quot;n&quot;: 822, &quot;successes&quot;: 50},
+        &quot;b&quot;: {&quot;n&quot;: 2830, &quot;successes&quot;: 93},
+        &quot;missing&quot;: 0
+      }
+    }
+  ]
+}</pre></div><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci prop --cols converted --success 1 --group arm observed_busy.csv</span>
+{
+  &quot;intervals&quot;: [
+    {
+      &quot;estimate&quot;: 0.03865508745721898,
+      &quot;interval&quot;: {&quot;low&quot;: 0.01356468119688184, &quot;high&quot;: 0.0630075030245867},
+      &quot;n&quot;: {
+        &quot;a&quot;: {&quot;n&quot;: 1355, &quot;successes&quot;: 167},
+        &quot;b&quot;: {&quot;n&quot;: 993, &quot;successes&quot;: 84},
+        &quot;missing&quot;: 0
+      }
+    }
+  ]
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 216" role="img" aria-label="Estimates with their 95% intervals and the line of no effect"><line class="ax" x1="190" y1="176" x2="610" y2="176"/>
+<line class="ax" x1="225" y1="176" x2="225" y2="181"/><text class="tk" x="225" y="195" text-anchor="middle">-2</text>
+<line class="ax" x1="295" y1="176" x2="295" y2="181"/><text class="tk" x="295" y="195" text-anchor="middle">0</text>
+<line class="ax" x1="365" y1="176" x2="365" y2="181"/><text class="tk" x="365" y="195" text-anchor="middle">2</text>
+<line class="ax" x1="435" y1="176" x2="435" y2="181"/><text class="tk" x="435" y="195" text-anchor="middle">4</text>
+<line class="ax" x1="505" y1="176" x2="505" y2="181"/><text class="tk" x="505" y="195" text-anchor="middle">6</text>
+<line class="ax" x1="575" y1="176" x2="575" y2="181"/><text class="tk" x="575" y="195" text-anchor="middle">8</text>
+<text class="lb" x="400" y="214" text-anchor="middle">difference in conversion, points (95% interval)</text>
+<line class="zero" x1="295" y1="30" x2="295" y2="176"/><text class="tk" x="295" y="24" text-anchor="middle">no effect</text>
+<text class="nm" x="182" y="58" text-anchor="end">everyone, exposed vs not</text>
+<line class="ciline" x1="433.315" y1="54" x2="533.208" y2="54"/><circle class="pt" cx="481.829" cy="54" r="5"/>
+<text class="tk" x="481.829" y="45" text-anchor="middle">5.3</text>
+<text class="nm" x="182" y="92" text-anchor="end">quiet users only</text>
+<line class="ciline" x1="336.53" y1="88" x2="460.811" y2="88"/><circle class="pt" cx="392.878" cy="88" r="5"/>
+<text class="tk" x="392.878" y="79" text-anchor="middle">2.8</text>
+<text class="nm" x="182" y="126" text-anchor="end">busy users only</text>
+<line class="ciline" x1="342.476" y1="122" x2="515.526" y2="122"/><circle class="pt" cx="430.293" cy="122" r="5"/>
+<text class="tk" x="430.293" y="113" text-anchor="middle">3.9</text>
+<text class="nm" x="182" y="160" text-anchor="end">holdout (story 12)</text>
+<line class="ciline" x1="308.434" y1="156" x2="379.741" y2="156"/><circle class="pt" cx="344" cy="156" r="5"/>
+<text class="tk" x="344" y="147" text-anchor="middle">1.4</text></svg></figure><div class="read"><b>Reading it.</b> Inside the bands the lift falls from 5.3 points to 2.8 (quiet users) and 3.9 (busy users). Comparing like with like moved the answer toward the experiment, and both estimates are still above the whole interval of the holdout (0.4 to 2.4): inside a band the busier users are still the ones reached, so some of the bias stays. That is the lesson. Adjustment narrows the gap and does not close it; only the experiment closes it. A campaign worth a large budget deserves a holdout, and a small one (even 5% of the audience) costs far less than being wrong about the return.</div></div></section>
+<section class="alt story" id="s14"><div class="wrap"><h2>14 &middot; Twelve regions and a TV campaign</h2><div class="badge"><span class="lvl">marketing: a geo experiment, difference in differences</span><span>test t2</span><span>resample perm --permutations all</span><span>ci diff</span></div><p class="said">&#8220;We cannot hold out individual viewers of a TV spot. We can hold out whole regions.&#8221; &#8212; a media planner</p><p>Television reaches a region, not a user, so the unit of the experiment is the region. Twelve sales regions; six were drawn at random to get the campaign for a month. Comparing the TV regions with the others <em>after</em> the month would mix the campaign with the fact that some regions are simply bigger. What does not depend on size is the <em>change</em> in each region: sales after minus sales before, in thousands of euros a week. Comparing changes between the two groups is the difference in differences, and here it is one column, <code>change_keur</code>, compared between two groups of six.</p><figure class="fig"><svg viewBox="0 0 640 250" role="img" aria-label="Weekly sales of twelve regions before and after the campaign month"><line class="ax" x1="200" y1="24" x2="200" y2="214"/><line class="ax" x1="480" y1="24" x2="480" y2="214"/>
+<text class="tk" x="192" y="206.824" text-anchor="end">90</text>
+<text class="tk" x="192" y="162.118" text-anchor="end">110</text>
+<text class="tk" x="192" y="117.412" text-anchor="end">130</text>
+<text class="tk" x="192" y="72.7059" text-anchor="end">150</text>
+<text class="tk" x="192" y="28" text-anchor="end">170</text>
+<line class="wh pb" x1="200" y1="133.753" x2="480" y2="109.165"/>
+<line class="wh pa" x1="200" y1="142.918" x2="480" y2="137.776"/>
+<line class="wh pa" x1="200" y1="137.776" x2="480" y2="123.247"/>
+<line class="wh pa" x1="200" y1="92.8471" x2="480" y2="92.6235"/>
+<line class="wh pb" x1="200" y1="128.835" x2="480" y2="114.082"/>
+<line class="wh pa" x1="200" y1="100" x2="480" y2="93.2941"/>
+<line class="wh pb" x1="200" y1="131.518" x2="480" y2="105.588"/>
+<line class="wh pb" x1="200" y1="147.612" x2="480" y2="127.494"/>
+<line class="wh pa" x1="200" y1="164.824" x2="480" y2="157"/>
+<line class="wh pa" x1="200" y1="205.953" x2="480" y2="201.929"/>
+<line class="wh pb" x1="200" y1="156.553" x2="480" y2="142.694"/>
+<line class="wh pb" x1="200" y1="64.0118" x2="480" y2="60.4353"/>
+<text class="lb" x="200" y="238" text-anchor="middle">month before</text><text class="lb" x="480" y="238" text-anchor="middle">month after</text>
+<text class="nm" x="500" y="40" fill="currentColor"><tspan class="tk">green: TV campaign</tspan></text><text class="tk" x="500" y="58">blue: no campaign</text>
+<text class="tk" x="90" y="120" text-anchor="middle" transform="rotate(-90 90 120)">weekly sales, k euros</text></svg></figure><p>Six against six is a small sample, so two answers are given, the t test and the exact one: the permutation test with <code>--permutations all</code> lists every one of the 924 ways to choose which six regions got the campaign, and counts those at least as extreme as the one drawn.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test t2 --cols change_keur --group arm geo.csv</span>
+{
+  &quot;tests&quot;: [
+    {
+      &quot;statistic&quot;: -2.753190070387241,
+      &quot;df&quot;: 7.991107357971631,
+      &quot;p_value&quot;: 0.024961960198669832,
+      &quot;interval&quot;: {
+        &quot;of&quot;: &quot;difference of means&quot;,
+        &quot;level&quot;: 0.95,
+        &quot;estimate&quot;: -4.8,
+        &quot;low&quot;: -8.821140557497344,
+        &quot;high&quot;: -0.7788594425026565,
+        &quot;rounding&quot;: &quot;double&quot;
+      },
+      &quot;n&quot;: {&quot;a&quot;: 6, &quot;b&quot;: 6}
+    }
+  ]
+}</pre></div><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats resample perm --cols change_keur --group arm --permutations all geo.csv</span>
+{
+  &quot;p_method&quot;: &quot;exact&quot;,
+  &quot;tests&quot;: [
+    {
+      &quot;statistic&quot;: -4.8,
+      &quot;p&quot;: 0.032467532467532464,
+      &quot;extreme&quot;: 30,
+      &quot;permutations&quot;: 924,
+      &quot;n&quot;: {&quot;a&quot;: 6, &quot;b&quot;: 6, &quot;missing&quot;: 0}
+    }
+  ]
+}</pre></div><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci diff --cols change_keur --group arm geo.csv</span>
+{
+  &quot;intervals&quot;: [
+    {
+      &quot;estimate&quot;: -4.8,
+      &quot;interval&quot;: {&quot;low&quot;: -8.821140557497344, &quot;high&quot;: -0.7788594425026565},
+      &quot;n&quot;: {&quot;a&quot;: 6, &quot;b&quot;: 6}
+    }
+  ]
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 114" role="img" aria-label="Estimates with their 95% intervals and the line of no effect"><line class="ax" x1="190" y1="74" x2="610" y2="74"/>
+<line class="ax" x1="228.182" y1="74" x2="228.182" y2="79"/><text class="tk" x="228.182" y="93" text-anchor="middle">0</text>
+<line class="ax" x1="304.545" y1="74" x2="304.545" y2="79"/><text class="tk" x="304.545" y="93" text-anchor="middle">2</text>
+<line class="ax" x1="380.909" y1="74" x2="380.909" y2="79"/><text class="tk" x="380.909" y="93" text-anchor="middle">4</text>
+<line class="ax" x1="457.273" y1="74" x2="457.273" y2="79"/><text class="tk" x="457.273" y="93" text-anchor="middle">6</text>
+<line class="ax" x1="533.636" y1="74" x2="533.636" y2="79"/><text class="tk" x="533.636" y="93" text-anchor="middle">8</text>
+<line class="ax" x1="610" y1="74" x2="610" y2="79"/><text class="tk" x="610" y="93" text-anchor="middle">10</text>
+<text class="lb" x="400" y="112" text-anchor="middle">extra weekly sales in a TV region, thousands of euros (95% interval)</text>
+<line class="zero" x1="228.182" y1="30" x2="228.182" y2="74"/><text class="tk" x="228.182" y="24" text-anchor="middle">no effect</text>
+<text class="nm" x="182" y="58" text-anchor="end">TV effect, k euros</text>
+<line class="ciline" x1="257.92" y1="54" x2="564.989" y2="54"/><circle class="pt" cx="411.455" cy="54" r="5"/>
+<text class="tk" x="411.455" y="45" text-anchor="middle">4.8</text></svg></figure><div class="read"><b>Reading it.</b> The TV regions grew 4.8 thousand euros a week more than the others (the tool prints the difference as none minus tv, hence the sign). The exact test says 30 of the 924 arrangements are at least this extreme: p = 0.032, the t test p = 0.025. The interval runs from 0.8 to 8.8 thousand euros a week: the campaign probably worked, and could have worked a lot or barely. With six regions a side a planner should say exactly that, and the exact count is the safer of the two p-values to quote.</div></div></section>
 <footer><div class="wrap">cancho-stats &middot; EUPL-1.2 &middot; the data are invented; the runs, the digits and the figures are real &middot; <a href=".">overview</a></div></footer>
 </body>
 </html>

@@ -18,6 +18,7 @@ import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+import stories_marketing  # noqa: E402
 from storylib import W, STORY_CSS, claim, pretty, num, esc, axis, svg, wrap_cmd, term, story, fig_hashes  # noqa: E402
 DOCS = ROOT / "docs"
 
@@ -583,21 +584,22 @@ def build(binary):
              term(shown(s2, "town.csv"), pretty({"levels": ds2["levels"], "tests": [{k: ts2[k] for k in ("statistic", "df", "p_value", "effect_size", "n", "mean_rank", "ties")}]})),
              term(shown(s3, "town.csv"), pretty({"tests": [{k: ts3[k] for k in ("statistic", "df", "p_value", "effect_size", "n", "assumptions")}]})),
              '<div class="read"><b>Reading it.</b> The districts differ clearly (Kruskal&#8211;Wallis p = %s): satisfaction rises from the North to the South, as the bars show. Support for the line shows no sign of depending on education (chi-square p = %s). Two different questions, two answers, and each with the test that suits the kind of data.</div>' % (num(ts2["p_value"], 3), num(ts3["p_value"], 3))]))
+        sections.extend(stories_marketing.stories(R, folder, files))
     return sections, files
 
 
 def page(sections):
     index = (DOCS / "index.html").read_text()
     style = re.search(r"<style>(.*?)</style>", index, re.S).group(1)
-    nav = ' '.join('<a class="opt" href="#s%d">%d</a>' % (i, i) for i in range(1, 11))
-    toc = "".join('<a href="#s%d">%d &middot; %s</a>' % (i, i, esc(tt)) for i, tt in enumerate(("Look", "One question", "Outliers", "Six tests", "Exact counts", "Same bytes", "Mice", "Chemistry", "Detectors", "Survey"), 1))
+    nav = ' '.join('<a class="opt" href="#s%d">%d</a>' % (i, i) for i in range(1, 15))
+    toc = "".join('<a href="#s%d">%d &middot; %s</a>' % (i, i, esc(tt)) for i, tt in enumerate(("Look", "One question", "Outliers", "Six tests", "Exact counts", "Same bytes", "Mice", "Chemistry", "Detectors", "Survey", "Holdout", "Dashboard", "Geo"), 1))
     return """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>cancho-stats: ten stories, from a bakery to the lab</title>
-<meta name="description" content="Ten end-to-end examples of cancho-stats, in increasing complexity: a bakery, then biology, chemistry, physics and a social survey. Every number and every figure is drawn from a real run.">
+<title>cancho-stats: fourteen stories, from a bakery to the lab</title>
+<meta name="description" content="Fourteen end-to-end examples of cancho-stats, in increasing complexity: a bakery, then biology, chemistry, physics, a social survey and marketing incrementality. Every number and every figure is drawn from a real run.">
 <meta name="color-scheme" content="light dark">
 <style>%s%s</style>
 </head>
@@ -607,10 +609,10 @@ def page(sections):
   <nav>%s<a href=".">Overview</a><a href="https://github.com/alpibrusl/cancho-stats">GitHub</a></nav>
 </div></header>
 <div class="wrap hero small">
-  <h1>Ten stories, from a bakery to the lab.</h1>
-  <p class="sub">Marta has bought a second oven and wants to know whether it was a good idea; six stories follow her, each asking a little more of the tool than the last. Then four short ones from the sciences: biology, chemistry, physics and a social survey. Every number and every figure below is drawn from a real run of <code>stats</code> on the data you can download. The data are invented, with effects planted on purpose (B bakes faster and rises higher, three of its batches run long, the crust, weight and salt do not differ, A has more defects); the runs are real, and the narration is checked against the numbers whenever the page is generated.</p>
+  <h1>Fourteen stories, from a bakery to the lab.</h1>
+  <p class="sub">Marta has bought a second oven and wants to know whether it was a good idea; six stories follow her, each asking a little more of the tool than the last. Then four short ones from the sciences: biology, chemistry, physics and a social survey. Last, three from marketing, on its hardest question: what would have happened without the campaign (a randomized holdout, the dashboard that lies, and a geo experiment). Every number and every figure below is drawn from a real run of <code>stats</code> on the data you can download. The data are invented, with effects planted on purpose (B bakes faster and rises higher, three of its batches run long, the crust, weight and salt do not differ, A has more defects); the runs are real, and the narration is checked against the numbers whenever the page is generated.</p>
   <div class="toc">%s</div>
-  <p class="data">Data (invented, seeded): <a href="stories/bakery.csv">bakery.csv</a> (80 batches), <a href="stories/pilot.csv">pilot.csv</a> (the first four batches of each oven), and for part II <a href="stories/bio.csv">bio.csv</a>, <a href="stories/chem.csv">chem.csv</a>, <a href="stories/detectors.csv">detectors.csv</a>, <a href="stories/clock.csv">clock.csv</a>, <a href="stories/town.csv">town.csv</a>. Rebuild this page: <code>python3 scripts/gen_stories.py</code>.</p>
+  <p class="data">Data (invented, seeded): <a href="stories/bakery.csv">bakery.csv</a> (80 batches), <a href="stories/pilot.csv">pilot.csv</a> (the first four batches of each oven), and for part II <a href="stories/bio.csv">bio.csv</a>, <a href="stories/chem.csv">chem.csv</a>, <a href="stories/detectors.csv">detectors.csv</a>, <a href="stories/clock.csv">clock.csv</a>, <a href="stories/town.csv">town.csv</a>, and for part III <a href="stories/holdout.csv">holdout.csv</a>, <a href="stories/observed.csv">observed.csv</a> (with the quiet and busy halves <a href="stories/observed_quiet.csv">observed_quiet.csv</a>, <a href="stories/observed_busy.csv">observed_busy.csv</a>) and <a href="stories/geo.csv">geo.csv</a>. Rebuild this page: <code>python3 scripts/gen_stories.py</code>.</p>
 </div>
 %s
 <footer><div class="wrap">cancho-stats &middot; EUPL-1.2 &middot; the data are invented; the runs, the digits and the figures are real &middot; <a href=".">overview</a></div></footer>
