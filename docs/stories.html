@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>cancho-stats: six stories, one bakery</title>
-<meta name="description" content="Six end-to-end examples of cancho-stats, in increasing complexity, told as one story about a bakery: every number and every figure is drawn from a real run.">
+<title>cancho-stats: ten stories, from a bakery to the lab</title>
+<meta name="description" content="Ten end-to-end examples of cancho-stats, in increasing complexity: a bakery, then biology, chemistry, physics and a social survey. Every number and every figure is drawn from a real run.">
 <meta name="color-scheme" content="light dark">
 <style>
 :root {
@@ -108,6 +108,13 @@ figure.fig svg { width: 100%; height: auto; display: block; background: var(--su
 .fig .seg { fill: var(--good); } .fig .seg.bad { fill: var(--bad); }
 .fig .hash { fill: var(--soft); stroke: var(--good); stroke-width: 1.5; }
 .fig .hx { fill: var(--fg); font: 12px var(--mono); }
+.fig .bandci { fill: var(--accent); opacity: .18; }
+.fig .ecdfa { fill: none; stroke: var(--accent); stroke-width: 2.5; } .fig .ecdfb { fill: none; stroke: var(--good); stroke-width: 2.5; }
+.fig .gap { stroke: var(--bad); stroke-width: 3; }
+.fig .lk1 { fill: #b42d27; } .fig .lk2 { fill: #d97a52; } .fig .lk3 { fill: #c9c9c9; } .fig .lk4 { fill: #5a9bd4; } .fig .lk5 { fill: #1f5fa6; }
+.fig .lk { fill: #fff; font: 600 12px var(--font); }
+.part { padding: 2.5rem 0 .5rem; text-align: center; border-top: 1px solid var(--line); }
+.part h2 { text-align: center; }
 .toc { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: center; margin-top: 1.2rem; }
 .toc a { text-decoration: none; border: 1px solid var(--line); border-radius: 99px; padding: .25rem .9rem; background: var(--surface); font-size: .9rem; }
 .data { color: var(--muted); font-size: .9rem; text-align: center; margin-top: 1rem; }
@@ -116,13 +123,13 @@ figure.fig svg { width: 100%; height: auto; display: block; background: var(--su
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href=".">cancho-stats</a>
-  <nav><a class="opt" href="#s1">1</a> <a class="opt" href="#s2">2</a> <a class="opt" href="#s3">3</a> <a class="opt" href="#s4">4</a> <a class="opt" href="#s5">5</a> <a class="opt" href="#s6">6</a><a href=".">Overview</a><a href="https://github.com/alpibrusl/cancho-stats">GitHub</a></nav>
+  <nav><a class="opt" href="#s1">1</a> <a class="opt" href="#s2">2</a> <a class="opt" href="#s3">3</a> <a class="opt" href="#s4">4</a> <a class="opt" href="#s5">5</a> <a class="opt" href="#s6">6</a> <a class="opt" href="#s7">7</a> <a class="opt" href="#s8">8</a> <a class="opt" href="#s9">9</a> <a class="opt" href="#s10">10</a><a href=".">Overview</a><a href="https://github.com/alpibrusl/cancho-stats">GitHub</a></nav>
 </div></header>
 <div class="wrap hero small">
-  <h1>Six stories, one bakery.</h1>
-  <p class="sub">Marta has bought a second oven and wants to know whether it was a good idea. Each story asks a little more of the tool than the last. Every number and every figure below is drawn from a real run of <code>stats</code> on the data you can download. The data are invented, with effects planted on purpose (B bakes faster and rises higher, three of its batches run long, the crust, weight and salt do not differ, A has more defects); the runs are real, and the narration is checked against the numbers whenever the page is generated.</p>
-  <div class="toc"><a href="#s1">1 &middot; Look</a><a href="#s2">2 &middot; One question</a><a href="#s3">3 &middot; Outliers</a><a href="#s4">4 &middot; Six tests</a><a href="#s5">5 &middot; Exact counts</a><a href="#s6">6 &middot; Same bytes</a></div>
-  <p class="data">Data (invented, seeded): <a href="stories/bakery.csv">bakery.csv</a> (80 batches), <a href="stories/pilot.csv">pilot.csv</a> (the first four batches of each oven). Rebuild this page: <code>python3 scripts/gen_stories.py</code>.</p>
+  <h1>Ten stories, from a bakery to the lab.</h1>
+  <p class="sub">Marta has bought a second oven and wants to know whether it was a good idea; six stories follow her, each asking a little more of the tool than the last. Then four short ones from the sciences: biology, chemistry, physics and a social survey. Every number and every figure below is drawn from a real run of <code>stats</code> on the data you can download. The data are invented, with effects planted on purpose (B bakes faster and rises higher, three of its batches run long, the crust, weight and salt do not differ, A has more defects); the runs are real, and the narration is checked against the numbers whenever the page is generated.</p>
+  <div class="toc"><a href="#s1">1 &middot; Look</a><a href="#s2">2 &middot; One question</a><a href="#s3">3 &middot; Outliers</a><a href="#s4">4 &middot; Six tests</a><a href="#s5">5 &middot; Exact counts</a><a href="#s6">6 &middot; Same bytes</a><a href="#s7">7 &middot; Mice</a><a href="#s8">8 &middot; Chemistry</a><a href="#s9">9 &middot; Detectors</a><a href="#s10">10 &middot; Survey</a></div>
+  <p class="data">Data (invented, seeded): <a href="stories/bakery.csv">bakery.csv</a> (80 batches), <a href="stories/pilot.csv">pilot.csv</a> (the first four batches of each oven), and for part II <a href="stories/bio.csv">bio.csv</a>, <a href="stories/chem.csv">chem.csv</a>, <a href="stories/detectors.csv">detectors.csv</a>, <a href="stories/clock.csv">clock.csv</a>, <a href="stories/town.csv">town.csv</a>. Rebuild this page: <code>python3 scripts/gen_stories.py</code>.</p>
 </div>
 <section class=" story" id="s1"><div class="wrap"><h2>1 &middot; Before anything else, look</h2><div class="badge"><span class="lvl">start here</span><span>describe</span></div><p class="said">&#8220;I bought a second oven. Is it any good?&#8221; &#8212; Marta, who bakes for a street of cafes</p><p>Marta kept a note of every batch for two months: which oven, how many minutes, how high it rose, how the crust scored, whether a loaf came out defective. Eighty batches, forty per oven. Before she asks anything, she looks at the one number she cares about most, the baking time.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats describe --by oven --cols bake_min --bins 6 bakery.csv</span>
 {
@@ -343,25 +350,25 @@ figure.fig svg { width: 100%; height: auto; display: block; background: var(--su
       &quot;mc_error&quot;: 0.0025566471489950364
     }
   ]
-}</pre></div><figure class="fig"><svg viewBox="0 0 640 228" role="img" aria-label="The p-values of the tests on a logarithmic axis against the line at 0.05"><line class="ax" x1="210" y1="176" x2="600" y2="176"/>
-<line class="ax" x1="245.565" y1="176" x2="245.565" y2="181"/><text class="tk" x="245.565" y="195" text-anchor="middle">0.001</text>
-<line class="ax" x1="363.71" y1="176" x2="363.71" y2="181"/><text class="tk" x="363.71" y="195" text-anchor="middle">0.01</text>
-<line class="ax" x1="481.855" y1="176" x2="481.855" y2="181"/><text class="tk" x="481.855" y="195" text-anchor="middle">0.1</text>
-<line class="ax" x1="600" y1="176" x2="600" y2="181"/><text class="tk" x="600" y="195" text-anchor="middle">1</text>
-<text class="lb" x="405" y="214" text-anchor="middle">p-value (log scale)</text>
-<line class="zero" x1="446.29" y1="22" x2="446.29" y2="176"/><text class="tk" x="446.29" y="16" text-anchor="middle">0.05</text>
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 228" role="img" aria-label="The p-values of the tests on a logarithmic axis against the line at 0.05"><line class="ax" x1="210" y1="176" x2="520" y2="176"/>
+<line class="ax" x1="238.27" y1="176" x2="238.27" y2="181"/><text class="tk" x="238.27" y="195" text-anchor="middle">0.001</text>
+<line class="ax" x1="332.18" y1="176" x2="332.18" y2="181"/><text class="tk" x="332.18" y="195" text-anchor="middle">0.01</text>
+<line class="ax" x1="426.09" y1="176" x2="426.09" y2="181"/><text class="tk" x="426.09" y="195" text-anchor="middle">0.1</text>
+<line class="ax" x1="520" y1="176" x2="520" y2="181"/><text class="tk" x="520" y="195" text-anchor="middle">1</text>
+<text class="lb" x="365" y="214" text-anchor="middle">p-value (log scale)</text>
+<line class="zero" x1="397.82" y1="22" x2="397.82" y2="176"/><text class="tk" x="397.82" y="16" text-anchor="middle">0.05</text>
 <text class="nm" x="200" y="45" text-anchor="end">Welch t test</text>
-<rect class="pbar pa" x="210" y="32" width="398.566" height="16" rx="3"/>
-<text class="tk" x="614.566" y="45">0.0725</text>
+<rect class="pbar pa" x="210" y="32" width="316.809" height="16" rx="3"/>
+<text class="tk" x="532.809" y="45">0.0725</text>
 <text class="nm" x="200" y="79" text-anchor="end">pooled t test</text>
-<rect class="pbar pa" x="210" y="66" width="398.536" height="16" rx="3"/>
-<text class="tk" x="614.536" y="79">0.0723</text>
+<rect class="pbar pa" x="210" y="66" width="316.785" height="16" rx="3"/>
+<text class="tk" x="532.785" y="79">0.0723</text>
 <text class="nm" x="200" y="113" text-anchor="end">permutation, means</text>
-<rect class="pbar warn" x="210" y="100" width="398.306" height="16" rx="3"/>
-<text class="tk" x="614.306" y="113">0.0703</text>
+<rect class="pbar warn" x="210" y="100" width="316.602" height="16" rx="3"/>
+<text class="tk" x="532.602" y="113">0.0703</text>
 <text class="nm" x="200" y="147" text-anchor="end">Mann–Whitney</text>
-<rect class="pbar pb" x="210" y="134" width="390.376" height="16" rx="3"/>
-<text class="tk" x="606.376" y="147">0.0032</text></svg></figure><div class="read"><b>Reading it.</b> The tests that use the <em>mean</em> (both t tests, and the permutation test of the mean difference) all say &#8220;not shown&#8221;, because three long batches inflate B&#8217;s mean and its spread. The rank test, which looks at the bulk of the batches, says p = 0.00318. Neither is &#8220;the right one&#8221;: they answer different questions, and the answer says which one it answered. The permutation test's count is exact (702 of 9999 shuffles were as extreme; the Monte Carlo error is printed, 0.0026), and every one of those numbers can be reproduced by an independent program from the seed. What Marta now knows: <em>the typical batch of B is faster; the average is dragged by three exceptions she can investigate.</em></div></div></section>
+<rect class="pbar pb" x="210" y="134" width="310.299" height="16" rx="3"/>
+<text class="tk" x="526.299" y="147">0.0032</text></svg></figure><div class="read"><b>Reading it.</b> The tests that use the <em>mean</em> (both t tests, and the permutation test of the mean difference) all say &#8220;not shown&#8221;, because three long batches inflate B&#8217;s mean and its spread. The rank test, which looks at the bulk of the batches, says p = 0.00318. Neither is &#8220;the right one&#8221;: they answer different questions, and the answer says which one it answered. The permutation test's count is exact (702 of 9999 shuffles were as extreme; the Monte Carlo error is printed, 0.0026), and every one of those numbers can be reproduced by an independent program from the seed. What Marta now knows: <em>the typical batch of B is faster; the average is dragged by three exceptions she can investigate.</em></div></div></section>
 <section class="alt story" id="s4"><div class="wrap"><h2>4 &middot; Six questions at once</h2><div class="badge"><span class="lvl">many tests, one decision</span><span>test t2</span><span>--correct holm</span></div><p class="said">&#8220;While I am at it: height, crust, weight, moisture, salt. Did the new oven change any of them?&#8221;</p><p>Ask six questions at the 5% level and the chance that at least one comes out &#8220;significant&#8221; by luck alone is about one in four. The honest way to run a family of tests is to say so up front. <code>--correct holm</code> declares the six tests a family and prints each p-value both as computed and after Holm&#8217;s step-down correction; the tool refuses a family larger than <code>--max-tests</code>, so a fishing trip has to be declared.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test t2 --cols bake_min,height_cm,crust,weight_g,moisture_pct,salt_pct --group \
     oven --correct holm bakery.csv</span>
 {
@@ -529,6 +536,329 @@ exit 8
 <text class="nm" x="205" y="135" text-anchor="end">as recorded  perm</text><rect class="hash" x="215" y="120" width="395" height="22" rx="4"/><text class="hx" x="225" y="135">798dbdb8452ceac972836d79647957f8575982009a4509d6</text>
 <text class="nm" x="205" y="169" text-anchor="end">rows shuffled  perm</text><rect class="hash" x="215" y="154" width="395" height="22" rx="4"/><text class="hx" x="225" y="169">798dbdb8452ceac972836d79647957f8575982009a4509d6</text>
 <text class="nm" x="205" y="203" text-anchor="end">rows reversed  perm</text><rect class="hash" x="215" y="188" width="395" height="22" rx="4"/><text class="hx" x="225" y="203">798dbdb8452ceac972836d79647957f8575982009a4509d6</text></svg></figure><div class="read"><b>Reading it.</b> All three digests of each question are identical. Across platforms it is the same: the project&#8217;s CI runs these answers on Linux x86-64, Linux arm64 and macOS arm64 and compares their hashes to the file <code>docs/xplat_fp.txt</code>. (One thing that <em>does</em> depend on row order, by design: a bootstrap resamples row positions, so <code>ci boot</code> is a function of the file&#8217;s bytes and the seed. The answer says so.)</div></div></section>
+<section class="part" id="lab"><div class="wrap"><h2>Part II &middot; In the lab and in the field</h2><p class="lead">The same tool on four small datasets from the sciences: a gene in mice, a chemistry method comparison, two particle detectors, a town survey. The data are invented; the runs are real; each story is built around a different habit of the field.</p></div></section>
+<section class=" story" id="s7"><div class="wrap"><h2>7 &middot; Six mice against six</h2><div class="badge"><span class="lvl">biology: small samples, exact answers</span><span>test t2</span><span>test mannwhitney</span><span>resample perm --permutations all</span></div><p class="said">&#8220;Six wild-type and six knockout mice, one liver sample each. The knockout looks higher. One animal is very high. Is the gene doing something?&#8221; &#8212; a postdoc, late on a Friday</p><p>Twelve animals is a small sample, and an assumption that the data are bell-shaped cannot be checked on twelve points. Three questions, from the most assumption-laden to the least: Welch&#8217;s t test (needs the means to be roughly normal), the Mann&#8211;Whitney test (ranks only; with no ties and so few animals the tool computes the <em>exact</em> p-value, <code>p_method: exact</code>, not the normal approximation), and a permutation test of the means over all 924 ways to hand six of the twelve animals to the knockout group.</p><figure class="fig"><svg viewBox="0 0 640 200" role="img" aria-label="Every animal as a dot, by genotype"><line class="ax" x1="120" y1="160" x2="610" y2="160"/>
+<line class="ax" x1="160.833" y1="160" x2="160.833" y2="165"/><text class="tk" x="160.833" y="179" text-anchor="middle">7</text>
+<line class="ax" x1="242.5" y1="160" x2="242.5" y2="165"/><text class="tk" x="242.5" y="179" text-anchor="middle">8</text>
+<line class="ax" x1="324.167" y1="160" x2="324.167" y2="165"/><text class="tk" x="324.167" y="179" text-anchor="middle">9</text>
+<line class="ax" x1="405.833" y1="160" x2="405.833" y2="165"/><text class="tk" x="405.833" y="179" text-anchor="middle">10</text>
+<line class="ax" x1="487.5" y1="160" x2="487.5" y2="165"/><text class="tk" x="487.5" y="179" text-anchor="middle">11</text>
+<line class="ax" x1="569.167" y1="160" x2="569.167" y2="165"/><text class="tk" x="569.167" y="179" text-anchor="middle">12</text>
+<text class="lb" x="365" y="198" text-anchor="middle">log2 expression of the gene</text>
+<text class="nm" x="112" y="45" text-anchor="end">wild-type</text><line class="band" x1="120" y1="40" x2="610" y2="40"/>
+<circle class="dot pa" cx="225.35" cy="34" r="5"/>
+<circle class="dot pa" cx="244.133" cy="46" r="5"/>
+<circle class="dot pa" cx="255.567" cy="43" r="5"/>
+<circle class="dot pa" cx="258.017" cy="40" r="5"/>
+<circle class="dot pa" cx="259.65" cy="37" r="5"/>
+<circle class="dot pa" cx="276.8" cy="34" r="5"/>
+<text class="nm" x="112" y="105" text-anchor="end">knockout</text><line class="band" x1="120" y1="100" x2="610" y2="100"/>
+<circle class="dot pb" cx="258.833" cy="94" r="5"/>
+<circle class="dot pb" cx="266.183" cy="106" r="5"/>
+<circle class="dot pb" cx="272.717" cy="103" r="5"/>
+<circle class="dot pb" cx="329.067" cy="100" r="5"/>
+<circle class="dot pb" cx="439.317" cy="97" r="5"/>
+<circle class="dot pb" cx="457.283" cy="94" r="5"/></svg></figure><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test mannwhitney --cols expression --group genotype bio.csv</span>
+{
+  &quot;tests&quot;: [
+    {
+      &quot;statistic&quot;: 32.0,
+      &quot;p_value&quot;: 0.025974025974025976,
+      &quot;p_method&quot;: &quot;exact&quot;,
+      &quot;effect_size&quot;: {&quot;name&quot;: &quot;rank_biserial&quot;, &quot;value&quot;: 0.7777777777777778},
+      &quot;n&quot;: {&quot;a&quot;: 6, &quot;b&quot;: 6}
+    }
+  ]
+}</pre></div><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats resample perm --cols expression --group genotype --permutations all bio.csv</span>
+{
+  &quot;p_method&quot;: &quot;exact&quot;,
+  &quot;tests&quot;: [
+    {
+      &quot;statistic&quot;: 1.028333333333333,
+      &quot;p&quot;: 0.023809523809523808,
+      &quot;extreme&quot;: 22,
+      &quot;permutations&quot;: 924,
+      &quot;n&quot;: {&quot;a&quot;: 6, &quot;b&quot;: 6, &quot;missing&quot;: 0}
+    }
+  ]
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 194" role="img" aria-label="The p-values of the tests on a logarithmic axis against the line at 0.05"><line class="ax" x1="210" y1="142" x2="520" y2="142"/>
+<line class="ax" x1="238.27" y1="142" x2="238.27" y2="147"/><text class="tk" x="238.27" y="161" text-anchor="middle">0.001</text>
+<line class="ax" x1="332.18" y1="142" x2="332.18" y2="147"/><text class="tk" x="332.18" y="161" text-anchor="middle">0.01</text>
+<line class="ax" x1="426.09" y1="142" x2="426.09" y2="147"/><text class="tk" x="426.09" y="161" text-anchor="middle">0.1</text>
+<line class="ax" x1="520" y1="142" x2="520" y2="147"/><text class="tk" x="520" y="161" text-anchor="middle">1</text>
+<text class="lb" x="365" y="180" text-anchor="middle">p-value (log scale)</text>
+<line class="zero" x1="397.82" y1="22" x2="397.82" y2="142"/><text class="tk" x="397.82" y="16" text-anchor="middle">0.05</text>
+<text class="nm" x="200" y="45" text-anchor="end">Welch t test</text>
+<rect class="pbar pa" x="210" y="32" width="316.621" height="16" rx="3"/>
+<text class="tk" x="532.621" y="45">0.0705</text>
+<text class="nm" x="200" y="79" text-anchor="end">Mann–Whitney, exact</text>
+<rect class="pbar pb" x="210" y="66" width="312.439" height="16" rx="3"/>
+<text class="tk" x="528.439" y="79">0.0260</text>
+<text class="nm" x="200" y="113" text-anchor="end">permutation, exact</text>
+<rect class="pbar pb" x="210" y="100" width="312.236" height="16" rx="3"/>
+<text class="tk" x="528.236" y="113">0.0238</text></svg></figure><div class="read"><b>Reading it.</b> Welch&#8217;s p is 0.0705: the one very high knockout animal inflates the knockout&#8217;s variance, and the test is cautious. The exact rank test gives p = 0.026 and the exact permutation test p = 0.0238 (22 of 924 arrangements as extreme). None of these is a Monte Carlo estimate: there is no seed because nothing was drawn. In a small experiment the honest sentence is the one with the method in it: <em>by an exact permutation test, p = 0.0238</em>.</div></div></section>
+<section class="alt story" id="s8"><div class="wrap"><h2>8 &middot; Two methods, one sample set</h2><div class="badge"><span class="lvl">chemistry: correlation is not agreement</span><span>test paired</span><span>ci corr</span></div><p class="said">&#8220;The UV method is ten times cheaper and it correlates almost perfectly with the HPLC. Can we switch?&#8221; &#8212; the lab manager</p><p>Twelve caffeine samples were measured by both methods. A correlation coefficient asks whether the two move together; it says nothing about whether they give the <em>same number</em>. The tool answers both questions on the same file: <code>ci corr</code> with a Fisher-z interval for the correlation, and a paired test of the differences, whose mean is the bias between the methods.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci corr --cols hplc,uv chem.csv</span>
+{
+  &quot;intervals&quot;: [
+    {
+      &quot;x&quot;: &quot;hplc&quot;,
+      &quot;y&quot;: &quot;uv&quot;,
+      &quot;n&quot;: 12,
+      &quot;estimate&quot;: 0.9993345182683051,
+      &quot;interval&quot;: {
+        &quot;of&quot;: &quot;correlation&quot;,
+        &quot;method&quot;: &quot;fisher-z&quot;,
+        &quot;level&quot;: 0.95,
+        &quot;estimate&quot;: 0.9993345182683051,
+        &quot;low&quot;: 0.9975440770330842,
+        &quot;high&quot;: 0.9998197920937946,
+        &quot;rounding&quot;: &quot;double&quot;
+      }
+    }
+  ]
+}</pre></div><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test paired --pairs hplc:uv chem.csv</span>
+{
+  &quot;tests&quot;: [
+    {
+      &quot;pair&quot;: [&quot;hplc&quot;, &quot;uv&quot;],
+      &quot;statistic&quot;: -2.568943422391961,
+      &quot;df&quot;: 11,
+      &quot;p_value&quot;: 0.026099475525154844,
+      &quot;interval&quot;: {
+        &quot;of&quot;: &quot;difference of means&quot;,
+        &quot;level&quot;: 0.95,
+        &quot;estimate&quot;: -0.7108333333333334,
+        &quot;low&quot;: -1.3198516574926078,
+        &quot;high&quot;: -0.10181500917405917,
+        &quot;rounding&quot;: &quot;double&quot;
+      },
+      &quot;n&quot;: {&quot;n&quot;: 12, &quot;missing&quot;: 0}
+    }
+  ]
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 358" role="img" aria-label="Left: the two methods against each other. Right: their differences with the interval of the mean difference"><line class="ax" x1="60" y1="290" x2="340" y2="290"/>
+<line class="ax" x1="80" y1="290" x2="80" y2="295"/><text class="tk" x="80" y="309" text-anchor="middle">20</text>
+<line class="ax" x1="160" y1="290" x2="160" y2="295"/><text class="tk" x="160" y="309" text-anchor="middle">40</text>
+<line class="ax" x1="240" y1="290" x2="240" y2="295"/><text class="tk" x="240" y="309" text-anchor="middle">60</text>
+<line class="ax" x1="320" y1="290" x2="320" y2="295"/><text class="tk" x="320" y="309" text-anchor="middle">80</text>
+<text class="lb" x="200" y="328" text-anchor="middle">HPLC, mg per serving</text>
+<line class="ax" x1="60" y1="20" x2="60" y2="290"/>
+<text class="tk" x="52" y="256.143" text-anchor="end">20</text>
+<text class="tk" x="52" y="184.714" text-anchor="end">40</text>
+<text class="tk" x="52" y="113.286" text-anchor="end">60</text>
+<text class="tk" x="52" y="41.8571" text-anchor="end">80</text>
+<text class="lb" x="14" y="150" transform="rotate(-90 14 150)" text-anchor="middle">UV, mg per serving</text>
+<line class="zero" x1="60" y1="270" x2="340" y2="20"/>
+<circle class="dot pa" cx="135.36" cy="199.107" r="4"/>
+<circle class="dot pa" cx="224.28" cy="119.321" r="4"/>
+<circle class="dot pa" cx="84" cy="248.964" r="4"/>
+<circle class="dot pa" cx="138.64" cy="199.393" r="4"/>
+<circle class="dot pa" cx="277.96" cy="67.4643" r="4"/>
+<circle class="dot pa" cx="113.32" cy="220.607" r="4"/>
+<circle class="dot pa" cx="205.44" cy="139" r="4"/>
+<circle class="dot pa" cx="95.32" cy="239.25" r="4"/>
+<circle class="dot pa" cx="156.32" cy="184.071" r="4"/>
+<circle class="dot pa" cx="192.8" cy="150.857" r="4"/>
+<circle class="dot pa" cx="252.96" cy="95.6429" r="4"/>
+<circle class="dot pa" cx="268" cy="74.0714" r="4"/>
+<text class="tk" x="340" y="14" text-anchor="end">dashed: agreement</text>
+<line class="ax" x1="400" y1="290" x2="620" y2="290"/><line class="ax" x1="400" y1="20" x2="400" y2="290"/>
+<line class="ax" x1="415.714" y1="290" x2="415.714" y2="295"/><text class="tk" x="415.714" y="309" text-anchor="middle">20</text>
+<line class="ax" x1="478.571" y1="290" x2="478.571" y2="295"/><text class="tk" x="478.571" y="309" text-anchor="middle">40</text>
+<line class="ax" x1="541.429" y1="290" x2="541.429" y2="295"/><text class="tk" x="541.429" y="309" text-anchor="middle">60</text>
+<line class="ax" x1="604.286" y1="290" x2="604.286" y2="295"/><text class="tk" x="604.286" y="309" text-anchor="middle">80</text>
+<text class="tk" x="392" y="238.286" text-anchor="end">-2</text>
+<text class="tk" x="392" y="166.857" text-anchor="end">-1</text>
+<text class="tk" x="392" y="95.4286" text-anchor="end">0</text>
+<text class="tk" x="392" y="24" text-anchor="end">1</text>
+<text class="lb" x="510" y="328" text-anchor="middle">mean of the two methods, mg</text>
+<text class="lb" x="352" y="150" transform="rotate(-90 352 150)" text-anchor="middle">HPLC minus UV, mg</text>
+<rect class="bandci" x="400" y="98.7011" width="220" height="87.0026"/>
+<line class="zero" x1="400" y1="91.4286" x2="620" y2="91.4286"/>
+<line class="ciline" x1="400" y1="142.202" x2="620" y2="142.202"/>
+<circle class="dot pb" cx="460.799" cy="163.571" r="4"/>
+<circle class="dot pb" cx="530.837" cy="171.429" r="4"/>
+<circle class="dot pb" cx="418.684" cy="83.5714" r="4"/>
+<circle class="dot pb" cx="461.961" cy="99.2857" r="4"/>
+<circle class="dot pb" cx="574.743" cy="250" r="4"/>
+<circle class="dot pb" cx="442.68" cy="127.143" r="4"/>
+<circle class="dot pb" cx="514.777" cy="114.286" r="4"/>
+<circle class="dot pb" cx="427.406" cy="75.7143" r="4"/>
+<circle class="dot pb" cx="475.649" cy="90" r="4"/>
+<circle class="dot pb" cx="504.594" cy="102.857" r="4"/>
+<circle class="dot pb" cx="552.523" cy="132.857" r="4"/>
+<circle class="dot pb" cx="567.923" cy="295.714" r="4"/>
+<text class="tk" x="620" y="345" text-anchor="end">band: 95% interval of the mean difference, -1.32 to -0.10</text></svg></figure><div class="read"><b>Reading it.</b> The correlation is 0.99933, with a 95% interval 0.99754 to 0.99982: the methods move together almost perfectly. The paired differences have a mean of -0.711 mg with a 95% interval from -1.32 to -0.102, which excludes zero (p = 0.0261): the UV method reads systematically higher, here by 1.6 per cent of the mean amount. A calibration against the HPLC would fix a bias like this; a correlation of 0.999 could never have shown it. The figure on the right is the same finding as a picture.</div></div></section>
+<section class=" story" id="s9"><div class="wrap"><h2>9 &middot; Same source, two detectors</h2><div class="badge"><span class="lvl">physics: shape, and digits that cancel</span><span>test t2</span><span>test ks --exact yes</span><span>describe</span></div><p class="said">&#8220;Both detectors see the 662 keV line of the same caesium source. Their average energies agree. Why does the second one look broader?&#8221; &#8212; a detector physicist</p><p>Thirty counts on each detector. The second detector&#8217;s gain drifted during the run, so its line is split into two close peaks. A comparison of means cannot see that; the two-sample Kolmogorov&#8211;Smirnov test compares the whole distributions, and with 60 values and no ties the tool computes its p-value exactly (<code>--exact yes</code> refuses if it cannot).</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test t2 --cols energy_keV --group detector detectors.csv</span>
+{
+  &quot;tests&quot;: [
+    {
+      &quot;statistic&quot;: -0.24744542916521842,
+      &quot;df&quot;: 51.937980184489305,
+      &quot;p_value&quot;: 0.8055391129701185,
+      &quot;interval&quot;: {
+        &quot;of&quot;: &quot;difference of means&quot;,
+        &quot;level&quot;: 0.95,
+        &quot;estimate&quot;: -1.2843333333333362,
+        &quot;low&quot;: -11.69986876225348,
+        &quot;high&quot;: 9.131202095586808,
+        &quot;rounding&quot;: &quot;double&quot;
+      },
+      &quot;n&quot;: {&quot;a&quot;: 30, &quot;b&quot;: 30}
+    }
+  ]
+}</pre></div><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test ks --cols energy_keV --group detector --exact yes detectors.csv</span>
+{
+  &quot;tests&quot;: [
+    {
+      &quot;statistic&quot;: 0.36666666666666664,
+      &quot;p_value&quot;: 0.03458008496333449,
+      &quot;p_method&quot;: &quot;exact&quot;,
+      &quot;n&quot;: {&quot;a&quot;: 30, &quot;b&quot;: 30}
+    }
+  ]
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 275" role="img" aria-label="The empirical distribution functions of the two detectors and their largest gap"><line class="ax" x1="60" y1="230" x2="610" y2="230"/>
+<line class="ax" x1="110" y1="230" x2="110" y2="235"/><text class="tk" x="110" y="249" text-anchor="middle">620</text>
+<line class="ax" x1="210" y1="230" x2="210" y2="235"/><text class="tk" x="210" y="249" text-anchor="middle">640</text>
+<line class="ax" x1="310" y1="230" x2="310" y2="235"/><text class="tk" x="310" y="249" text-anchor="middle">660</text>
+<line class="ax" x1="410" y1="230" x2="410" y2="235"/><text class="tk" x="410" y="249" text-anchor="middle">680</text>
+<line class="ax" x1="510" y1="230" x2="510" y2="235"/><text class="tk" x="510" y="249" text-anchor="middle">700</text>
+<line class="ax" x1="610" y1="230" x2="610" y2="235"/><text class="tk" x="610" y="249" text-anchor="middle">720</text>
+<text class="lb" x="335" y="268" text-anchor="middle">photopeak energy, keV</text>
+<line class="ax" x1="60" y1="20" x2="60" y2="230"/>
+<text class="tk" x="52" y="214" text-anchor="end">0</text>
+<text class="tk" x="52" y="119" text-anchor="end">0.5</text>
+<text class="tk" x="52" y="24" text-anchor="end">1</text>
+<path class="ecdfa" d="M60 210 L136.5 210 L136.5 203.667 L139.5 203.667 L139.5 197.333 L219.4 197.333 L219.4 191 L225.7 191 L225.7 184.667 L228.15 184.667 L228.15 178.333 L260.95 178.333 L260.95 172 L273.05 172 L273.05 165.667 L278.2 165.667 L278.2 159.333 L279.65 159.333 L279.65 153 L287.2 153 L287.2 146.667 L289.2 146.667 L289.2 140.333 L291.65 140.333 L291.65 134 L292 134 L292 127.667 L297.15 127.667 L297.15 121.333 L308.55 121.333 L308.55 115 L321.8 115 L321.8 108.667 L324.6 108.667 L324.6 102.333 L324.65 102.333 L324.65 96 L331.65 96 L331.65 89.6667 L332.75 89.6667 L332.75 83.3333 L334.05 83.3333 L334.05 77 L336.25 77 L336.25 70.6667 L351.85 70.6667 L351.85 64.3333 L373.55 64.3333 L373.55 58 L373.95 58 L373.95 51.6667 L375.75 51.6667 L375.75 45.3333 L408.1 45.3333 L408.1 39 L428.5 39 L428.5 32.6667 L482 32.6667 L482 26.3333 L495.15 26.3333 L495.15 20 L610 20"/>
+<path class="ecdfb" d="M60 210 L140.9 210 L140.9 203.667 L156.4 203.667 L156.4 197.333 L182.15 197.333 L182.15 191 L191.75 191 L191.75 184.667 L192.2 184.667 L192.2 178.333 L196.55 178.333 L196.55 172 L201.1 172 L201.1 165.667 L208.5 165.667 L208.5 159.333 L215.5 159.333 L215.5 153 L217.15 153 L217.15 146.667 L227.25 146.667 L227.25 140.333 L233.8 140.333 L233.8 134 L238.95 134 L238.95 127.667 L259.4 127.667 L259.4 121.333 L272.15 121.333 L272.15 115 L383.45 115 L383.45 108.667 L407.6 108.667 L407.6 102.333 L409.6 102.333 L409.6 96 L416.75 96 L416.75 89.6667 L425.6 89.6667 L425.6 83.3333 L428.05 83.3333 L428.05 77 L429.45 77 L429.45 70.6667 L432.5 70.6667 L432.5 64.3333 L435.5 64.3333 L435.5 58 L436.75 58 L436.75 51.6667 L438.5 51.6667 L438.5 45.3333 L442.35 45.3333 L442.35 39 L444.55 39 L444.55 32.6667 L448.15 32.6667 L448.15 26.3333 L481.55 26.3333 L481.55 20 L610 20"/>
+<line class="gap" x1="375.75" y1="45.3333" x2="375.75" y2="115"/>
+<text class="tk" x="383.75" y="80.1667">largest gap D = 0.367</text>
+<text class="nm" x="76" y="30" style="fill:var(--accent)">detector 1</text><text class="nm" x="76" y="48" style="fill:var(--good)">detector 2</text></svg></figure><div class="read"><b>Reading it.</b> The t test sees nothing (p = 0.806): the two means differ by 1.3 keV out of 662. The largest vertical gap between the two distribution functions is D = 0.3667, and the exact p-value is 0.0346. The drawn gap is the printed statistic.</div><p>A second habit of the field: timestamps. Twenty arrivals of the same repeated event, recorded as seconds since 1970 &#8212; a number near 1.7&times;10<sup>9</sup> carrying microseconds of jitter. What is the spread? The textbook one-pass formula, <code>(&Sigma;x&sup2;/n &minus; mean&sup2;) n/(n&minus;1)</code>, is what many spreadsheets and quick scripts compute:</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats describe --cols t_s clock.csv</span>
+{
+  &quot;columns&quot;: [
+    {
+      &quot;count&quot;: 20,
+      &quot;mean&quot;: 1700000000.5000012,
+      &quot;variance&quot;: 8.935037505197168e-12,
+      &quot;sd&quot;: 2.989153309082217e-06
+    }
+  ]
+}</pre></div><div class="read"><b>Reading it.</b> The tool&#8217;s variance is 8.93504e-12 s&sup2;, which is the exact variance of the twenty recorded numbers rounded once (checked against exact fractions when this page is generated). The one-pass formula in doubles, run on the same twenty numbers, answers 538.947: the two terms it subtracts are about 2.9&times;10<sup>18</sup> and agree to the last digit that a double holds, so what is left is rounding noise, here about 10<sup>14</sup> times too large. The sums in <code>stats</code> are exact, so the offset costs nothing.</div></div></section>
+<section class="alt story" id="s10"><div class="wrap"><h2>10 &middot; What does the town think?</h2><div class="badge"><span class="lvl">social science: ordinal answers and honest intervals</span><span>ci prop</span><span>test kruskal</span><span>test chisq</span></div><p class="said">&#8220;A hundred and fifty residents answered. Does the town support the new bus line? Do the districts feel the same?&#8221; &#8212; a council analyst</p><p>Survey data are counts and ordinal scales, and the usual mistakes are treating a Likert score as a measurement on a ruler and quoting a share without its uncertainty. First the share: the Wilson interval is the default, and Clopper&#8211;Pearson (the exact binomial interval) is one flag away and always the wider.</p><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci prop --cols support --success yes town.csv</span>
+{
+  &quot;intervals&quot;: [
+    {
+      &quot;column&quot;: &quot;support&quot;,
+      &quot;estimate&quot;: 0.58,
+      &quot;interval&quot;: {
+        &quot;of&quot;: &quot;proportion&quot;,
+        &quot;method&quot;: &quot;wilson&quot;,
+        &quot;level&quot;: 0.95,
+        &quot;estimate&quot;: 0.58,
+        &quot;low&quot;: 0.49998480543102514,
+        &quot;high&quot;: 0.6560199554700826,
+        &quot;rounding&quot;: &quot;double&quot;
+      },
+      &quot;n&quot;: {&quot;n&quot;: 150, &quot;successes&quot;: 87, &quot;missing&quot;: 0}
+    }
+  ]
+}</pre></div><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats ci prop --cols support --success yes --method clopper-pearson town.csv</span>
+{
+  &quot;intervals&quot;: [
+    {
+      &quot;column&quot;: &quot;support&quot;,
+      &quot;estimate&quot;: 0.58,
+      &quot;interval&quot;: {
+        &quot;of&quot;: &quot;proportion&quot;,
+        &quot;method&quot;: &quot;clopper-pearson&quot;,
+        &quot;level&quot;: 0.95,
+        &quot;estimate&quot;: 0.58,
+        &quot;low&quot;: 0.49675905312956237,
+        &quot;high&quot;: 0.6600167856652149,
+        &quot;rounding&quot;: &quot;double&quot;
+      }
+    }
+  ]
+}</pre></div><figure class="fig"><svg viewBox="0 0 640 150" role="img" aria-label="Two 95% intervals of the share of supporters"><line class="ax" x1="60" y1="100" x2="610" y2="100"/>
+<line class="ax" x1="60" y1="100" x2="60" y2="105"/><text class="tk" x="60" y="119" text-anchor="middle">0.3</text>
+<line class="ax" x1="170" y1="100" x2="170" y2="105"/><text class="tk" x="170" y="119" text-anchor="middle">0.4</text>
+<line class="ax" x1="280" y1="100" x2="280" y2="105"/><text class="tk" x="280" y="119" text-anchor="middle">0.5</text>
+<line class="ax" x1="390" y1="100" x2="390" y2="105"/><text class="tk" x="390" y="119" text-anchor="middle">0.6</text>
+<line class="ax" x1="500" y1="100" x2="500" y2="105"/><text class="tk" x="500" y="119" text-anchor="middle">0.7</text>
+<line class="ax" x1="610" y1="100" x2="610" y2="105"/><text class="tk" x="610" y="119" text-anchor="middle">0.8</text>
+<text class="lb" x="335" y="138" text-anchor="middle">share of residents who support the policy</text>
+<line class="zero" x1="280" y1="26" x2="280" y2="100"/><text class="tk" x="280" y="20" text-anchor="middle">one half</text>
+<text class="nm" x="170" y="50" text-anchor="end">Wilson</text>
+<line class="ciline" x1="279.983" y1="46" x2="451.622" y2="46"/><circle class="pt" cx="368" cy="46" r="5"/>
+<text class="tk" x="459.622" y="50">0.500 &#8211; 0.656</text>
+<text class="nm" x="170" y="80" text-anchor="end">Clopper–Pearson</text>
+<line class="ciline" x1="276.435" y1="76" x2="456.018" y2="76"/><circle class="pt" cx="368" cy="76" r="5"/>
+<text class="tk" x="464.018" y="80">0.497 &#8211; 0.660</text></svg></figure><div class="read"><b>Reading it.</b> 0.58 of the sample support the line. Both intervals contain one half, so &#8220;a majority supports it&#8221; is not something this sample can claim; the exact interval is wider, as it must be.</div><p>Second, do the districts feel the same? Satisfaction is on a 1&#8211;5 scale: an order, not a ruler. The Kruskal&#8211;Wallis test uses only the order, and prints the number of ties and the mean rank of each district. Third, is support related to education? Counts in a table call for the chi-square test of independence; its answer carries the smallest expected count and how many are below 5, so that the reader can see the test applies.</p><figure class="fig"><svg viewBox="0 0 640 176" role="img" aria-label="How the residents of each district answered the satisfaction question, 1 to 5"><text class="nm" x="102" y="41" text-anchor="end">North</text>
+<rect class="lk1" x="110" y="28" width="76.8" height="24"/>
+<text class="lk" x="148.4" y="44" text-anchor="middle">8</text>
+<rect class="lk2" x="186.8" y="28" width="115.2" height="24"/>
+<text class="lk" x="244.4" y="44" text-anchor="middle">12</text>
+<rect class="lk3" x="302" y="28" width="144" height="24"/>
+<text class="lk" x="374" y="44" text-anchor="middle">15</text>
+<rect class="lk4" x="446" y="28" width="105.6" height="24"/>
+<text class="lk" x="498.8" y="44" text-anchor="middle">11</text>
+<rect class="lk5" x="551.6" y="28" width="38.4" height="24"/>
+<text class="lk" x="570.8" y="44" text-anchor="middle">4</text>
+<text class="nm" x="102" y="85" text-anchor="end">Centre</text>
+<rect class="lk1" x="110" y="72" width="38.4" height="24"/>
+<text class="lk" x="129.2" y="88" text-anchor="middle">4</text>
+<rect class="lk2" x="148.4" y="72" width="76.8" height="24"/>
+<text class="lk" x="186.8" y="88" text-anchor="middle">8</text>
+<rect class="lk3" x="225.2" y="72" width="192" height="24"/>
+<text class="lk" x="321.2" y="88" text-anchor="middle">20</text>
+<rect class="lk4" x="417.2" y="72" width="96" height="24"/>
+<text class="lk" x="465.2" y="88" text-anchor="middle">10</text>
+<rect class="lk5" x="513.2" y="72" width="76.8" height="24"/>
+<text class="lk" x="551.6" y="88" text-anchor="middle">8</text>
+<text class="nm" x="102" y="129" text-anchor="end">South</text>
+<rect class="lk1" x="110" y="116" width="0" height="24"/>
+<rect class="lk2" x="110" y="116" width="48" height="24"/>
+<text class="lk" x="134" y="132" text-anchor="middle">5</text>
+<rect class="lk3" x="158" y="116" width="105.6" height="24"/>
+<text class="lk" x="210.8" y="132" text-anchor="middle">11</text>
+<rect class="lk4" x="263.6" y="116" width="182.4" height="24"/>
+<text class="lk" x="354.8" y="132" text-anchor="middle">19</text>
+<rect class="lk5" x="446" y="116" width="144" height="24"/>
+<text class="lk" x="518" y="132" text-anchor="middle">15</text>
+<text class="tk" x="110" y="16">1 very dissatisfied</text><text class="tk" x="590" y="16" text-anchor="end">5 very satisfied</text></svg></figure><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test kruskal --cols satisfaction --group district town.csv</span>
+{
+  &quot;levels&quot;: [&quot;Centre&quot;, &quot;North&quot;, &quot;South&quot;],
+  &quot;tests&quot;: [
+    {
+      &quot;statistic&quot;: 20.32912076579316,
+      &quot;df&quot;: 2,
+      &quot;p_value&quot;: 3.851124109104445e-05,
+      &quot;effect_size&quot;: {&quot;name&quot;: &quot;epsilon_squared&quot;, &quot;value&quot;: 0.1364370521194172},
+      &quot;n&quot;: [50, 50, 50],
+      &quot;mean_rank&quot;: [71.34, 58.92, 96.24],
+      &quot;ties&quot;: 5
+    }
+  ]
+}</pre></div><div class="term"><div class="bar"><i></i><i></i><i></i> a real run</div><pre><span class="cm">$ stats test chisq --cols support --vs education town.csv</span>
+{
+  &quot;tests&quot;: [
+    {
+      &quot;statistic&quot;: 0.07021342869563062,
+      &quot;df&quot;: 2,
+      &quot;p_value&quot;: 0.9655023778032622,
+      &quot;effect_size&quot;: {
+        &quot;name&quot;: &quot;cramers_v&quot;,
+        &quot;value&quot;: 0.021635376692758033,
+        &quot;rounding&quot;: &quot;double&quot;
+      },
+      &quot;n&quot;: {&quot;n&quot;: 150, &quot;missing&quot;: 0},
+      &quot;assumptions&quot;: {
+        &quot;table&quot;: {&quot;rows&quot;: 2, &quot;cols&quot;: 3},
+        &quot;min_expected&quot;: 17.64,
+        &quot;expected_below_5&quot;: 0
+      }
+    }
+  ]
+}</pre></div><div class="read"><b>Reading it.</b> The districts differ clearly (Kruskal&#8211;Wallis p = 3.85e-05): satisfaction rises from the North to the South, as the bars show. Support for the line shows no sign of depending on education (chi-square p = 0.966). Two different questions, two answers, and each with the test that suits the kind of data.</div></div></section>
 <footer><div class="wrap">cancho-stats &middot; EUPL-1.2 &middot; the data are invented; the runs, the digits and the figures are real &middot; <a href=".">overview</a></div></footer>
 </body>
 </html>

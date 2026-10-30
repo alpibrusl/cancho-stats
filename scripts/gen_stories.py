@@ -44,6 +44,56 @@ def make_bakery():
     return cols
 
 
+def make_bio():
+    """log2 expression of one gene in the liver of six wild-type and six knockout mice; one knockout animal is high"""
+    r = random.Random(4)
+    rows = [("wildtype", round(r.gauss(8.0, 0.45), 2)) for _ in range(6)] + [("knockout", round(r.gauss(9.0, 0.9), 2)) for _ in range(6)]
+    rows[-1] = ("knockout", round(rows[-1][1] + 1.8, 2))
+    return rows
+
+
+def make_chem():
+    """caffeine (mg per serving) in twelve samples by HPLC and by UV absorbance; the UV method reads 2% high"""
+    r = random.Random(3)
+    rows = []
+    for i in range(12):
+        t = round(r.uniform(20, 80), 1)
+        rows.append((i + 1, round(t + r.gauss(0, 0.5), 2), round(t * 1.02 + r.gauss(0, 0.5), 2)))
+    return rows
+
+
+def make_physics():
+    """photopeak energies (keV) of the same source on two detectors: one clean, one whose gain drifts so that the peak splits in two (same mean)"""
+    r = random.Random(5)
+    rows = [("det1", round(r.gauss(662, 16), 2)) for _ in range(30)]
+    rows += [("det2", round(r.gauss(662 + (22 if r.random() < 0.5 else -22), 6), 2)) for _ in range(30)]
+    return rows
+
+
+def make_clock():
+    """twenty timestamps (seconds since the epoch) of one repeated event, microseconds of jitter on a large offset"""
+    r = random.Random(8)
+    return [round(1700000000.5 + r.gauss(0, 3e-6), 7) for _ in range(20)]
+
+
+def make_town():
+    """150 residents of three districts: support for a policy, satisfaction on a 1-5 scale (higher further south), education"""
+    r = random.Random(1)
+    rows = []
+    for d, pm, lik in (("North", 0.45, [0.15, 0.25, 0.3, 0.2, 0.1]), ("Centre", 0.6, [0.08, 0.17, 0.3, 0.28, 0.17]), ("South", 0.72, [0.04, 0.1, 0.26, 0.32, 0.28])):
+        for _ in range(50):
+            x = r.random()
+            c = 0
+            level = 5
+            for k, pk in enumerate(lik):
+                c += pk
+                if x <= c:
+                    level = k + 1
+                    break
+            rows.append((d, "yes" if r.random() < pm else "no", level, r.choice(["school", "college", "degree"])))
+    return rows
+
+
 COLS = ["oven", "bake_min", "height_cm", "crust", "weight_g", "moisture_pct", "salt_pct", "defect"]
 
 
@@ -173,12 +223,24 @@ def fig_strip(values):
     return svg(215, "\n".join(body), "Every batch as a dot, by oven, with the batches that ran long ringed")
 
 
+def fig_dots(values, lo, hi, ticks, label):
+    """one dot per animal or sample, by group"""
+    ax, sx = axis(120, 610, 40 + 60 * len(values), lo, hi, ticks, label)
+    body = [ax]
+    for k, (name, vs, cls) in enumerate(values):
+        y0 = 40 + k * 60
+        body.append('<text class="nm" x="112" y="%g" text-anchor="end">%s</text><line class="band" x1="120" y1="%g" x2="610" y2="%g"/>' % (y0 + 5, esc(name), y0, y0))
+        for i, v in enumerate(sorted(vs)):
+            body.append('<circle class="dot %s" cx="%g" cy="%g" r="5"/>' % (cls, sx(v), y0 + ((i * 7919) % 5 - 2) * 3.0))
+    return svg(40 + 60 * len(values) + 40, "\n".join(body), "Every animal as a dot, by genotype")
+
+
 def fig_pbars(items):
     """p-values on a log axis, 0.05 marked"""
     import math
     lo, hi = math.log10(0.0005), math.log10(1.0)
     y = 40 + 34 * len(items)
-    ax, sx = axis(210, 600, y, lo, hi, [math.log10(v) for v in (0.001, 0.01, 0.1, 1.0)], "p-value (log scale)", fmt=lambda v: "%g" % (10 ** v))
+    ax, sx = axis(210, 520, y, lo, hi, [math.log10(v) for v in (0.001, 0.01, 0.1, 1.0)], "p-value (log scale)", fmt=lambda v: "%g" % (10 ** v))
     body = [ax]
     body.append('<line class="zero" x1="%g" y1="22" x2="%g" y2="%g"/><text class="tk" x="%g" y="16" text-anchor="middle">0.05</text>' % (sx(math.log10(0.05)), sx(math.log10(0.05)), y, sx(math.log10(0.05))))
     for k, (name, p, cls) in enumerate(items):
@@ -229,6 +291,104 @@ def fig_two_by_two(a_yes, a_n, b_yes, b_n):
     return svg(130, "\n".join(body), "Defective loaves out of the batches of each oven")
 
 
+def fig_scatter(pairs):
+    """one dot per sample, method 1 against method 2, with the line of agreement"""
+    lo, hi = 15, 85
+    ax, sx = axis(60, 340, 290, lo, hi, [20, 40, 60, 80], "HPLC, mg per serving")
+    sy = lambda v: 270 - (v - lo) / (hi - lo) * 250
+    body = [ax, '<line class="ax" x1="60" y1="20" x2="60" y2="290"/>']
+    for t in (20, 40, 60, 80):
+        body.append('<text class="tk" x="52" y="%g" text-anchor="end">%d</text>' % (sy(t) + 4, t))
+    body.append('<text class="lb" x="14" y="150" transform="rotate(-90 14 150)" text-anchor="middle">UV, mg per serving</text>')
+    body.append('<line class="zero" x1="%g" y1="%g" x2="%g" y2="%g"/>' % (sx(lo), sy(lo), sx(hi), sy(hi)))
+    for h, u in pairs:
+        body.append('<circle class="dot pa" cx="%g" cy="%g" r="4"/>' % (sx(h), sy(u)))
+    body.append('<text class="tk" x="340" y="14" text-anchor="end">dashed: agreement</text>')
+    return body, sx
+
+
+def fig_chem(pairs, est, lo_, hi_):
+    left, _ = fig_scatter(pairs)
+    # the differences, against the mean of the two methods, with the interval of the mean difference as a band
+    mlo, mhi = 15, 85
+    dlo, dhi = -2.5, 1.0
+    sxm = lambda v: 400 + (v - mlo) / (mhi - mlo) * 220
+    syd = lambda v: 270 - (v - dlo) / (dhi - dlo) * 250
+    right = ['<line class="ax" x1="400" y1="290" x2="620" y2="290"/><line class="ax" x1="400" y1="20" x2="400" y2="290"/>']
+    for t in (20, 40, 60, 80):
+        right.append('<line class="ax" x1="%g" y1="290" x2="%g" y2="295"/><text class="tk" x="%g" y="309" text-anchor="middle">%d</text>' % (sxm(t), sxm(t), sxm(t), t))
+    for t in (-2, -1, 0, 1):
+        right.append('<text class="tk" x="392" y="%g" text-anchor="end">%d</text>' % (syd(t) + 4, t))
+    right.append('<text class="lb" x="510" y="328" text-anchor="middle">mean of the two methods, mg</text>')
+    right.append('<text class="lb" x="352" y="150" transform="rotate(-90 352 150)" text-anchor="middle">HPLC minus UV, mg</text>')
+    right.append('<rect class="bandci" x="400" y="%g" width="220" height="%g"/>' % (syd(hi_), syd(lo_) - syd(hi_)))
+    right.append('<line class="zero" x1="400" y1="%g" x2="620" y2="%g"/>' % (syd(0), syd(0)))
+    right.append('<line class="ciline" x1="400" y1="%g" x2="620" y2="%g"/>' % (syd(est), syd(est)))
+    for h, u in pairs:
+        right.append('<circle class="dot pb" cx="%g" cy="%g" r="4"/>' % (sxm((h + u) / 2), syd(h - u)))
+    right.append('<text class="tk" x="620" y="345" text-anchor="end">band: 95%% interval of the mean difference, %.2f to %.2f</text>' % (lo_, hi_))
+    return svg(358, "\n".join(left + right), "Left: the two methods against each other. Right: their differences with the interval of the mean difference")
+
+
+def fig_ecdf(a, b, d):
+    """the two empirical distribution functions and the largest gap between them"""
+    lo, hi = 610, 720
+    ax, sx = axis(60, 610, 230, lo, hi, [620, 640, 660, 680, 700, 720], "photopeak energy, keV")
+    sy = lambda v: 210 - v * 190
+    body = [ax, '<line class="ax" x1="60" y1="20" x2="60" y2="230"/>']
+    for t in (0, 0.5, 1):
+        body.append('<text class="tk" x="52" y="%g" text-anchor="end">%g</text>' % (sy(t) + 4, t))
+    best = (0, None)
+    pts = sorted(a + b)
+    def F(v, xs): return sum(1 for x in xs if x <= v) / len(xs)
+    for name, xs, cls in (("det1", a, "ecdfa"), ("det2", b, "ecdfb")):
+        xs = sorted(xs)
+        path = "M%g %g" % (sx(lo), sy(0))
+        for i, v in enumerate(xs):
+            path += " L%g %g L%g %g" % (sx(v), sy(i / len(xs)), sx(v), sy((i + 1) / len(xs)))
+        path += " L%g %g" % (sx(hi), sy(1))
+        body.append('<path class="%s" d="%s"/>' % (cls, path))
+    for v in pts:
+        g = abs(F(v, a) - F(v, b))
+        if g > best[0]:
+            best = (g, v)
+    body.append('<line class="gap" x1="%g" y1="%g" x2="%g" y2="%g"/>' % (sx(best[1]), sy(F(best[1], a)), sx(best[1]), sy(F(best[1], b))))
+    body.append('<text class="tk" x="%g" y="%g">largest gap D = %.3f</text>' % (sx(best[1]) + 8, (sy(F(best[1], a)) + sy(F(best[1], b))) / 2, best[0]))
+    body.append('<text class="nm" x="76" y="30" style="fill:var(--accent)">detector 1</text><text class="nm" x="76" y="48" style="fill:var(--good)">detector 2</text>')
+    return svg(275, "\n".join(body), "The empirical distribution functions of the two detectors and their largest gap"), best[0]
+
+
+def fig_prop(items):
+    """intervals of a proportion, with the line at one half"""
+    ax, sx = axis(60, 610, 100, 0.3, 0.8, [0.3, 0.4, 0.5, 0.6, 0.7, 0.8], "share of residents who support the policy")
+    body = [ax, '<line class="zero" x1="%g" y1="26" x2="%g" y2="100"/><text class="tk" x="%g" y="20" text-anchor="middle">one half</text>' % (sx(0.5), sx(0.5), sx(0.5))]
+    for k, (name, est, lo_, hi_) in enumerate(items):
+        y = 46 + k * 30
+        body.append('<text class="nm" x="170" y="%g" text-anchor="end">%s</text>' % (y + 4, esc(name)))
+        body.append('<line class="ciline" x1="%g" y1="%g" x2="%g" y2="%g"/><circle class="pt" cx="%g" cy="%g" r="5"/>' % (sx(lo_), y, sx(hi_), y, sx(est), y))
+        body.append('<text class="tk" x="%g" y="%g">%.3f &#8211; %.3f</text>' % (sx(hi_) + 8, y + 4, lo_, hi_))
+    return svg(150, "\n".join(body), "Two 95% intervals of the share of supporters")
+
+
+def fig_likert(groups):
+    """stacked bars of the five answers, by district"""
+    shades = ["lk1", "lk2", "lk3", "lk4", "lk5"]
+    body = []
+    for k, (name, counts) in enumerate(groups):
+        y = 36 + k * 44
+        tot = sum(counts)
+        x = 110
+        body.append('<text class="nm" x="102" y="%g" text-anchor="end">%s</text>' % (y + 5, esc(name)))
+        for lv, c in enumerate(counts):
+            w = 480 * c / tot
+            body.append('<rect class="%s" x="%g" y="%g" width="%g" height="24"/>' % (shades[lv], x, y - 8, w))
+            if c >= 4:
+                body.append('<text class="lk" x="%g" y="%g" text-anchor="middle">%d</text>' % (x + w / 2, y + 8, c))
+            x += w
+    body.append('<text class="tk" x="110" y="16">1 very dissatisfied</text><text class="tk" x="590" y="16" text-anchor="end">5 very satisfied</text>')
+    return svg(36 + 44 * len(groups) + 8, "\n".join(body), "How the residents of each district answered the satisfaction question, 1 to 5")
+
+
 def fig_hashes(rows):
     body = []
     for k, (label, h) in enumerate(rows):
@@ -275,6 +435,13 @@ figure.fig svg { width: 100%; height: auto; display: block; background: var(--su
 .fig .seg { fill: var(--good); } .fig .seg.bad { fill: var(--bad); }
 .fig .hash { fill: var(--soft); stroke: var(--good); stroke-width: 1.5; }
 .fig .hx { fill: var(--fg); font: 12px var(--mono); }
+.fig .bandci { fill: var(--accent); opacity: .18; }
+.fig .ecdfa { fill: none; stroke: var(--accent); stroke-width: 2.5; } .fig .ecdfb { fill: none; stroke: var(--good); stroke-width: 2.5; }
+.fig .gap { stroke: var(--bad); stroke-width: 3; }
+.fig .lk1 { fill: #b42d27; } .fig .lk2 { fill: #d97a52; } .fig .lk3 { fill: #c9c9c9; } .fig .lk4 { fill: #5a9bd4; } .fig .lk5 { fill: #1f5fa6; }
+.fig .lk { fill: #fff; font: 600 12px var(--font); }
+.part { padding: 2.5rem 0 .5rem; text-align: center; border-top: 1px solid var(--line); }
+.part h2 { text-align: center; }
 .toc { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: center; margin-top: 1.2rem; }
 .toc a { text-decoration: none; border: 1px solid var(--line); border-radius: 99px; padding: .25rem .9rem; background: var(--surface); font-size: .9rem; }
 .data { color: var(--muted); font-size: .9rem; text-align: center; margin-top: 1rem; }
@@ -431,21 +598,127 @@ def build(binary):
              '<div class="read"><b>Reading it.</b> %s Across platforms it is the same: the project&#8217;s CI runs these answers on Linux x86-64, Linux arm64 and macOS arm64 and compares their hashes to the file <code>docs/xplat_fp.txt</code>. (One thing that <em>does</em> depend on row order, by design: a bootstrap resamples row positions, so <code>ci boot</code> is a function of the file&#8217;s bytes and the seed. The answer says so.)</div>' % ("All three digests of each question are identical." if same_t and same_p else "THE DIGESTS DIFFER: this is a bug, not a story.")]))
         if not (same_t and same_p):
             raise SystemExit("gen_stories: the digests differ across row orders")
+        sections.append('<section class="part" id="lab"><div class="wrap"><h2>Part II &middot; In the lab and in the field</h2><p class="lead">The same tool on four small datasets from the sciences: a gene in mice, a chemistry method comparison, two particle detectors, a town survey. The data are invented; the runs are real; each story is built around a different habit of the field.</p></div></section>')
+        from fractions import Fraction
+        # 7 biology -----------------------------------------------------------------------------------------
+        bio = make_bio()
+        files["bio.csv"] = "genotype,expression\n" + "\n".join("%s,%s" % x for x in bio) + "\n"
+        (folder / "bio.csv").write_text(files["bio.csv"])
+        a1 = ["test", "t2", "--cols", "expression", "--group", "genotype"]
+        a2 = ["test", "mannwhitney", "--cols", "expression", "--group", "genotype"]
+        a3 = ["resample", "perm", "--cols", "expression", "--group", "genotype", "--permutations", "all"]
+        d1, _ = R.run(a1, "bio.csv")
+        d2, _ = R.run(a2, "bio.csv")
+        d3, _ = R.run(a3, "bio.csv")
+        t1, t2_, t3 = d1["tests"][0], d2["tests"][0], d3["tests"][0]
+        claim(t1["p_value"] > 0.05 and t2_["p_method"] == "exact" and t2_["p_value"] < 0.05 and t3["p"] < 0.05 and t3["permutations"] == 924, "story 7: Welch does not show, the exact rank test and the exact permutation test do, 924 arrangements")
+        wt = [v for g, v in bio if g == "wildtype"]
+        ko = [v for g, v in bio if g == "knockout"]
+        sections.append(story(7, "Six mice against six", "biology: small samples, exact answers", ["test t2", "test mannwhitney", "resample perm --permutations all"],
+            "&#8220;Six wild-type and six knockout mice, one liver sample each. The knockout looks higher. One animal is very high. Is the gene doing something?&#8221; &#8212; a postdoc, late on a Friday",
+            ["<p>Twelve animals is a small sample, and an assumption that the data are bell-shaped cannot be checked on twelve points. Three questions, from the most assumption-laden to the least: Welch&#8217;s t test (needs the means to be roughly normal), the Mann&#8211;Whitney test (ranks only; with no ties and so few animals the tool computes the <em>exact</em> p-value, <code>p_method: exact</code>, not the normal approximation), and a permutation test of the means over all %d ways to hand six of the twelve animals to the knockout group.</p>" % t3["permutations"],
+             fig_dots([("wild-type", wt, "pa"), ("knockout", ko, "pb")], 6.5, 12.5, [7, 8, 9, 10, 11, 12], "log2 expression of the gene"),
+             term(shown(a2, "bio.csv"), pretty({"tests": [{k: t2_[k] for k in ("statistic", "p_value", "p_method", "effect_size", "n")}]})),
+             term(shown(a3, "bio.csv"), pretty({"p_method": d3["p_method"], "tests": [{k: t3[k] for k in ("statistic", "p", "extreme", "permutations", "n")}]})),
+             fig_pbars([("Welch t test", t1["p_value"], "pa"), ("Mann\u2013Whitney, exact", t2_["p_value"], "pb"), ("permutation, exact", t3["p"], "pb")]),
+             '<div class="read"><b>Reading it.</b> Welch&#8217;s p is %s: the one very high knockout animal inflates the knockout&#8217;s variance, and the test is cautious. The exact rank test gives p = %s and the exact permutation test p = %s (%d of %d arrangements as extreme). None of these is a Monte Carlo estimate: there is no seed because nothing was drawn. In a small experiment the honest sentence is the one with the method in it: <em>by an exact permutation test, p = %s</em>.</div>' % (num(t1["p_value"], 3), num(t2_["p_value"], 3), num(t3["p"], 3), t3["extreme"], t3["permutations"], num(t3["p"], 3))]))
+        # 8 chemistry ---------------------------------------------------------------------------------------
+        chem = make_chem()
+        files["chem.csv"] = "sample,hplc,uv\n" + "\n".join("%d,%s,%s" % x for x in chem) + "\n"
+        (folder / "chem.csv").write_text(files["chem.csv"])
+        c1 = ["test", "paired", "--pairs", "hplc:uv"]
+        c2 = ["ci", "corr", "--cols", "hplc,uv"]
+        dc1, _ = R.run(c1, "chem.csv")
+        dc2, _ = R.run(c2, "chem.csv")
+        pt = dc1["tests"][0]
+        pc = dc2["intervals"][0]
+        claim(pc["estimate"] > 0.999 and pt["p_value"] < 0.05 and pt["interval"]["high"] < 0 and pc["interval"]["low"] > 0.99, "story 8: r above 0.999 and a paired interval that excludes zero")
+        sections.append(story(8, "Two methods, one sample set", "chemistry: correlation is not agreement", ["test paired", "ci corr"],
+            "&#8220;The UV method is ten times cheaper and it correlates almost perfectly with the HPLC. Can we switch?&#8221; &#8212; the lab manager",
+            ["<p>Twelve caffeine samples were measured by both methods. A correlation coefficient asks whether the two move together; it says nothing about whether they give the <em>same number</em>. The tool answers both questions on the same file: <code>ci corr</code> with a Fisher-z interval for the correlation, and a paired test of the differences, whose mean is the bias between the methods.</p>",
+             term(shown(c2, "chem.csv"), pretty({"intervals": [{k: pc[k] for k in ("x", "y", "n", "estimate", "interval")}]})),
+             term(shown(c1, "chem.csv"), pretty({"tests": [{k: pt[k] for k in ("pair", "statistic", "df", "p_value", "interval", "n")}]})),
+             fig_chem([(h, u) for _, h, u in chem], pt["interval"]["estimate"], pt["interval"]["low"], pt["interval"]["high"]),
+             '<div class="read"><b>Reading it.</b> The correlation is %s, with a 95%% interval %s to %s: the methods move together almost perfectly. The paired differences have a mean of %s mg with a 95%% interval from %s to %s, which excludes zero (p = %s): the UV method reads systematically higher, here by %s per cent of the mean amount. A calibration against the HPLC would fix a bias like this; a correlation of 0.999 could never have shown it. The figure on the right is the same finding as a picture.</div>' % (num(pc["estimate"], 5), num(pc["interval"]["low"], 5), num(pc["interval"]["high"], 5), num(pt["interval"]["estimate"], 3), num(pt["interval"]["low"], 3), num(pt["interval"]["high"], 3), num(pt["p_value"], 3), num(-100 * pt["interval"]["estimate"] / (sum(h for _, h, _ in chem) / len(chem)), 2))]))
+        # 9 physics -----------------------------------------------------------------------------------------
+        phys = make_physics()
+        files["detectors.csv"] = "detector,energy_keV\n" + "\n".join("%s,%s" % x for x in phys) + "\n"
+        (folder / "detectors.csv").write_text(files["detectors.csv"])
+        clock = make_clock()
+        files["clock.csv"] = "t_s\n" + "\n".join(repr(v) for v in clock) + "\n"
+        (folder / "clock.csv").write_text(files["clock.csv"])
+        k1 = ["test", "t2", "--cols", "energy_keV", "--group", "detector"]
+        k2 = ["test", "ks", "--cols", "energy_keV", "--group", "detector", "--exact", "yes"]
+        dk1, _ = R.run(k1, "detectors.csv")
+        dk2, _ = R.run(k2, "detectors.csv")
+        tk1, tk2 = dk1["tests"][0], dk2["tests"][0]
+        e1 = [v for g, v in phys if g == "det1"]
+        e2 = [v for g, v in phys if g == "det2"]
+        ecdf, dpy = fig_ecdf(e1, e2, tk2["statistic"])
+        claim(tk1["p_value"] > 0.5 and tk2["p_value"] < 0.05 and tk2["p_method"].startswith("exact") and abs(dpy - tk2["statistic"]) < 1e-12, "story 9: equal means, a shape the KS test sees; the gap drawn is the statistic printed")
+        k3 = ["describe", "--cols", "t_s"]
+        dk3, _ = R.run(k3, "clock.csv")
+        cv = dk3["columns"][0]
+        fr = [Fraction(v) for v in clock]
+        mean_fr = sum(fr, Fraction(0)) / len(fr)
+        var_exact = float(sum(((x - mean_fr) ** 2 for x in fr), Fraction(0)) / (len(fr) - 1))
+        naive = (sum(v * v for v in clock) / len(clock) - (sum(clock) / len(clock)) ** 2) * len(clock) / (len(clock) - 1)
+        claim(cv["variance"] == var_exact and abs(naive - var_exact) > 1000 * var_exact, "story 9: the tool's variance is the exact one and the textbook one-pass formula in doubles is far from it")
+        sections.append(story(9, "Same source, two detectors", "physics: shape, and digits that cancel", ["test t2", "test ks --exact yes", "describe"],
+            "&#8220;Both detectors see the 662 keV line of the same caesium source. Their average energies agree. Why does the second one look broader?&#8221; &#8212; a detector physicist",
+            ["<p>Thirty counts on each detector. The second detector&#8217;s gain drifted during the run, so its line is split into two close peaks. A comparison of means cannot see that; the two-sample Kolmogorov&#8211;Smirnov test compares the whole distributions, and with 60 values and no ties the tool computes its p-value exactly (<code>--exact yes</code> refuses if it cannot).</p>",
+             term(shown(k1, "detectors.csv"), pretty({"tests": [{k: tk1[k] for k in ("statistic", "df", "p_value", "interval", "n")}]})),
+             term(shown(k2, "detectors.csv"), pretty({"tests": [{k: tk2[k] for k in ("statistic", "p_value", "p_method", "n")}]})),
+             ecdf,
+             '<div class="read"><b>Reading it.</b> The t test sees nothing (p = %s): the two means differ by %s keV out of 662. The largest vertical gap between the two distribution functions is D = %s, and the exact p-value is %s. The drawn gap is the printed statistic.</div>' % (num(tk1["p_value"], 3), num(abs(tk1["interval"]["estimate"]), 2), num(tk2["statistic"], 4), num(tk2["p_value"], 3)),
+             "<p>A second habit of the field: timestamps. Twenty arrivals of the same repeated event, recorded as seconds since 1970 &#8212; a number near 1.7&times;10<sup>9</sup> carrying microseconds of jitter. What is the spread? The textbook one-pass formula, <code>(&Sigma;x&sup2;/n &minus; mean&sup2;) n/(n&minus;1)</code>, is what many spreadsheets and quick scripts compute:</p>",
+             term(shown(k3, "clock.csv"), pretty({"columns": [{k: cv[k] for k in ("count", "mean", "variance", "sd")}]})),
+             '<div class="read"><b>Reading it.</b> The tool&#8217;s variance is %s s&sup2;, which is the exact variance of the twenty recorded numbers rounded once (checked against exact fractions when this page is generated). The one-pass formula in doubles, run on the same twenty numbers, answers %s: the two terms it subtracts are about 2.9&times;10<sup>18</sup> and agree to the last digit that a double holds, so what is left is rounding noise, here about 10<sup>%d</sup> times too large. The sums in <code>stats</code> are exact, so the offset costs nothing.</div>' % (num(cv["variance"], 6), num(naive, 6), int(round(__import__("math").log10(abs(naive / var_exact)))))]))
+        # 10 social science ---------------------------------------------------------------------------------
+        town = make_town()
+        files["town.csv"] = "district,support,satisfaction,education\n" + "\n".join("%s,%s,%d,%s" % x for x in town) + "\n"
+        (folder / "town.csv").write_text(files["town.csv"])
+        s1 = ["ci", "prop", "--cols", "support", "--success", "yes"]
+        s1b = s1 + ["--method", "clopper-pearson"]
+        s2 = ["test", "kruskal", "--cols", "satisfaction", "--group", "district"]
+        s3 = ["test", "chisq", "--cols", "support", "--vs", "education"]
+        ds1, _ = R.run(s1, "town.csv")
+        ds1b, _ = R.run(s1b, "town.csv")
+        ds2, _ = R.run(s2, "town.csv")
+        ds3, _ = R.run(s3, "town.csv")
+        i1, i1b = ds1["intervals"][0], ds1b["intervals"][0]
+        ts2, ts3 = ds2["tests"][0], ds3["tests"][0]
+        mr = dict(zip(ds2["levels"], ts2["mean_rank"]))
+        claim(mr["North"] < mr["Centre"] < mr["South"] and ts3["assumptions"]["expected_below_5"] == 0, "story 10: mean ranks rise from North to South and no expected count is below 5")
+        claim(i1["interval"]["low"] < 0.5 and i1["interval"]["high"] > 0.5 and (i1b["interval"]["high"] - i1b["interval"]["low"]) > (i1["interval"]["high"] - i1["interval"]["low"]) and ts2["p_value"] < 0.01 and ts3["p_value"] > 0.2, "story 10: the interval of the share contains one half, Clopper-Pearson is wider than Wilson, Kruskal-Wallis shows a district effect and chi-square shows no education effect")
+        likert = [(d, [sum(1 for r in town if r[0] == d and r[2] == lv) for lv in range(1, 6)]) for d in ("North", "Centre", "South")]
+        sections.append(story(10, "What does the town think?", "social science: ordinal answers and honest intervals", ["ci prop", "test kruskal", "test chisq"],
+            "&#8220;A hundred and fifty residents answered. Does the town support the new bus line? Do the districts feel the same?&#8221; &#8212; a council analyst",
+            ["<p>Survey data are counts and ordinal scales, and the usual mistakes are treating a Likert score as a measurement on a ruler and quoting a share without its uncertainty. First the share: the Wilson interval is the default, and Clopper&#8211;Pearson (the exact binomial interval) is one flag away and always the wider.</p>",
+             term(shown(s1, "town.csv"), pretty({"intervals": [{"column": i1["column"], "estimate": i1["estimate"], "interval": i1["interval"], "n": i1["n"]}]})),
+             term(shown(s1b, "town.csv"), pretty({"intervals": [{"column": i1b["column"], "estimate": i1b["estimate"], "interval": i1b["interval"]}]})),
+             fig_prop([("Wilson", i1["estimate"], i1["interval"]["low"], i1["interval"]["high"]), ("Clopper\u2013Pearson", i1b["estimate"], i1b["interval"]["low"], i1b["interval"]["high"])]),
+             '<div class="read"><b>Reading it.</b> %s of the sample support the line. Both intervals contain one half, so &#8220;a majority supports it&#8221; is not something this sample can claim; the exact interval is wider, as it must be.</div>' % num(i1["estimate"], 3),
+             "<p>Second, do the districts feel the same? Satisfaction is on a 1&#8211;5 scale: an order, not a ruler. The Kruskal&#8211;Wallis test uses only the order, and prints the number of ties and the mean rank of each district. Third, is support related to education? Counts in a table call for the chi-square test of independence; its answer carries the smallest expected count and how many are below 5, so that the reader can see the test applies.</p>",
+             fig_likert(likert),
+             term(shown(s2, "town.csv"), pretty({"levels": ds2["levels"], "tests": [{k: ts2[k] for k in ("statistic", "df", "p_value", "effect_size", "n", "mean_rank", "ties")}]})),
+             term(shown(s3, "town.csv"), pretty({"tests": [{k: ts3[k] for k in ("statistic", "df", "p_value", "effect_size", "n", "assumptions")}]})),
+             '<div class="read"><b>Reading it.</b> The districts differ clearly (Kruskal&#8211;Wallis p = %s): satisfaction rises from the North to the South, as the bars show. Support for the line shows no sign of depending on education (chi-square p = %s). Two different questions, two answers, and each with the test that suits the kind of data.</div>' % (num(ts2["p_value"], 3), num(ts3["p_value"], 3))]))
     return sections, files
 
 
 def page(sections):
     index = (DOCS / "index.html").read_text()
     style = re.search(r"<style>(.*?)</style>", index, re.S).group(1)
-    nav = ' '.join('<a class="opt" href="#s%d">%d</a>' % (i, i) for i in range(1, 7))
-    toc = "".join('<a href="#s%d">%d &middot; %s</a>' % (i, i, esc(tt)) for i, tt in enumerate(("Look", "One question", "Outliers", "Six tests", "Exact counts", "Same bytes"), 1))
+    nav = ' '.join('<a class="opt" href="#s%d">%d</a>' % (i, i) for i in range(1, 11))
+    toc = "".join('<a href="#s%d">%d &middot; %s</a>' % (i, i, esc(tt)) for i, tt in enumerate(("Look", "One question", "Outliers", "Six tests", "Exact counts", "Same bytes", "Mice", "Chemistry", "Detectors", "Survey"), 1))
     return """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>cancho-stats: six stories, one bakery</title>
-<meta name="description" content="Six end-to-end examples of cancho-stats, in increasing complexity, told as one story about a bakery: every number and every figure is drawn from a real run.">
+<title>cancho-stats: ten stories, from a bakery to the lab</title>
+<meta name="description" content="Ten end-to-end examples of cancho-stats, in increasing complexity: a bakery, then biology, chemistry, physics and a social survey. Every number and every figure is drawn from a real run.">
 <meta name="color-scheme" content="light dark">
 <style>%s%s</style>
 </head>
@@ -455,10 +728,10 @@ def page(sections):
   <nav>%s<a href=".">Overview</a><a href="https://github.com/alpibrusl/cancho-stats">GitHub</a></nav>
 </div></header>
 <div class="wrap hero small">
-  <h1>Six stories, one bakery.</h1>
-  <p class="sub">Marta has bought a second oven and wants to know whether it was a good idea. Each story asks a little more of the tool than the last. Every number and every figure below is drawn from a real run of <code>stats</code> on the data you can download. The data are invented, with effects planted on purpose (B bakes faster and rises higher, three of its batches run long, the crust, weight and salt do not differ, A has more defects); the runs are real, and the narration is checked against the numbers whenever the page is generated.</p>
+  <h1>Ten stories, from a bakery to the lab.</h1>
+  <p class="sub">Marta has bought a second oven and wants to know whether it was a good idea; six stories follow her, each asking a little more of the tool than the last. Then four short ones from the sciences: biology, chemistry, physics and a social survey. Every number and every figure below is drawn from a real run of <code>stats</code> on the data you can download. The data are invented, with effects planted on purpose (B bakes faster and rises higher, three of its batches run long, the crust, weight and salt do not differ, A has more defects); the runs are real, and the narration is checked against the numbers whenever the page is generated.</p>
   <div class="toc">%s</div>
-  <p class="data">Data (invented, seeded): <a href="stories/bakery.csv">bakery.csv</a> (80 batches), <a href="stories/pilot.csv">pilot.csv</a> (the first four batches of each oven). Rebuild this page: <code>python3 scripts/gen_stories.py</code>.</p>
+  <p class="data">Data (invented, seeded): <a href="stories/bakery.csv">bakery.csv</a> (80 batches), <a href="stories/pilot.csv">pilot.csv</a> (the first four batches of each oven), and for part II <a href="stories/bio.csv">bio.csv</a>, <a href="stories/chem.csv">chem.csv</a>, <a href="stories/detectors.csv">detectors.csv</a>, <a href="stories/clock.csv">clock.csv</a>, <a href="stories/town.csv">town.csv</a>. Rebuild this page: <code>python3 scripts/gen_stories.py</code>.</p>
 </div>
 %s
 <footer><div class="wrap">cancho-stats &middot; EUPL-1.2 &middot; the data are invented; the runs, the digits and the figures are real &middot; <a href=".">overview</a></div></footer>
