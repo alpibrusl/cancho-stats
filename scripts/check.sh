@@ -29,7 +29,7 @@ step "stats test prop"; $PY scripts/gate_test4.py --files 300; $PY scripts/gate_
 step "stats test --correct"; $PY scripts/gate_test5.py --files 100; $PY scripts/gate_test5_calibration.py --replicates 1000
 step "stats test anova"; $PY scripts/gate_anova.py --files 200 --scipy; $PY scripts/gate_anova_calibration.py --replicates 1000
 step "stats test kruskal"; $PY scripts/gate_kruskal.py --files 200 --scipy; $PY scripts/gate_kruskal_calibration.py --replicates 1000
-step "stats ci prop"; $PY scripts/gate_ci_prop.py --files 200; $PY scripts/gate_ci_prop_coverage.py; $PY scripts/gate_ci_mean.py --files 200; $PY scripts/gate_ci_corr.py --files 200; $PY scripts/gate_ci_boot.py --files 100
+step "stats ci prop"; $PY scripts/gate_ci_prop.py --files 200; $PY scripts/gate_ci_prop_coverage.py; $PY scripts/gate_ci_mean.py --files 200; $PY scripts/gate_ci_corr.py --files 200; $PY scripts/gate_ci_boot.py --files 100; $PY scripts/gate_resample_perm.py --files 100; $PY scripts/gen_stories.py --check
 step "stats corr --exact"; $PY scripts/gate_corr_exact.py --files 200 --scipy
 step "stats test fisher"; $PY scripts/gate_fisher.py --files 200 --scipy
 step "stats test ks"; $PY scripts/gate_ks.py --files 200 --scipy; $PY scripts/gate_ks_calibration.py --replicates 1000
@@ -43,6 +43,6 @@ step "determinism"; $PY scripts/xplat_fp.py; $PY scripts/xplat_fp.py --mutants |
 if [ "$1" = "--full" ]; then
   step "accuracy sweeps (10%)"; $PY scripts/gate_special.py --n-scale 0.1
   step "mutants of the special functions"; $PY scripts/mutants_special.py
-  step "mutants of the big integers, the power sums and stats"; $PY scripts/mutants_bigint.py; $PY scripts/mutants_psum.py; $PY scripts/mutants_xsum.py; $PY scripts/mutants_stats.py; $PY scripts/mutants_central.py; $PY scripts/mutants_quantile.py; $PY scripts/mutants_histogram.py; $PY scripts/mutants_levels.py; $PY scripts/mutants_by.py; $PY scripts/mutants_cols.py; $PY scripts/mutants_corr.py; $PY scripts/mutants_test.py; $PY scripts/mutants_test2.py; $PY scripts/mutants_test3.py; $PY scripts/mutants_test4.py; $PY scripts/mutants_test5.py; $PY scripts/mutants_anova.py; $PY scripts/mutants_kruskal.py; $PY scripts/mutants_mannwhitney.py; $PY scripts/mutants_wilcoxon.py; $PY scripts/mutants_ks.py; $PY scripts/mutants_fisher.py; $PY scripts/mutants_corrx.py; $PY scripts/mutants_ci.py; $PY scripts/mutants_boot.py
+  step "mutants of the big integers, the power sums and stats"; $PY scripts/mutants_bigint.py; $PY scripts/mutants_psum.py; $PY scripts/mutants_xsum.py; $PY scripts/mutants_stats.py; $PY scripts/mutants_central.py; $PY scripts/mutants_quantile.py; $PY scripts/mutants_histogram.py; $PY scripts/mutants_levels.py; $PY scripts/mutants_by.py; $PY scripts/mutants_cols.py; $PY scripts/mutants_corr.py; $PY scripts/mutants_test.py; $PY scripts/mutants_test2.py; $PY scripts/mutants_test3.py; $PY scripts/mutants_test4.py; $PY scripts/mutants_test5.py; $PY scripts/mutants_anova.py; $PY scripts/mutants_kruskal.py; $PY scripts/mutants_mannwhitney.py; $PY scripts/mutants_wilcoxon.py; $PY scripts/mutants_ks.py; $PY scripts/mutants_fisher.py; $PY scripts/mutants_corrx.py; $PY scripts/mutants_ci.py; $PY scripts/mutants_boot.py; $PY scripts/mutants_perm.py
 fi
 echo; echo "check.sh: all gates passed"

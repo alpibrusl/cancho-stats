@@ -39,6 +39,7 @@ import gate_corr_exact  # noqa: E402
 import gate_ci_prop  # noqa: E402
 import gate_ci_corr  # noqa: E402
 import gate_ci_boot  # noqa: E402
+import gate_resample_perm  # noqa: E402
 import gate_test2  # noqa: E402
 import gate_test  # noqa: E402
 import gate_wilcoxon  # noqa: E402
@@ -553,6 +554,34 @@ def ci_bca_lines(stats):
     return out
 
 
+def resample_perm_lines(stats):
+    """`stats resample perm` on 6 seeded CSV files of the groups of scripts/gate_test2.py (two labels, missing cells), Monte Carlo with a seed across the range and, where the arrangements are few, `--permutations all`: the hash of the
+    bytes of the answers. The shuffle is SplitMix64 and the comparison exact integers, so the same bytes on every platform is the claim; the only floating-point steps are two divisions and a square root."""
+    out = []
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        r = gate_special.SM64(149)
+        done = 0
+        fi = len(gate_test2.FIXED2)
+        while done < 6:
+            names, rows, gcol, labels, shapes, vidx, variance, level = gate_test2.gen_t2(r, fi)
+            fi += 1
+            num = [j for j in vidx if gate_test.numeric([rw[j] for rw in rows])]
+            gl = sorted(set(rw[gcol] for rw in rows if rw[gcol] != ""))
+            if not num or len(gl) != 2 or len(rows) > 60:
+                continue
+            cols = ",".join(names[j] for j in num)
+            h = hashlib.sha256()
+            seed = gate_resample_perm.SEEDS[int(r.next() % len(gate_resample_perm.SEEDS))]
+            for argv in (["--cols", cols, "--group", names[gcol], "--seed", str(seed), "--permutations", "200"],
+                         ["--cols", cols, "--group", names[gcol], "--permutations", "all"]):
+                p = gate_resample_perm.run(stats, tmp, names, rows, argv)
+                h.update(("exit %d %s" % (p.returncode, p.stdout)).encode())
+            out.append("resample-perm\tfile%02d\t%d\t%s" % (done, len(rows), h.hexdigest()))
+            done += 1
+    return out
+
+
 def wilcoxon_lines(stats):
     """`stats test wilcoxon` on 8 seeded CSV files (pairs of columns with zero differences and heavy ties, sizes up to 200, the shapes of scripts/gate_wilcoxon.py), with the three methods for zeros, `--exact no` and
     `--continuity none`, and the one-sample form: the hash of the bytes of the answers."""
@@ -618,6 +647,7 @@ def fingerprint(driver, acc, threads_check=True, stats=None):
         lines += ci_corr_lines(stats)
         lines += ci_boot_lines(stats)
         lines += ci_bca_lines(stats)
+        lines += resample_perm_lines(stats)
     return lines, bad
 
 

@@ -1,0 +1,359 @@
+edition 5;
+
+module csvx.perm;
+
+import std.buffer;
+import std.bytes;
+import std.json;
+import std.map;
+import std.math;
+import std.vec;
+import csvx.boot;
+import csvx.pick;
+import csvx.rule;
+import csvx.run;
+import csvx.scan;
+import flt;
+import metrics.rank;
+import stest.answer;
+import stest.permute;
+import toolbox.cli;
+import toolbox.fail;
+import toolbox.place;
+
+// `stats resample perm` (docs/resample.md section 15): the permutation test of the difference of the means of each column named by --cols between the two groups of --group, Monte Carlo or exact. The pooled vector of a column
+// is the present values of group a in file order, then those of group b.
+
+fn float_of_bits(bits: int) -> [] float {
+    var key = bits;
+    if bits < 0 {
+        key = bits ^ 0x7fffffffffffffff;
+    }
+    return flt.float_of_key(key);
+}
+
+// C(m, k) or 2^20 + 1 where it is larger
+fn binomial_capped(m: int, k0: int) -> [] int {
+    var k = k0;
+    if k > m - k {
+        k = m - k;
+    }
+    var c = 1;
+    var i = 1;
+    while i <= k {
+        c = c * (m - k + i) / i;
+        if c > 1048576 {
+            return 1048577;
+        }
+        i = i + 1;
+    }
+    return c;
+}
+
+// The refusals of the flags that need no file. Answers (errors, seed, permutations; -1 for all).
+pub fn check_flags[&h, &g, &p](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, table: &static [byte], errs: fail.Errors) -> [heap, args] (fail.Errors, int, int) {
+    var e = errs;
+    var perms = 0 - 1;
+    let pt = cli.text(args, parsed, table, "permutations");
+    if !bytes.equal(pt, "all") {
+        var v = 0;
+        var ok = len(pt) > 0 && len(pt) <= 7;
+        var i = 0;
+        while ok && i < len(pt) {
+            let c = int_of(pt[i]);
+            if c < 48 || c > 57 {
+                ok = false;
+            } else {
+                v = v * 10 + c - 48;
+            }
+            i = i + 1;
+        }
+        if !ok || v < 100 || v > 1000000 {
+            e = rule.refuse(heap, e, "args.bad-value", "--permutations is all, or a whole number from 100 to 1000000", "--permutations 9999, or --permutations all", "flag", "--permutations");
+        } else {
+            perms = v;
+        }
+    }
+    var seed = 0;
+    if !bytes.equal(pt, "all") && !cli.has(parsed, table, "seed") {
+        e = rule.refuse(heap, e, "stats.seed-required", "a Monte Carlo test needs --seed: an unseeded draw is not reproducible", "stats resample perm --cols A --group G --seed 1 FILE, or --permutations all", "flag", "--seed");
+    }
+    if cli.has(parsed, table, "seed") {
+        let (v, ok) = boot.parse_seed(cli.text(args, parsed, table, "seed"));
+        seed = v;
+        if !ok {
+            e = rule.refuse(heap, e, "args.bad-value", "--seed is an integer from 0 to 4611686018427387903", "--seed 20240229", "flag", "--seed");
+        }
+    }
+    if cli.has(parsed, table, "statistic") && !bytes.equal(cli.text(args, parsed, table, "statistic"), "mean-diff") {
+        e = rule.refuse(heap, e, "args.bad-value", "resample perm so far has the statistic mean-diff", "use --statistic mean-diff, or drop --statistic", "statistic", cli.text(args, parsed, table, "statistic"));
+    }
+    return (e, seed, perms);
+}
+
+// the keys of the present cells of column j of the store, appended to out from position at; answers the new position
+fn gather[&sv, &o](store: &sv vec.Vec[int], rows: int, ncols: int, j: int, out: &!o [int], at: int) -> [] int {
+    var m = at;
+    var r = 0;
+    while r < rows {
+        let k = vec.get(store, r * ncols + j);
+        if k != rank.min_int() {
+            out[m] = k;
+            m = m + 1;
+        }
+        r = r + 1;
+    }
+    return m;
+}
+
+fn put_entry[&h, &n, &en, &v](heap: &!h Heap, w0: json.Writer, names: &n [byte], ends: &en vec.Vec[int], j: int, vals: &v [int], na: int, nb: int, rows_a: int, rows_b: int, missing: int, seed: int, perms: int) -> [heap] json.Writer {
+    var w = w0;
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "column");
+    w = answer.put_name(heap, w, names, ends, j);
+    let m = na + nb;
+    var reason = "";
+    var t = 0.0;
+    var p = 0.0;
+    var count = 0;
+    var total = 0;
+    var ok = false;
+    if na < 1 || nb < 1 {
+        reason = "too-few-rows";
+    } else {
+        let ans = box_slice(heap, 8, 0);
+        borrow mut ans as &!aw in {
+            if perms < 0 {
+                permute.mean_diff_all(heap, vals[0..m], m, na, contents(aw));
+            } else {
+                permute.mean_diff_mc(heap, vals[0..m], m, na, seed, perms, contents(aw));
+            }
+            if contents(aw)[2] == 0 {
+                ok = true;
+                t = float_of_bits(contents(aw)[1]);
+                count = contents(aw)[0];
+                total = contents(aw)[3];
+            } else {
+                reason = "statistic-beyond-double";
+            }
+        }
+        unbox_slice(heap, ans);
+        if ok {
+            if perms < 0 {
+                p = float_of(count) / float_of(total);
+            } else {
+                p = float_of(1 + count) / float_of(total + 1);
+            }
+        }
+    }
+    w = json.put_key(heap, w, "statistic");
+    if ok {
+        w = json.put_float(heap, w, t);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "p");
+    if ok {
+        w = json.put_float(heap, w, p);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "extreme");
+    if ok {
+        w = json.put_int(heap, w, count);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "permutations");
+    if ok {
+        w = json.put_int(heap, w, total);
+    } else {
+        w = json.put_null(heap, w);
+    }
+    w = json.put_key(heap, w, "n");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "a");
+    w = json.put_int(heap, w, na);
+    w = json.put_key(heap, w, "b");
+    w = json.put_int(heap, w, nb);
+    w = json.put_key(heap, w, "missing");
+    w = json.put_int(heap, w, missing);
+    w = json.end_object(heap, w);
+    if ok && perms >= 0 {
+        w = json.put_key(heap, w, "mc_error");
+        w = json.put_float(heap, w, sqrt(p * (1.0 - p) / float_of(perms)));
+    }
+    if len(reason) > 0 {
+        w = json.put_key(heap, w, "reason");
+        w = json.put_string(heap, w, reason);
+    }
+    w = json.end_object(heap, w);
+    return w;
+}
+
+pub fn perm[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], table: &static [byte], seed: int, perms: int, w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
+    var w = w0;
+    var e = errs;
+    match place.open_operand(fs, root, rel, full) {
+        Opened::Failed(reason) => {
+            e = fail.io_error(heap, e, reason, false, rel);
+        }
+        Opened::Ok(opened) => {
+            var file = opened;
+            borrow mut file as &!handle in {
+                let (groups, by, e1) = scan.discover(heap, handle, rel, cli.text(args, parsed, table, "group"), int_of(cli.text(args, parsed, table, "delim")[0]), cli.nat(args, parsed, table, "max-line-bytes"), cli.nat(args, parsed, table, "max-rows"), cli.nat(args, parsed, table, "max-cols"), cli.nat(args, parsed, table, "max-groups"), e);
+                e = e1;
+                var clean = false;
+                borrow e as &er1 in {
+                    clean = fail.count(er1) == 0;
+                }
+                borrow groups as &gr in {
+                    let nlevels = map.size(gr.m);
+                    if clean && nlevels != 2 {
+                        clean = false;
+                        e = rule.refuse_int(heap, e, "stats.group-levels", "--group names a column that does not have exactly two levels", "give --group a column with two levels, or filter the file to two of them", "levels", nlevels, "missing", gr.nulls);
+                    }
+                    if clean {
+                        let key_a = map.key_at(gr.m, contents(gr.order)[0]);
+                        let key_b = map.key_at(gr.m, contents(gr.order)[1]);
+                        let (names, ends, cols_a, store_a, info_a, e2) = run.read_group(heap, args, parsed, fs, root, rel, full, table, by, key_a, e);
+                        let (names_b, ends_b, cols_b, store_b, info_b, e3) = run.read_group(heap, args, parsed, fs, root, rel, full, table, by, key_b, e2);
+                        e = e3;
+                        borrow e as &er2 in {
+                            clean = fail.count(er2) == 0;
+                        }
+                        if clean {
+                            let nc = info_a.ncols;
+                            let sel = box_slice(heap, nc + 1, 0);
+                            var st = 0;
+                            var item = 0;
+                            borrow names as &nb0 in {
+                                borrow ends as &eb0 in {
+                                    borrow mut sel as &!sw0 in {
+                                        let (s1, i1) = pick.select(buffer.bytes(nb0), eb0, nc, cli.text(args, parsed, table, "cols"), contents(sw0));
+                                        st = s1;
+                                        item = i1;
+                                    }
+                                }
+                            }
+                            if st != 0 {
+                                clean = false;
+                                e = rule.refuse_pick(heap, e, st, bytes.field(cli.text(args, parsed, table, "cols"), ',', item + 1), false);
+                            }
+                            if clean {
+                                borrow cols_a as &ca in {
+                                    borrow cols_b as &cb in {
+                                        borrow sel as &sr in {
+                                            borrow names as &nb1 in {
+                                                borrow ends as &eb1 in {
+                                                    e = pick.check_numeric(heap, nb1, eb1, contents(sr), nc, contents(ca.numeric), contents(ca.bad), contents(cb.numeric), contents(cb.bad), e);
+                                                    var j = 0;
+                                                    while j < nc {
+                                                        let na = contents(ca.numeric)[j];
+                                                        let nbb = contents(cb.numeric)[j];
+                                                        if contents(sr)[j] == 1 && na >= 1 && nbb >= 1 && clean {
+                                                            let m = na + nbb;
+                                                            var work = perms * m;
+                                                            if perms < 0 {
+                                                                let cc = binomial_capped(m, na);
+                                                                if cc > 1048576 {
+                                                                    clean = false;
+                                                                    e = rule.refuse_int(heap, e, "limit.exact-too-large", "more arrangements of the labels than the exact test enumerates", "use --permutations N for the Monte Carlo test", "limit", 1048576, "values", m);
+                                                                }
+                                                                work = cc * na;
+                                                            }
+                                                            if clean && work > cli.nat(args, parsed, table, "max-work") {
+                                                                clean = false;
+                                                                e = rule.refuse_int(heap, e, "limit.too-much-work", "permutations times values is above --max-work", "raise --max-work, or lower --permutations", "limit", cli.nat(args, parsed, table, "max-work"), "work", work);
+                                                            }
+                                                        }
+                                                        j = j + 1;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                borrow e as &er3 in {
+                                    if fail.count(er3) != 0 {
+                                        clean = false;
+                                    }
+                                }
+                            }
+                            if clean {
+                                borrow store_a as &sa in {
+                                    borrow store_b as &sb in {
+                                        borrow sel as &sr3 in {
+                                            borrow names as &nb in {
+                                                borrow ends as &eb in {
+                                                    w = json.put_key(heap, w, "resample");
+                                                    w = json.put_string(heap, w, "perm");
+                                                    w = json.put_key(heap, w, "statistic");
+                                                    w = json.put_string(heap, w, "mean-diff");
+                                                    w = json.put_key(heap, w, "group");
+                                                    w = json.put_string(heap, w, cli.text(args, parsed, table, "group"));
+                                                    w = json.put_key(heap, w, "levels");
+                                                    w = json.begin_object(heap, w);
+                                                    w = json.put_key(heap, w, "a");
+                                                    w = json.put_string(heap, w, key_a);
+                                                    w = json.put_key(heap, w, "b");
+                                                    w = json.put_string(heap, w, key_b);
+                                                    w = json.end_object(heap, w);
+                                                    w = json.put_key(heap, w, "rows");
+                                                    w = json.put_int(heap, w, info_a.rows + info_b.rows + gr.nulls);
+                                                    w = json.put_key(heap, w, "p_method");
+                                                    if perms < 0 {
+                                                        w = json.put_string(heap, w, "exact");
+                                                    } else {
+                                                        w = json.put_string(heap, w, "monte-carlo");
+                                                        w = json.put_key(heap, w, "seed");
+                                                        w = json.put_int(heap, w, seed);
+                                                    }
+                                                    w = json.put_key(heap, w, "assumptions");
+                                                    w = json.begin_object(heap, w);
+                                                    w = json.put_key(heap, w, "shuffle");
+                                                    w = json.put_string(heap, w, "Fisher-Yates of the pooled values (group a then group b) from the end: i = m - 1 - d, z = mix(s_b + (d + 1) gold), j = (z >> 1) mod (i + 1), swap x[i] and x[j]; group a* is x[0 .. n_a)");
+                                                    w = json.put_key(heap, w, "stream");
+                                                    w = json.put_string(heap, w, "s_b = derive(derive(seed, 2), b), b from 0");
+                                                    w = json.end_object(heap, w);
+                                                    w = json.put_key(heap, w, "tests");
+                                                    w = json.begin_array(heap, w);
+                                                    let pool = box_slice(heap, info_a.rows + info_b.rows + 1, 0);
+                                                    borrow mut pool as &!pw in {
+                                                        var j = 0;
+                                                        while j < nc {
+                                                            if contents(sr3)[j] == 1 {
+                                                                let ma = gather(sa, info_a.rows, nc, j, contents(pw), 0);
+                                                                let mb = gather(sb, info_b.rows, nc, j, contents(pw), ma);
+                                                                w = put_entry(heap, w, buffer.bytes(nb), eb, j, contents(pw), ma, mb - ma, info_a.rows, info_b.rows, info_a.rows + info_b.rows - mb, seed, perms);
+                                                            }
+                                                            j = j + 1;
+                                                        }
+                                                    }
+                                                    unbox_slice(heap, pool);
+                                                    w = json.end_array(heap, w);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            unbox_slice(heap, sel);
+                        }
+                        buffer.drop(heap, names);
+                        vec.drop(heap, ends);
+                        scan.drop_cols(heap, cols_a);
+                        vec.drop(heap, store_a);
+                        buffer.drop(heap, names_b);
+                        vec.drop(heap, ends_b);
+                        scan.drop_cols(heap, cols_b);
+                        vec.drop(heap, store_b);
+                    }
+                }
+                scan.drop_groups(heap, groups);
+            }
+            file_close(file);
+        }
+    }
+    return (w, e);
+}

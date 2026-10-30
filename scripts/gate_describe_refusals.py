@@ -494,6 +494,39 @@ CASES = [
     ('ci: diff --method', b'a,g\n1,x\n2,y\n3,y\n', ['ci','diff','--cols','a','--group','g','--method','bca','f.csv'], 'args.bad-value', 2),
     ('ci: prop --method bca', b'o\ny\nn\n', ['ci','prop','--cols','o','--success','y','--method','bca','f.csv'], 'args.bad-value', 2),
     ('ci: corr --method bca', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','corr','--method','bca','f.csv'], 'args.bad-value', 2),
+    ('resample: perm', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','100','f.csv'], None, 0),
+    ('resample: perm default permutations', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--seed','1','f.csv'], None, 0),
+    ('resample: perm exact', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--permutations','all','f.csv'], None, 0),
+    ('resample: perm exact with a seed', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--permutations','all','--seed','3','f.csv'], None, 0),
+    ('resample: perm statistic mean-diff', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','100','--statistic','mean-diff','f.csv'], None, 0),
+    ('resample: perm statistic median', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','100','--statistic','median','f.csv'], 'args.bad-value', 2),
+    ('resample: perm no seed', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--permutations','100','f.csv'], 'stats.seed-required', 2),
+    ('resample: perm seed 2^62', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--seed','4611686018427387904','--permutations','100','f.csv'], 'args.bad-value', 2),
+    ('resample: perm permutations 99', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','99','f.csv'], 'args.bad-value', 2),
+    ('resample: perm permutations 1000001', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','1000001','f.csv'], 'args.bad-value', 2),
+    ('resample: perm permutations text', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','many','f.csv'], 'args.bad-value', 2),
+    ('resample: perm permutations colon', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','1000:','f.csv'], 'args.bad-value', 2),
+    ('resample: perm permutations 1000000', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','1000000','--max-work','6000000','f.csv'], None, 0),
+    ('resample: perm no --cols', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--group','g','--seed','1','f.csv'], 'stats.test-columns', 2),
+    ('resample: perm no --group', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--seed','1','f.csv'], 'stats.test-columns', 2),
+    ('resample: no kind', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample'], 'args.missing-operand', 2),
+    ('resample: unknown kind', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','shuffle','--cols','x','--group','g','--seed','1','f.csv'], 'args.bad-value', 2),
+    ('resample: kind alone', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm'], 'args.missing-operand', 2),
+    ('resample: perm no such column', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','z','--group','g','--seed','1','--permutations','100','f.csv'], 'stats.no-such-column', 2),
+    ('resample: perm no such group column', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','z','--seed','1','--permutations','100','f.csv'], 'stats.no-such-column', 2),
+    ('resample: perm three levels', b'x,g\n1,a\n2,b\n3,c\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','100','f.csv'], 'stats.group-levels', 2),
+    ('resample: perm one level', b'x,g\n1,a\n2,a\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','100','f.csv'], 'stats.group-levels', 2),
+    ('resample: perm text column', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','g','--group','g','--seed','1','--permutations','100','f.csv'], 'stats.non-numeric', 2),
+    ('resample: perm a group with no values', b'x,g\n1,a\n2,a\n,b\n,b\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','100','f.csv'], None, 0),
+    ('resample: perm one value in each group', b'x,g\n1,a\n2,b\n', ['resample','perm','--cols','x','--group','g','--permutations','all','f.csv'], None, 0),
+    ('resample: perm exact too large', b'x,g\n0,a\n1,a\n2,a\n3,a\n4,a\n5,a\n6,a\n7,a\n8,a\n9,a\n10,a\n11,a\n12,a\n13,a\n14,a\n15,a\n16,a\n17,a\n18,a\n19,a\n20,b\n21,b\n22,b\n23,b\n24,b\n25,b\n26,b\n27,b\n28,b\n29,b\n30,b\n31,b\n32,b\n33,b\n34,b\n35,b\n36,b\n37,b\n38,b\n39,b\n', ['resample','perm','--cols','x','--group','g','--permutations','all','f.csv'], 'limit.exact-too-large', 8),
+    ('resample: perm exact at the limit of work', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--permutations','all','--max-work','60','f.csv'], None, 0),
+    ('resample: perm too much work', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','100','--max-work','599','f.csv'], 'limit.too-much-work', 8),
+    ('resample: perm work at the limit', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','100','--max-work','600','f.csv'], None, 0),
+    ('resample: perm exact too much work', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--permutations','all','--max-work','59','f.csv'], 'limit.too-much-work', 8),
+    ('resample: perm rows limit', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','100','--max-rows','2','f.csv'], 'limit.too-many-rows', 8),
+    ('resample: perm ragged', b'x,g\n1,a\n2\n', ['resample','perm','--cols','x','--group','g','--seed','1','--permutations','100','f.csv'], 'stats.csv-ragged', 8),
+    ('resample: perm two files', b'x,g\n1,a\n2,a\n3,a\n4,b\n7,b\n9,b\n', ['resample','perm','--cols','x','--group','g','--seed','1','f.csv','f.csv'], 'args.missing-operand', 2),
     # --correct and --max-tests (docs/test.md section 12)
     ("test: t1 holm", b"a,b,c\n1,5,3\n2,5,3\n4,1,3\n", ["test", "t1", "--cols", "a,b,c", "--correct", "holm", "f.csv"], None, 0),
     ("test: t1 bh with a constant column", b"a,b\n1,3\n2,3\n4,3\n", ["test", "t1", "--cols", "a,b", "--correct", "bh", "f.csv"], None, 0),
@@ -648,7 +681,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 73)
+            k = int(r.next() % 76)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -777,6 +810,12 @@ def main():
                 argv = ["ci", "boot", "--cols", "b", "--method", "bca", "--statistic", "skewness", "--seed", "3", "--replicates", "100", "--level", "0.5", "f.csv"]
             elif k == 72:
                 argv = ["ci", "boot", "--cols", "a", "--method", "bca", "--statistic", "trimmed-mean", "--trim", "0.2", "--seed", "4", "--replicates", "100", "--max-rows", "5", "f.csv"]
+            elif k == 73:
+                argv = ["resample", "perm", "--cols", "a", "--group", "b", "--seed", str(int(r.next() % 100)), "--permutations", "100", "f.csv"]
+            elif k == 74:
+                argv = ["resample", "perm", "--cols", "a,b", "--group", "c", "--permutations", "all", "f.csv"]
+            elif k == 75:
+                argv = ["resample", "perm", "--cols", "b", "--group", "a", "--seed", "5", "--permutations", "100", "--max-rows", "4", "f.csv"]
             elif k == 27:
                 argv = ["test", "prop", "--cols", "a", "--success", "1", "f.csv"]
             elif k == 28:
