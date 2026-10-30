@@ -34,7 +34,7 @@ No verb is built here. The code of S0 is a library (`lib/special`) and a driver 
 
 | repository | stores | rev | state |
 |---|---|---|---|
-| `alpibrusl/cancho` | the compiler, `cancho = "<rev>"` of `[package]` | `dcf6751951590aa7f3427001eca3bef0d6677f3b` | **[read]** the second release built by cancho, which CI installs instead of building the compiler; before it, `f4ead824f33b291a0ad7620a34a0c1346a7abe4f` |
+| `alpibrusl/cancho` | the compiler, `cancho = "<rev>"` of `[package]` | `2bd251f7f9354fe43d48055b3d9fe4d4af007a5c` | **[read]** the second release built by cancho, which CI installs instead of building the compiler; before it, `f4ead824f33b291a0ad7620a34a0c1346a7abe4f` |
 | `alpibrusl/cancho-table` | `dec`, `facc`, `flt`, `pow5`, `reader` | `202b214372a03ec6ed8ca841357f3d2ed4de8aa0` | **[read]** merge commit of cancho-table#44, the rev `cancho-ml` pins (its `docs/reader.md` section 1.3) |
 | `alpibrusl/cancho-tools` | the contract package: `cli`, `describe`, `fail`, `limit`, `lines`, `out`, `path`, `place`, `text` (`toolbox.<name>`) | `8dab9176e521660333914dc768a80a29330a2a8e` | **[read]** the rev `cancho-ml` pins; the nine it lists |
 | `alpibrusl/cancho-ml` | the 23 numeric modules of cancho-ml#46 (`ml.refuse`, `ml.limits`, `ml.rng`, `ml.exact`, `ml.fbits`, `ml.fsq`, `ml.matrix`, `linalg.{order,tensor,dot,axpy,gemv,syrk,gemm,chol,par}`, `metrics.{rules,ratio,classify,sums,regress,rank,splits}`) | `99e9b64afb4f1ca191a4209dea1306720da43b2f` | merge commit `99e9b64` of cancho-ml PR #51 (issue #46); its `.cancho-vcs` is byte-identical to the local branch head `2de565c` the design was first measured on (`git diff` empty) |
@@ -44,7 +44,7 @@ labels are the module's short name, as in `cancho-ml`'s `cancho.toml`.
 
 ### 2.0 The pinned set, as the check reads it
 
-cancho rev: `dcf6751951590aa7f3427001eca3bef0d6677f3b`
+cancho rev: `2bd251f7f9354fe43d48055b3d9fe4d4af007a5c`
 cancho-table rev: `202b214372a03ec6ed8ca841357f3d2ed4de8aa0`
 cancho-tools rev: `8dab9176e521660333914dc768a80a29330a2a8e`
 cancho-ml rev: `99e9b64afb4f1ca191a4209dea1306720da43b2f`
