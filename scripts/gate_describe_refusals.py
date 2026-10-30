@@ -482,6 +482,18 @@ CASES = [
     ('ci: boot --trim with the mean', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--trim','0.1','f.csv'], 'args.bad-value', 2),
     ('ci: boot skewness of a constant column', b'a\n4\n4\n4\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--statistic','skewness','f.csv'], None, 0),
     ('ci: boot kurtosis of three values', b'a\n1\n2\n5\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--statistic','kurtosis','f.csv'], None, 0),
+    ('ci: boot bca', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--method','bca','f.csv'], None, 0),
+    ('ci: boot method percentile', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--method','percentile','f.csv'], None, 0),
+    ('ci: boot method wilson', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--method','wilson','f.csv'], 'args.bad-value', 2),
+    ('ci: boot bca of the median', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--method','bca','--statistic','median','f.csv'], None, 0),
+    ('ci: boot bca of the quantile', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--method','bca','--statistic','quantile','--prob','0.9','f.csv'], None, 0),
+    ('ci: boot bca kurtosis', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--method','bca','--statistic','kurtosis','f.csv'], None, 0),
+    ('ci: boot bca work', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--method','bca','--max-work','635','f.csv'], 'limit.too-much-work', 8),
+    ('ci: boot bca work at the limit', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','boot','--cols','a','--seed','1','--replicates','100','--method','bca','--max-work','636','f.csv'], None, 0),
+    ('ci: mean --method', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','mean','--cols','a','--method','bca','f.csv'], 'args.bad-value', 2),
+    ('ci: diff --method', b'a,g\n1,x\n2,y\n3,y\n', ['ci','diff','--cols','a','--group','g','--method','bca','f.csv'], 'args.bad-value', 2),
+    ('ci: prop --method bca', b'o\ny\nn\n', ['ci','prop','--cols','o','--success','y','--method','bca','f.csv'], 'args.bad-value', 2),
+    ('ci: corr --method bca', b'a,b,c\n1,3,2\n2,1,2.5\n3,2,1\n4,5,6\n5,4,5\n6,6,9\n', ['ci','corr','--method','bca','f.csv'], 'args.bad-value', 2),
     # --correct and --max-tests (docs/test.md section 12)
     ("test: t1 holm", b"a,b,c\n1,5,3\n2,5,3\n4,1,3\n", ["test", "t1", "--cols", "a,b,c", "--correct", "holm", "f.csv"], None, 0),
     ("test: t1 bh with a constant column", b"a,b\n1,3\n2,3\n4,3\n", ["test", "t1", "--cols", "a,b", "--correct", "bh", "f.csv"], None, 0),
@@ -636,7 +648,7 @@ def main():
             data = b"".join(alphabet[int(r.next() % len(alphabet))] for _ in range(n))
             (tmp / "f.csv").write_bytes(data)
             argv = ["describe", "f.csv"]
-            k = int(r.next() % 70)
+            k = int(r.next() % 73)
             if k == 1:
                 argv = ["describe", "--ddof", "0", "f.csv"]
             elif k == 2:
@@ -759,6 +771,12 @@ def main():
                 argv = ["ci", "boot", "--cols", "b", "--statistic", "trimmed-mean", "--trim", "0.%d" % int(r.next() % 100), "--seed", "6", "--replicates", "100", "f.csv"]
             elif k == 69:
                 argv = ["ci", "boot", "--cols", "a,b", "--statistic", "kurtosis", "--seed", "7", "--replicates", "100", "--max-rows", "4", "f.csv"]
+            elif k == 70:
+                argv = ["ci", "boot", "--cols", "a,b", "--method", "bca", "--seed", "2", "--replicates", "100", "f.csv"]
+            elif k == 71:
+                argv = ["ci", "boot", "--cols", "b", "--method", "bca", "--statistic", "skewness", "--seed", "3", "--replicates", "100", "--level", "0.5", "f.csv"]
+            elif k == 72:
+                argv = ["ci", "boot", "--cols", "a", "--method", "bca", "--statistic", "trimmed-mean", "--trim", "0.2", "--seed", "4", "--replicates", "100", "--max-rows", "5", "f.csv"]
             elif k == 27:
                 argv = ["test", "prop", "--cols", "a", "--success", "1", "f.csv"]
             elif k == 28:

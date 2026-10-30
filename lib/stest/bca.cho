@@ -1,0 +1,86 @@
+edition 5;
+
+module stest.bca;
+
+import std.math;
+import special.dist;
+
+// The BCa step of `stats ci boot --method bca` (docs/resample.md section 14), from exact inputs: the bias z0 from the counts of the replicates, the acceleration a from the exact skewness of the leave-one-out statistics, the
+// adjusted levels and the positions.
+
+pub struct Bca {
+    status: int,
+    bias: float,
+    accel: float,
+    low: float,
+    high: float,
+    lo_pos: int,
+    hi_pos: int,
+}
+
+pub fn none() -> [] Bca {
+    return Bca { status: 1, bias: 0.0, accel: 0.0, low: 0.0, high: 0.0, lo_pos: 0, hi_pos: 0 };
+}
+
+fn floor_pos(x: float) -> [] int {
+    return truncate(x);
+}
+
+fn ceil_pos(x: float) -> [] int {
+    let f = truncate(x);
+    if float_of(f) < x {
+        return f + 1;
+    }
+    return f;
+}
+
+fn clamp(v: int, hi: int) -> [] int {
+    if v < 0 {
+        return 0;
+    }
+    if v > hi {
+        return hi;
+    }
+    return v;
+}
+
+// `twice` is 2c + e (c replicates below the estimate, e equal to it) of `reps`; `g` is the population skewness of the n leave-one-out statistics with its code `gcode` (stest.boots, exact, rounded once: 1 beyond the double,
+// 2 not defined because every leave-one-out statistic is equal); the level is lnum / 10^lk. The acceleration a = sum (m - t_i)^3 / (6 (sum (m - t_i)^2)^(3/2)) is - g / (6 sqrt(n)) EXACTLY (sum (t_i - m)^3 = n m3 and
+// sum (t_i - m)^2 = n m2), so it is not summed in doubles: the doubles' sums of t_i - m lose everything when the statistics share a large offset (measured, docs/resample.md section 14). Status 1 where the interval is
+// undefined: p0 of 0 or 1, g undefined, a nonpositive denominator, or a normal function that does not answer.
+pub fn adjust(twice: int, reps: int, g: float, gcode: int, n: int, lnum: int, lk: int) -> [] Bca {
+    if twice <= 0 || twice >= 2 * reps || gcode != 0 {
+        return none();
+    }
+    let (z0, c0) = dist.qnorm(float_of(twice) / float_of(2 * reps));
+    if c0 != 0 {
+        return none();
+    }
+    let a = (0.0 - g) / (6.0 * sqrt(float_of(n)));
+    var scale = 1;
+    var i = 0;
+    while i < lk {
+        scale = scale * 10;
+        i = i + 1;
+    }
+    let (zl, c1) = dist.qnorm(float_of(scale - lnum) / float_of(2 * scale));
+    if c1 != 0 {
+        return none();
+    }
+    let zh = 0.0 - zl;
+    let wl = z0 + zl;
+    let wh = z0 + zh;
+    let dl = 1.0 - a * wl;
+    let dh = 1.0 - a * wh;
+    if !(dl > 0.0) || !(dh > 0.0) {
+        return none();
+    }
+    let (al, c2) = dist.norm_cdf(z0 + wl / dl);
+    let (ah, c3) = dist.norm_cdf(z0 + wh / dh);
+    if c2 != 0 || c3 != 0 {
+        return none();
+    }
+    let lo = clamp(floor_pos(float_of(reps) * al), reps - 1);
+    let hi = clamp(ceil_pos(float_of(reps) * ah) - 1, reps - 1);
+    return Bca { status: 0, bias: z0, accel: a, low: al, high: ah, lo_pos: lo, hi_pos: hi };
+}

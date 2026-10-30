@@ -527,6 +527,32 @@ def ci_boot_lines(stats):
     return out
 
 
+def ci_bca_lines(stats):
+    """`stats ci boot --method bca` on 6 seeded CSV files of the groups of scripts/gate_test2.py, the four statistics and seeds across the range: the hash of the bytes of the answers. The BCa step uses the normal quantile and distribution functions of S0 (libm `log` and `exp` inside), so
+    the positions are the claim that a platform could break."""
+    out = []
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        r = gate_special.SM64(139)
+        done = 0
+        fi = len(gate_test2.FIXED2)
+        while done < 6:
+            names, rows, gcol, labels, shapes, vidx, variance, level = gate_test2.gen_t2(r, fi)
+            fi += 1
+            num = [j for j in vidx if gate_test.numeric([rw[j] for rw in rows])]
+            if not num or len(rows) > 60:
+                continue
+            cols = ",".join(names[j] for j in num)
+            h = hashlib.sha256()
+            for stat in gate_ci_boot.STATS:
+                seed = gate_ci_boot.SEEDS[int(r.next() % len(gate_ci_boot.SEEDS))]
+                p = gate_ci_boot.run(stats, tmp, names, rows, ["ci", "boot", "--cols", cols, "--statistic", stat, "--seed", str(seed), "--replicates", "200", "--level", level] + gate_ci_boot.stat_args(stat) + ["--method", "bca"])
+                h.update(("exit %d %s" % (p.returncode, p.stdout)).encode())
+            out.append("ci-bca\tfile%02d\t%d\t%s" % (done, len(rows), h.hexdigest()))
+            done += 1
+    return out
+
+
 def wilcoxon_lines(stats):
     """`stats test wilcoxon` on 8 seeded CSV files (pairs of columns with zero differences and heavy ties, sizes up to 200, the shapes of scripts/gate_wilcoxon.py), with the three methods for zeros, `--exact no` and
     `--continuity none`, and the one-sample form: the hash of the bytes of the answers."""
@@ -591,6 +617,7 @@ def fingerprint(driver, acc, threads_check=True, stats=None):
         lines += ci_mean_lines(stats)
         lines += ci_corr_lines(stats)
         lines += ci_boot_lines(stats)
+        lines += ci_bca_lines(stats)
     return lines, bad
 
 

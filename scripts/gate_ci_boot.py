@@ -24,6 +24,7 @@ from fractions import Fraction
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from gate_special import SM64  # noqa: E402
+import mpmath  # noqa: E402
 import oracle_test as ot  # noqa: E402
 from gate_test import numeric, parse  # noqa: E402
 import gate_test2 as g2  # noqa: E402
@@ -73,6 +74,8 @@ def safe_stat(name, vals, **kw):
         v = ot.boot_stat(name, vals, **kw)
     except (OverflowError, ValueError):
         return float("inf")
+    except ZeroDivisionError:
+        return "undefined"
     return float("inf") if v is None else v
 
 
@@ -88,6 +91,60 @@ def safe_reps(vals, name, reps, seed, kind=1, swap=False, **kw):
                 picked.append(vals[ot.boot_index(seed, kind, b, j, n)])
         out.append(safe_stat(name, picked, **kw))
     return out
+
+
+mpmath.mp.dps = 50
+
+
+def mp_qnorm(p):
+    return mpmath.sqrt(2) * mpmath.erfinv(2 * p - 1)
+
+
+def bca_oracle(vs, stat, kw, est, reps_v, level, reps, zero_bias=False, zero_accel=False, ties_below=False):
+    """the BCa quantities of docs/resample.md section 14 from the exact inputs, in mpmath at 50 digits: "undefined" where the section says bca-undefined, "extreme" where the program's double sums leave their range (judged
+    only for not crashing), else a dict of bias, accel, low, high (the adjusted levels)"""
+    n = len(vs)
+    c = sum(1 for x in reps_v if x < est)
+    e = sum(1 for x in reps_v if x == est)
+    if ties_below:
+        c, e = c + e, 0
+    twice = 2 * c + e
+    if twice <= 0 or twice >= 2 * reps:
+        return "undefined"
+    t = []
+    for i in range(n):
+        v = safe_stat(stat, vs[:i] + vs[i + 1:], **kw)
+        if not is_num(v):
+            return "undefined"
+        t.append(v)
+    ft = [Fraction(x) for x in t]
+    m = sum(ft, Fraction(0)) / n
+    s2 = sum(((m - x) ** 2 for x in ft), Fraction(0))
+    s3 = sum(((m - x) ** 3 for x in ft), Fraction(0))
+    if s2 == 0:
+        return "undefined"
+    if s2 < Fraction(1, 10 ** 280) or max(abs(m - x) for x in ft) > Fraction(10 ** 100):
+        return "extreme"
+    z0 = mp_qnorm(mpmath.mpf(twice) / (2 * reps))
+    if zero_bias:
+        z0 = mpmath.mpf(0)
+    a = mpmath.mpf(s3.numerator) / s3.denominator / (6 * mpmath.power(mpmath.mpf(s2.numerator) / s2.denominator, mpmath.mpf(3) / 2))
+    if zero_accel:
+        a = mpmath.mpf(0)
+    num, k = ot.level_parts(level)
+    zl = mp_qnorm(mpmath.mpf(10 ** k - num) / (2 * 10 ** k))
+    out = []
+    for z in (zl, -zl):
+        w = z0 + z
+        d = 1 - a * w
+        if d <= 0:
+            return "undefined"
+        out.append(mpmath.ncdf(z0 + w / d))
+    return {"bias": z0, "accel": a, "low": out[0], "high": out[1]}
+
+
+def close(got, want):
+    return abs(got - float(want)) <= 1e-9 * abs(float(want)) + 1e-12
 
 
 def main():
@@ -106,6 +163,7 @@ def main():
     entries = 0
     nulls = 0
     und_seen = 0
+    bca_undef = bca_extreme = bca_checked = 0
 
     def control(name, differs):
         c = ctl.setdefault(name, [0, 0])
@@ -133,14 +191,15 @@ def main():
             if len(rows) > 60:
                 reps = 100
             cols = ",".join(names[j] for j in num)
-            argv = ["ci", "boot", "--cols", cols, "--statistic", stat, "--seed", str(seed), "--replicates", str(reps), "--level", level] + stat_args(stat, qt, prob, trim)
+            method = "bca" if r.next() % 2 else "percentile"
+            argv = ["ci", "boot", "--cols", cols, "--statistic", stat, "--seed", str(seed), "--replicates", str(reps), "--level", level] + stat_args(stat, qt, prob, trim) + (["--method", method] if method == "bca" or r.next() % 2 else [])
             p = run(a.bin, tmp, names, rows, argv)
             if p.returncode != 0:
                 print("gate_ci_boot: exit %d on file %d: %s" % (p.returncode, fi, p.stdout[:300]))
                 return 2
             d = json.loads(p.stdout)["data"]
             want_level = ot.rounded(Fraction(ot.level_parts(level)[0], 10 ** ot.level_parts(level)[1]))
-            if (d.get("ci"), d.get("statistic"), d.get("method"), d.get("replicates"), d.get("seed"), d.get("rows")) != ("boot", stat, "percentile", reps, seed, len(rows)) or d.get("level") != want_level:
+            if (d.get("ci"), d.get("statistic"), d.get("method"), d.get("replicates"), d.get("seed"), d.get("rows")) != ("boot", stat, method, reps, seed, len(rows)) or d.get("level") != want_level:
                 bad.append((fi, "the header: %r" % {k: d.get(k) for k in ("ci", "statistic", "method", "level", "replicates", "seed", "rows")}))
             if stat == "quantile" and (d.get("p"), d.get("type")) != (float(Fraction(prob)), qt):
                 bad.append((fi, "the quantile header: %r" % {k: d.get(k) for k in ("p", "type")}))
@@ -189,6 +248,42 @@ def main():
                     continue
                 srt = sorted(reps_v)
                 iv = g["interval"]
+                if method == "bca":
+                    ora = bca_oracle(vs, stat, kw, est, reps_v, level, reps)
+                    if ora == "undefined":
+                        nulls += 1
+                        bca_undef += 1
+                        if iv is not None or g.get("reason") != "bca-undefined":
+                            bad.append((fi, "%s %s: want null with bca-undefined, got %r" % (stat, names[j], g)))
+                        continue
+                    if ora == "extreme":
+                        bca_extreme += 1
+                        if iv is None and g.get("reason") != "bca-undefined":
+                            bad.append((fi, "%s %s: extreme sums, null with %r" % (stat, names[j], g.get("reason"))))
+                        continue
+                    if iv is None:
+                        bad.append((fi, "%s %s: a null interval where the BCa oracle has one (%s)" % (stat, names[j], g.get("reason"))))
+                        continue
+                    bca_checked += 1
+                    adj = iv.get("adjusted", {})
+                    if not (close(iv.get("bias", 1e9), ora["bias"]) and close(iv.get("acceleration", 1e9), ora["accel"]) and close(adj.get("low", 1e9), ora["low"]) and close(adj.get("high", 1e9), ora["high"])):
+                        bad.append((fi, "%s %s: bias/acceleration/levels %r, want %s %s %s %s" % (stat, names[j], (iv.get("bias"), iv.get("acceleration"), adj), mpmath.nstr(ora["bias"], 17), mpmath.nstr(ora["accel"], 17), mpmath.nstr(ora["low"], 17), mpmath.nstr(ora["high"], 17))))
+                        continue
+                    pl = min(max(math.floor(reps * adj["low"]), 0), reps - 1)
+                    ph = min(max(math.ceil(reps * adj["high"]) - 1, 0), reps - 1)
+                    want = {"of": stat, "method": "bootstrap-bca", "level": want_level, "estimate": est, "low": srt[pl], "high": srt[ph], "positions": {"low": pl, "high": ph}, "bias": iv["bias"], "acceleration": iv["acceleration"], "adjusted": adj, "rounding": "double"}
+                    if iv != want or list(iv) != list(want):
+                        bad.append((fi, "%s %s seed %d R %d level %s: got %r want %r" % (stat, names[j], seed, reps, level, iv, want)))
+                    for cname, kws in (("bca-no-bias", {"zero_bias": True}), ("bca-no-acceleration", {"zero_accel": True}), ("bca-ties-below", {"ties_below": True})):
+                        if cname == "bca-ties-below" and not any(x == est for x in reps_v):
+                            continue
+                        alt = bca_oracle(vs, stat, kw, est, reps_v, level, reps, **kws)
+                        if isinstance(alt, dict):
+                            apl = min(max(math.floor(reps * float(alt["low"])), 0), reps - 1)
+                            aph = min(max(math.ceil(reps * float(alt["high"])) - 1, 0), reps - 1)
+                            control(cname, srt[apl] != srt[pl] or srt[aph] != srt[ph])
+                    control("bca-round-positions", srt[min(max(round(reps * adj["low"]), 0), reps - 1)] != srt[pl] or srt[min(max(round(reps * adj["high"]) - 1, 0), reps - 1)] != srt[ph])
+                    continue
                 if iv is None:
                     bad.append((fi, "%s %s: a null interval with %d values (%s)" % (stat, names[j], len(vs), g.get("reason"))))
                     continue
@@ -265,13 +360,25 @@ def main():
                 if not ok1:
                     bad.append((-4, "small column %r, %s: %r (the oracle has %d undefined)" % (vs_, st, g1, und1)))
                 und_seen += 1 if und1 else 0
+        # BCa where a leave-one-out statistic does not exist: two values, variance and sd of the one that is left
+        for st in ("variance", "sd"):
+            p1 = run(a.bin, tmp, ["x"], [["1.0"], ["2.0"]], ["ci", "boot", "--cols", "x", "--statistic", st, "--method", "bca", "--seed", "5", "--replicates", "100"])
+            g1 = json.loads(p1.stdout)["data"]["intervals"][0]
+            if g1["interval"] is not None or g1.get("reason") != "bca-undefined" or g1["estimate"] is None:
+                bad.append((-5, "bca of two values, %s: want null with bca-undefined and the estimate, got %r" % (st, g1)))
+        # BCa where R times the adjusted level is an exact integer (found by search: 0.95 R = 95 for the median of 1, 2, 3 at level 0.9): the position is ceil(95) - 1 = 94, not 95
+        p1 = run(a.bin, tmp, ["x"], [["1"], ["2"], ["3"]], ["ci", "boot", "--cols", "x", "--statistic", "median", "--method", "bca", "--level", "0.9", "--seed", "12", "--replicates", "100"])
+        g1 = json.loads(p1.stdout)["data"]["intervals"][0]
+        iv1 = g1["interval"]
+        if iv1 is None or 100 * iv1["adjusted"]["high"] != 95.0 or iv1["positions"]["high"] != 94:
+            bad.append((-6, "BCa with R alpha' an exact integer: %r" % g1))
     if a.files >= 150 and und_seen == 0:
         bad.append((-1, "no column had an undefined replicate: the rule is not exercised"))
     for k, (differs, total) in sorted(ctl.items()):
         if total and differs * 10 < total:
             bad.append((-1, "control %s left the answer on only %d of %d cases: the gate cannot tell it from the program" % (k, differs, total)))
-    print("gate_ci_boot: %d entries (%d null, %d with undefined replicates), %d problems; controls that differ from the program: %s" % (
-        entries, nulls, und_seen, len(bad), ", ".join("%s %d of %d" % (k, v[0], v[1]) for k, v in sorted(ctl.items()))))
+    print("gate_ci_boot: %d entries (%d null, %d with undefined replicates; BCa: %d checked, %d undefined as the oracle, %d extreme), %d problems; controls that differ from the program: %s" % (
+        entries, nulls, und_seen, bca_checked, bca_undef, bca_extreme, len(bad), ", ".join("%s %d of %d" % (k, v[0], v[1]) for k, v in sorted(ctl.items()))))
     for b in bad[:8]:
         print("  file %d: %s" % b)
     return 1 if bad else 0
