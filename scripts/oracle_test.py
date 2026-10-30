@@ -953,3 +953,61 @@ def boot_positions(reps, level_text):
     lo = reps * (scale - num) // (2 * scale)
     hi = -((-reps * (scale + num)) // (2 * scale)) - 1
     return lo, hi
+
+
+def perm_shuffle(x, seed, kind, b):
+    """the Fisher-Yates shuffle of docs/resample.md section 15 for replicate b, on a copy of the list x"""
+    x = list(x)
+    m = len(x)
+    sb = sm_derive(sm_derive(seed, kind), b)
+    for d in range(m - 1):
+        i = m - 1 - d
+        z = sm_mix((sb + (d + 1) * GOLD) & MASK64)
+        j = (z >> 1) % (i + 1)
+        x[i], x[j] = x[j], x[i]
+    return x
+
+
+def perm_dev(x_first, na, total_sum, m):
+    """m S_a - n_a S for the sum S_a of the values x_first, as an exact Fraction"""
+    return m * sum((Fraction(v) for v in x_first), Fraction(0)) - na * total_sum
+
+
+def perm_mc(a, b, seed, perms, kind=2, strict=False, one_sided=False, first_nb=False):
+    """(count of replicates at least as extreme as the data, the exact observed statistic T) of the Monte Carlo permutation test of the difference of means"""
+    x = list(a) + list(b)
+    na, nb = len(a), len(b)
+    m = na + nb
+    total = sum((Fraction(v) for v in x), Fraction(0))
+    d0 = perm_dev(x[:na], na, total, m)
+    take = nb if first_nb else na
+    count = 0
+    for r in range(perms):
+        xs = perm_shuffle(x, seed, kind, r)
+        d = perm_dev(xs[:take], na, total, m)
+        if one_sided:
+            hit = d > d0 if strict else d >= d0
+        else:
+            hit = abs(d) > abs(d0) if strict else abs(d) >= abs(d0)
+        count += 1 if hit else 0
+    return count, d0 / (na * nb)
+
+
+def perm_all(a, b, strict=False, one_sided=False):
+    """(count, number of arrangements, T) of the exact test by enumeration of the index sets of size n_a"""
+    import itertools
+    x = list(a) + list(b)
+    na, nb = len(a), len(b)
+    m = na + nb
+    total = sum((Fraction(v) for v in x), Fraction(0))
+    d0 = perm_dev(x[:na], na, total, m)
+    count = n = 0
+    for idx in itertools.combinations(range(m), na):
+        d = perm_dev([x[i] for i in idx], na, total, m)
+        n += 1
+        if one_sided:
+            hit = d > d0 if strict else d >= d0
+        else:
+            hit = abs(d) > abs(d0) if strict else abs(d) >= abs(d0)
+        count += 1 if hit else 0
+    return count, n, d0 / (na * nb)

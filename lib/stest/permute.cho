@@ -1,0 +1,205 @@
+edition 5;
+
+module stest.permute;
+
+import acc.bigint;
+import acc.central;
+import acc.psum;
+import ml.rng;
+
+// The permutation test of the difference of two means (docs/resample.md section 15), exact. T = (m S_a - n_a S) / (n_a n_b) for the group a of n_a values among m (S the sum of all, S_a that of group a), so |T*| >= |T| is
+// the comparison of the integers |m S_a* - n_a S| and |m S_a - n_a S| in units of 2^-1074: no tolerance. The values are order keys (flt.key_of) of the pooled vector, group a first.
+
+fn bits_of_key(k: int) -> [] int {
+    if k < 0 {
+        return k ^ 0x7fffffffffffffff;
+    }
+    return k;
+}
+
+// out = |m S_a - K| for the sum S_a in the accumulator `acc` (psum layout, k = 1), K = ksign * kmag (l1 + 3 limbs), m given as three limbs. Answers the sign.
+fn deviation[&a, &k, &ml, &s, &pr, &p, &q, &o](acc: &a [int], ksign: int, kmag: &k [int], mlimbs: &ml [int], sm: &!s [int], prod: &!pr [int], pos: &!p [int], neg: &!q [int], out: &!o [int]) -> [] int {
+    let l1 = psum.limbs(1);
+    let c = central.cap();
+    let ss = psum.magnitude(acc, 1, sm);
+    bigint.clear(pos, c);
+    bigint.clear(neg, c);
+    if ss != 0 {
+        bigint.mul(prod, sm, l1, mlimbs, 3);
+        central.put(pos, neg, prod, l1 + 3, ss < 0);
+    }
+    if ksign != 0 {
+        central.put(pos, neg, kmag, l1 + 3, ksign > 0);
+    }
+    return central.settle(pos, neg, out);
+}
+
+// sum of the keys vals[idx[0 .. na)] or of x[0 .. na) into the (zeroed) accumulator
+fn sum_first[&x, &a, &w](x: &x [int], na: int, acc: &!a [int], work: &!w [int]) -> [] int {
+    var i = 0;
+    while i < na {
+        psum.add(acc, 1, bits_of_key(x[i]), work);
+        i = i + 1;
+    }
+    return 0;
+}
+
+// The Monte Carlo test: `perms` shuffles of the pooled keys `vals` (m of them, group a first, n_a of group a), replicate b with the stream derive(derive(seed, 2), b). Fills ans[0] = the count of replicates with |T*| >= |T|,
+// ans[1] = the BITS of T rounded once, ans[2] = code of that rounding. Answers 0.
+pub fn mean_diff_mc[&h, &v, &o](heap: &!h Heap, vals: &v [int], m: int, na: int, seed: int, perms: int, ans: &!o [int]) -> [heap] int {
+    return run(heap, vals, m, na, seed, perms, false, ans);
+}
+
+// The exact test: every arrangement of the labels, the index sets of size n_a in lexicographic order. ans as above, ans[3] = the number of arrangements counted.
+pub fn mean_diff_all[&h, &v, &o](heap: &!h Heap, vals: &v [int], m: int, na: int, ans: &!o [int]) -> [heap] int {
+    return run(heap, vals, m, na, 0, 0, true, ans);
+}
+
+fn run[&h, &v, &o](heap: &!h Heap, vals: &v [int], m: int, na: int, seed: int, perms: int, all: bool, ans: &!o [int]) -> [heap] int {
+    let l1 = psum.limbs(1);
+    let c = central.cap();
+    let x = box_slice(heap, m + 1, 0);
+    let idx = box_slice(heap, na + 2, 0);
+    let acc = box_slice(heap, psum.size(1) + 1, 0);
+    let wk = box_slice(heap, psum.scratch() + 1, 0);
+    let sm = box_slice(heap, l1 + 4, 0);
+    let prod = box_slice(heap, l1 + 8, 0);
+    let pos = box_slice(heap, c + 1, 0);
+    let neg = box_slice(heap, c + 1, 0);
+    let out0 = box_slice(heap, c + 1, 0);
+    let outs = box_slice(heap, c + 1, 0);
+    let kmag = box_slice(heap, l1 + 8, 0);
+    let ml = box_slice(heap, 4, 0);
+    let nal = box_slice(heap, 4, 0);
+    let den = box_slice(heap, 4, 0);
+    var count = 0;
+    var total = 0;
+    borrow mut x as &!xw in {
+        borrow mut idx as &!iw in {
+            borrow mut acc as &!aw in {
+                borrow mut wk as &!ww in {
+                    borrow mut sm as &!smw in {
+                        borrow mut prod as &!prw in {
+                            borrow mut pos as &!pw in {
+                                borrow mut neg as &!nw in {
+                                    borrow mut out0 as &!o0 in {
+                                        borrow mut outs as &!os in {
+                                            borrow mut kmag as &!kw in {
+                                                borrow mut ml as &!mw in {
+                                                    borrow mut nal as &!naw in {
+                                                        borrow mut den as &!dw in {
+                                                            central.limbs_of(m, contents(mw));
+                                                            central.limbs_of(na, contents(naw));
+                                                            central.limbs_of(na * (m - na), contents(dw));
+                                                            // K = n_a S: the sum of all the values
+                                                            sum_first(vals, m, contents(aw)[0..psum.size(1)], contents(ww));
+                                                            let st = psum.magnitude(contents(aw)[0..psum.size(1)], 1, contents(smw));
+                                                            bigint.clear(contents(kw), l1 + 8);
+                                                            if st != 0 {
+                                                                bigint.mul(contents(kw), contents(smw), l1, contents(naw), 3);
+                                                            }
+                                                            // the observed deviation, from the first n_a values
+                                                            bigint.clear(contents(aw), psum.size(1) + 1);
+                                                            sum_first(vals, na, contents(aw)[0..psum.size(1)], contents(ww));
+                                                            let s0 = deviation(contents(aw)[0..psum.size(1)], st, contents(kw), contents(mw), contents(smw), contents(prw), contents(pw), contents(nw), contents(o0));
+                                                            let (tb, tc) = central.ratio_bits(heap, contents(o0), central.mag_len(contents(o0), central.cap()), contents(dw), 3, 0 - 1074, s0 < 0);
+                                                            ans[1] = tb;
+                                                            ans[2] = tc;
+                                                            if all {
+                                                                // the index sets in lexicographic order
+                                                                var i = 0;
+                                                                while i < na {
+                                                                    contents(iw)[i] = i;
+                                                                    i = i + 1;
+                                                                }
+                                                                var going = true;
+                                                                while going {
+                                                                    bigint.clear(contents(aw), psum.size(1) + 1);
+                                                                    var t = 0;
+                                                                    while t < na {
+                                                                        psum.add(contents(aw)[0..psum.size(1)], 1, bits_of_key(vals[contents(iw)[t]]), contents(ww));
+                                                                        t = t + 1;
+                                                                    }
+                                                                    deviation(contents(aw)[0..psum.size(1)], st, contents(kw), contents(mw), contents(smw), contents(prw), contents(pw), contents(nw), contents(os));
+                                                                    if bigint.compare(contents(os), central.cap(), contents(o0), central.cap()) >= 0 {
+                                                                        count = count + 1;
+                                                                    }
+                                                                    total = total + 1;
+                                                                    // next combination
+                                                                    var k = na - 1;
+                                                                    while k >= 0 && contents(iw)[k] == m - na + k {
+                                                                        k = k - 1;
+                                                                    }
+                                                                    if k < 0 {
+                                                                        going = false;
+                                                                    } else {
+                                                                        contents(iw)[k] = contents(iw)[k] + 1;
+                                                                        var u = k + 1;
+                                                                        while u < na {
+                                                                            contents(iw)[u] = contents(iw)[u - 1] + 1;
+                                                                            u = u + 1;
+                                                                        }
+                                                                    }
+                                                                }
+                                                            } else {
+                                                                let s1 = rng.derive(seed, 2);
+                                                                var b = 0;
+                                                                while b < perms {
+                                                                    let sb = rng.derive(s1, b);
+                                                                    var i = 0;
+                                                                    while i < m {
+                                                                        contents(xw)[i] = vals[i];
+                                                                        i = i + 1;
+                                                                    }
+                                                                    var d = 0;
+                                                                    while d < m - 1 {
+                                                                        let top = m - 1 - d;
+                                                                        let z = rng.mix(wrapping_add(sb, wrapping_mul(d + 1, rng.gold())));
+                                                                        let j = rng.uniform(z, top + 1);
+                                                                        let tmp = contents(xw)[top];
+                                                                        contents(xw)[top] = contents(xw)[j];
+                                                                        contents(xw)[j] = tmp;
+                                                                        d = d + 1;
+                                                                    }
+                                                                    bigint.clear(contents(aw), psum.size(1) + 1);
+                                                                    sum_first(contents(xw), na, contents(aw)[0..psum.size(1)], contents(ww));
+                                                                    deviation(contents(aw)[0..psum.size(1)], st, contents(kw), contents(mw), contents(smw), contents(prw), contents(pw), contents(nw), contents(os));
+                                                                    if bigint.compare(contents(os), central.cap(), contents(o0), central.cap()) >= 0 {
+                                                                        count = count + 1;
+                                                                    }
+                                                                    b = b + 1;
+                                                                }
+                                                                total = perms;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    unbox_slice(heap, x);
+    unbox_slice(heap, idx);
+    unbox_slice(heap, acc);
+    unbox_slice(heap, wk);
+    unbox_slice(heap, sm);
+    unbox_slice(heap, prod);
+    unbox_slice(heap, pos);
+    unbox_slice(heap, neg);
+    unbox_slice(heap, out0);
+    unbox_slice(heap, outs);
+    unbox_slice(heap, kmag);
+    unbox_slice(heap, ml);
+    unbox_slice(heap, nal);
+    unbox_slice(heap, den);
+    ans[0] = count;
+    ans[3] = total;
+    return 0;
+}

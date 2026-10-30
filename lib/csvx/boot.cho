@@ -32,7 +32,7 @@ fn float_of_bits(bits: int) -> [] float {
 }
 
 // the seed: all digits, 1 to 19 of them, below 2^62; (value, ok)
-fn parse_seed[&t](text: &t [byte]) -> [] (int, bool) {
+pub fn parse_seed[&t](text: &t [byte]) -> [] (int, bool) {
     if len(text) == 0 || len(text) > 19 {
         return (0, false);
     }
