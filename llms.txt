@@ -1,0 +1,13 @@
+# cancho-stats
+
+> Statistics on tabular data as a command line an agent can read: exact sums rounded once, the same bytes everywhere, and refusals that name their rule. Written in cancho.
+
+Run `stats skill` for a guide and `stats introspect` for the flags, limits, rules and authority as one JSON document. Answers and refusals are one JSON line, schema `stats.v1`; match on `error.rule`.
+
+## Docs
+
+- [README](README.md): the front door
+- [Agent guide](AGENTS.md): how an agent uses the tool
+- [Design](docs/design.md): the whole tool, its verbs and milestones
+- [Numerics](docs/numerics.md): the accuracy bounds, the references and the gates
+- [Stories](docs/stories.html): worked cases with data and figures, by topic

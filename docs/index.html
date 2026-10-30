@@ -83,7 +83,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2rem; color: var(-
 <header class="top"><div class="wrap">
   <a class="brand" href=".">cancho-stats</a>
   <nav>
-    <a href="#first">The first command</a><a class="opt" href="#how">How it works</a><a class="opt" href="#sums">Exact sums</a><a class="opt" href="#numbers">Results</a><a href="#stories">Stories</a><a href="#try">Try it</a>
+    <a href="#watch">The first command</a><a class="opt" href="#how">How it works</a><a class="opt" href="#sums">Exact sums</a><a class="opt" href="#results">Results</a><a href="#stories">Stories</a><a href="#try">Try it</a>
     <a class="opt" href="https://github.com/alpibrusl/cancho-stats/blob/main/docs/numerics.md">Numerics</a><a href="https://github.com/alpibrusl/cancho-stats">GitHub</a>
   </nav>
 </div></header>
@@ -116,8 +116,8 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2rem; color: var(-
 
 <section id="stories"><div class="wrap">
 <!--stories-->
-<h2>From a first look to an exact test</h2>
-<p class="lead">17 end-to-end stories, in increasing complexity, from a bakery to medicine, physics, a survey, marketing and finance. The same tool moves from describing data to testing hypotheses, correcting for many questions and bounding what a sample can show, and every number and figure comes from a real run.</p>
+<h2>Stories, from a first look to real questions</h2>
+<p class="lead">17 end-to-end stories, in increasing complexity, from a bakery to medicine, physics, a survey, marketing and finance, each asking a little more of the tool. Every number and figure comes from a real run, and the page is regenerated and checked whenever the tool changes.</p>
 <div class="toc"><div class="tg"><a class="tn" href="stories.html#g-basics">Foundations</a><a href="stories.html#s1">1 &middot; Look</a><a href="stories.html#s2">2 &middot; One question</a><a href="stories.html#s3">3 &middot; Outliers</a><a href="stories.html#s4">4 &middot; Six tests</a><a href="stories.html#s5">5 &middot; Exact counts</a><a href="stories.html#s6">6 &middot; Same bytes</a></div><div class="tg"><a class="tn" href="stories.html#g-medicine">Medicine and biology</a><a href="stories.html#s7">7 &middot; Mice</a><a href="stories.html#s8">8 &middot; A drug trial</a><a href="stories.html#s9">9 &middot; Side effects</a></div><div class="tg"><a class="tn" href="stories.html#g-physics">Chemistry and physics</a><a href="stories.html#s10">10 &middot; Chemistry</a><a href="stories.html#s11">11 &middot; Detectors</a></div><div class="tg"><a class="tn" href="stories.html#g-social">Social science</a><a href="stories.html#s12">12 &middot; Survey</a></div><div class="tg"><a class="tn" href="stories.html#g-marketing">Marketing</a><a href="stories.html#s13">13 &middot; Holdout</a><a href="stories.html#s14">14 &middot; Dashboard</a><a href="stories.html#s15">15 &middot; Regions</a></div><div class="tg"><a class="tn" href="stories.html#g-finance">Finance</a><a href="stories.html#s16">16 &middot; Bad days</a><a href="stories.html#s17">17 &middot; Six backtests</a></div></div>
 <p class="cta" style="margin-top:1.2rem"><a class="btn primary" href="stories.html">Read the stories</a></p>
 <!--/stories-->
@@ -157,7 +157,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2rem; color: var(-
   <p class="fine">The rule that follows: squares through <code>ml.fsq</code>, products through the two-product with the refusal outside the range, one rounding at the end. Open: the exact numerator of variance and covariance needs a big-integer multiply that the compiler's library lacks; it is the first module of the next milestone.</p>
 </div></section>
 
-<section id="first"><div class="wrap">
+<section id="watch"><div class="wrap">
   <h2>The first command</h2>
   <p class="lead"><code>stats describe FILE</code> reads a CSV and describes each column. The mean, the variance, the skewness, the kurtosis, the quantiles and the histogram come from exact arithmetic, rounded once.</p>
   <div class="cards">
@@ -168,7 +168,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2rem; color: var(-
   <p class="fine">Measured: 1,000 generated files, 64,394 values, every one bit for bit equal to exact fractions rounded once (the nine quantile definitions against an independent implementation of the paper's formulas), and 97 of 97 mutants of the program and of its exact arithmetic killed. Not built yet: distinct counts and levels of text columns, <code>--by</code>.</p>
 </div></section>
 
-<section class="alt" id="numbers"><div class="wrap">
+<section class="alt" id="results"><div class="wrap">
   <h2>Measured, not promised</h2>
   <p class="lead">Normal, Student t, chi-square, F and binomial, with survival functions that never lose a tail, and the normal quantile.</p>
   <div class="nums">
@@ -197,13 +197,13 @@ echo "1 4000000000000000 4024000000000000" | build/special-check t_sf
   <p class="lead" style="margin-bottom:0"><code>--cols</code> picks columns and <code>--format text</code> prints the same document as one <code>path = value</code> line per value, for a person. Also here: <code>stats corr</code> (Pearson, Spearman, Kendall) and <code>stats test</code> (t1, t2, paired, chisq, prop, with <code>--correct</code>). Next: rank and exact tests, intervals, resampling and regression.</p>
 </div></section>
 
-<section>
+<section id="status">
 <div class="wrap">
   <h2>What exists today</h2>
   <p class="lead">Built and measured: <code>describe</code>; <code>corr</code>; <code>test</code> (<code>t2</code>, <code>paired</code>, <code>mannwhitney</code>, <code>wilcoxon</code>, <code>anova</code>, <code>kruskal</code>, <code>ks</code>, <code>fisher</code>, <code>chisq</code>, <code>prop</code>) with Holm and other corrections; <code>ci</code> (<code>prop</code>, <code>mean</code>, <code>diff</code>, <code>corr</code>, <code>boot</code> with percentile and BCa); and <code>resample perm</code> for the difference of means, Monte Carlo or exact. Not built: <code>resample perm</code> for other statistics, paired sign flips and the correlation permutation (S5.4b and S5.4c), and regression (<code>lm</code>, <code>glm</code>), which is planned. Each verb has a design document and a section of measured results in <a href="https://github.com/alpibrusl/cancho-stats/tree/main/docs">docs/</a>; the measured numbers above are those of S0, the distribution functions.</p>
 </div>
 </section>
-<section class="alt"><div class="wrap">
+<section class="alt" id="docs"><div class="wrap">
   <h2>Go deeper</h2>
   <div class="cards">
     <div class="card"><h3><a href="stories.html">Seventeen stories, by topic</a></h3><p>End-to-end examples in increasing complexity: a bakery, then medicine, chemistry and physics, a social survey, marketing and finance. Each figure is drawn from a real run, and the page is regenerated and checked in CI.</p></div>
