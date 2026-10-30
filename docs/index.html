@@ -104,7 +104,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2rem; color: var(-
   <div class="cards">
     <div class="card"><div class="ic">&#9878;</div><h3>Exact where a sum decides</h3><p>Sums, squares and products are accumulated exactly and rounded once, at the end. The order of the rows cannot change a bit.</p></div>
     <div class="card"><div class="ic">&#128207;</div><h3>A bound written first</h3><p>Every function has a relative error bound committed before its code, and a high-precision reference that tries to break it. When it broke, the bound was corrected in the open.</p></div>
-    <div class="card"><div class="ic">&#128257;</div><h3>Same bytes everywhere</h3><p>One committed fingerprint, equal on five machines and at 1 to 16 threads. No platform maths library is in any result.</p></div>
+    <div class="card"><div class="ic">&#128257;</div><h3>Same bytes everywhere</h3><p>One committed fingerprint, checked on every push on three platforms (Linux x86-64, Linux aarch64, macOS arm64) and at 1 to 16 threads. No platform maths library is in any result.</p></div>
     <div class="card"><div class="ic">&#128683;</div><h3>Refusals are data</h3><p>An input that cannot be answered gets a named rule, never a trap, a hang or a made-up number.</p></div>
   </div>
 </div></section>
@@ -160,8 +160,8 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2rem; color: var(-
   <div class="nums">
     <div class="num"><b>0 / 432,000</b><span>cases outside the bound, 27 ranges at full size, after one correction</span></div>
     <div class="num"><b>1.6&times;</b><span>the worst miss the full-size run found before the correction (a bound was 4e-16, it needed 1e-15)</span></div>
-    <div class="num"><b>5</b><span>machines with a byte-identical fingerprint, at 1 to 16 threads</span></div>
-    <div class="num"><b>73 + 12</b><span>mutants killed, and survivors each explained, of 85</span></div>
+    <div class="num"><b>3 + 5</b><span>platforms in CI with a byte-identical fingerprint on every push; the S0 sweeps agreed on five machines, at 1 to 16 threads</span></div>
+    <div class="num"><b>73 + 12</b><span>of S0's 85 mutants killed, the survivors each explained. The later verbs have their own mutant scripts (1,364 mutants in all); CI checks that every pattern applies, and the kill runs are made by hand and reported per milestone</span></div>
   </div>
   <p class="fine">Measured on seeded samples at the exact input doubles, against <code>mpmath</code> at 60 digits and more; <code>scipy.special</code> is a second reference and is the outlier on the binomial by up to 3.4e-9. The closest ratio to a bound is 0.97, so that bound is tight, not comfortable. The error is bounded only in the ranges stated in <a href="https://github.com/alpibrusl/cancho-stats/blob/main/docs/numerics.md">docs/numerics.md</a>.</p>
 </div></section>
@@ -183,13 +183,19 @@ echo "1 4000000000000000 4024000000000000" | build/special-check t_sf
   <p class="lead" style="margin-bottom:0"><code>--cols</code> picks columns and <code>--format text</code> prints the same document as one <code>path = value</code> line per value, for a person. Also here: <code>stats corr</code> (Pearson, Spearman, Kendall) and <code>stats test</code> (t1, t2, paired, chisq, prop, with <code>--correct</code>). Next: rank and exact tests, intervals, resampling and regression.</p>
 </div></section>
 
+<section>
+<div class="wrap">
+  <h2>What exists today</h2>
+  <p class="lead">Built and measured: <code>describe</code>; <code>corr</code>; <code>test</code> (<code>t2</code>, <code>paired</code>, <code>mannwhitney</code>, <code>wilcoxon</code>, <code>anova</code>, <code>kruskal</code>, <code>ks</code>, <code>fisher</code>, <code>chisq</code>, <code>prop</code>) with Holm and other corrections; <code>ci</code> (<code>prop</code>, <code>mean</code>, <code>diff</code>, <code>corr</code>, <code>boot</code> with percentile and BCa); and <code>resample perm</code> for the difference of means, Monte Carlo or exact. Not built: <code>resample perm</code> for other statistics, paired sign flips and the correlation permutation (S5.4b and S5.4c), and regression (<code>lm</code>, <code>glm</code>), which is planned. Each verb has a design document and a section of measured results in <a href="https://github.com/alpibrusl/cancho-stats/tree/main/docs">docs/</a>; the measured numbers above are those of S0, the distribution functions.</p>
+</div>
+</section>
 <section class="alt"><div class="wrap">
   <h2>Go deeper</h2>
   <div class="cards">
-    <div class="card"><h3><a href="stories.html">Six stories, one bakery</a></h3><p>End-to-end examples in increasing complexity, from a first look to an exact permutation test, each figure drawn from a real run.</p></div>
+    <div class="card"><h3><a href="stories.html">Seventeen stories, by topic</a></h3><p>End-to-end examples in increasing complexity: a bakery, then medicine, chemistry and physics, a social survey, marketing and finance. Each figure is drawn from a real run, and the page is regenerated and checked in CI.</p></div>
     <div class="card"><h3><a href="https://github.com/alpibrusl/cancho-stats/blob/main/docs/numerics.md">Numerics</a></h3><p>The accuracy targets, the gates, and every measured result of S0.</p></div>
     <div class="card"><h3><a href="https://github.com/alpibrusl/cancho-stats/blob/main/docs/design.md">Design</a></h3><p>The whole tool: verbs, principles, milestones.</p></div>
-    <div class="card"><h3><a href="https://github.com/alpibrusl/cancho-stats/blob/main/docs/describe.md">describe</a></h3><p>The next milestone's design, before any code.</p></div>
+    <div class="card"><h3><a href="https://github.com/alpibrusl/cancho-stats/blob/main/docs/describe.md">describe</a></h3><p>The design of the first verb, with its status and where the built verb differs from it.</p></div>
   </div>
 </div></section>
 
