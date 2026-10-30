@@ -135,6 +135,7 @@ M = [
 ]
 
 EXPLAINED = {
+    "bca-denominator-guard": "not equivalent, not reached: the upper denominator 1 - a (z0 + z) is nonpositive only for a > 0 and z0 + z >= 1 / a >= 6 (|a| < 1/6), so |z0| >= 2.7 at the widest level 0.999, p0 above 0.996. Measured over 500 random columns at level 0.999 and R = 1000 (the eight statistics): largest |z0| 1.05, smallest denominator 0.40. The guard is the domain of the formula, kept for it; the lower-end guard is tested by the same argument and not by a case",
     "bca-p0-zero": "equivalent: with 2c + e = 0 the next line asks dist.qnorm for p = 0, which refuses it (rules.domain_prob) and the function answers the same none(); the guard saves the call, not an answer",
     "bca-p0-one": "equivalent: with 2c + e = 2 R the next line asks dist.qnorm for p = 1, which refuses it (rules.domain_prob) and the function answers the same none()",
     "bca-clamp-low": "equivalent: `v < 1` and `v < 0` differ only at v = 0, and both answer 0 there",
