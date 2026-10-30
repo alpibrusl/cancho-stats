@@ -360,6 +360,18 @@ def main():
                 if not ok1:
                     bad.append((-4, "small column %r, %s: %r (the oracle has %d undefined)" % (vs_, st, g1, und1)))
                 und_seen += 1 if und1 else 0
+        # BCa where a leave-one-out statistic does not exist: two values, variance and sd of the one that is left
+        for st in ("variance", "sd"):
+            p1 = run(a.bin, tmp, ["x"], [["1.0"], ["2.0"]], ["ci", "boot", "--cols", "x", "--statistic", st, "--method", "bca", "--seed", "5", "--replicates", "100"])
+            g1 = json.loads(p1.stdout)["data"]["intervals"][0]
+            if g1["interval"] is not None or g1.get("reason") != "bca-undefined" or g1["estimate"] is None:
+                bad.append((-5, "bca of two values, %s: want null with bca-undefined and the estimate, got %r" % (st, g1)))
+        # BCa where R times the adjusted level is an exact integer (found by search: 0.95 R = 95 for the median of 1, 2, 3 at level 0.9): the position is ceil(95) - 1 = 94, not 95
+        p1 = run(a.bin, tmp, ["x"], [["1"], ["2"], ["3"]], ["ci", "boot", "--cols", "x", "--statistic", "median", "--method", "bca", "--level", "0.9", "--seed", "12", "--replicates", "100"])
+        g1 = json.loads(p1.stdout)["data"]["intervals"][0]
+        iv1 = g1["interval"]
+        if iv1 is None or 100 * iv1["adjusted"]["high"] != 95.0 or iv1["positions"]["high"] != 94:
+            bad.append((-6, "BCa with R alpha' an exact integer: %r" % g1))
     if a.files >= 150 and und_seen == 0:
         bad.append((-1, "no column had an undefined replicate: the rule is not exercised"))
     for k, (differs, total) in sorted(ctl.items()):

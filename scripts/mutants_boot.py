@@ -135,6 +135,9 @@ M = [
 ]
 
 EXPLAINED = {
+    "bca-p0-zero": "equivalent: with 2c + e = 0 the next line asks dist.qnorm for p = 0, which refuses it (rules.domain_prob) and the function answers the same none(); the guard saves the call, not an answer",
+    "bca-p0-one": "equivalent: with 2c + e = 2 R the next line asks dist.qnorm for p = 1, which refuses it (rules.domain_prob) and the function answers the same none()",
+    "bca-clamp-low": "equivalent: `v < 1` and `v < 0` differ only at v = 0, and both answer 0 there",
     "undefined-sort": "equivalent in output: sorting the replicates when some are undefined only reorders placeholder keys of a column whose interval is then null; no printed byte depends on it (it is wasted work, not a wrong answer)",
     "undefined-reset": "equivalent: a replicate is undefined only for the skewness and the kurtosis (a resample of one value), and those are never beyond the double (|skewness| <= sqrt(n), kurtosis <= n), so a column never has both an undefined and a beyond-double replicate, and the count is already 0 where the reason is statistic-beyond-double",
     "seed-empty": "equivalent: toolbox.cli refuses a flag with an empty value (args.bad-value) before parse_seed is called, so the empty-text guard is never the one that fires",
