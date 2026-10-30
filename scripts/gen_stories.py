@@ -20,7 +20,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import stories_marketing  # noqa: E402
 import stories_more  # noqa: E402
-from storylib import W, STORY_CSS, arrange, fill_stories, claim, pretty, num, esc, axis, svg, wrap_cmd, term, story, fig_hashes  # noqa: E402
+from storylib import W, STORY_CSS, arrange, export, fill_stories, standalone_svg, EXPORTED, claim, pretty, num, esc, axis, svg, wrap_cmd, term, story, fig_hashes  # noqa: E402
 DOCS = ROOT / "docs"
 
 
@@ -375,7 +375,7 @@ def build(binary):
         sections.append(story(1, "Before anything else, look", "start here", ["describe"],
             "&#8220;I bought a second oven. Is it any good?&#8221; &#8212; Marta, who bakes for a street of cafes",
             ["<p>Marta kept a note of every batch for two months: which oven, how many minutes, how high it rose, how the crust scored, whether a loaf came out defective. Eighty batches, forty per oven. Before she asks anything, she looks at the one number she cares about most, the baking time.</p>",
-             term(shown(args), excerpt), fig_boxes([("A", g["A"], "pa"), ("B", g["B"], "pb")]),
+             term(shown(args), excerpt), export("ovens-boxes", fig_boxes([("A", g["A"], "pa"), ("B", g["B"], "pb")])),
              '<div class="read"><b>Reading it.</b> The mean of oven A is %s minutes (sd %s); oven B&#8217;s is %s (sd %s). B&#8217;s median is lower, and its box sits left of A&#8217;s. But B has a long right whisker (its slowest batch took %g minutes) and a skewness of %s against %s for A. The sums behind these means are exact and rounded once, so the digits are the same on any machine. Something about oven B&#8217;s tail is worth a second look, later.</div>' % (num(g["A"]["mean"], 5), num(g["A"]["sd"], 4), num(g["B"]["mean"], 5), num(g["B"]["sd"], 4), g["B"]["max"], num(sk, 3), num(g["A"]["skewness"], 3))]))
         # 2 -------------------------------------------------------------------------------------------------
         args = ["test", "t2", "--cols", "bake_min", "--group", "oven"]
@@ -653,6 +653,8 @@ def main():
     out[DOCS / "index.html"] = fill_stories(home, out[DOCS / "stories.html"])
     for name, text in files.items():
         out[DOCS / "stories" / name] = text
+    for name, fig in EXPORTED.items():
+        out[DOCS / "figures" / (name + ".svg")] = standalone_svg(fig, "#1f5fa6", "#8ec0ff")
     if a.check:
         stale = [str(p.relative_to(ROOT)) for p, text in out.items() if not p.exists() or p.read_text() != text]
         if stale:

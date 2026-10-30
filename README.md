@@ -40,11 +40,15 @@ The mean `100000000.275` is the exact mean of the eight numbers, rounded once. A
 
 ## What is special
 
-* **Exact where a sum decides.** Sums, squares and products are accumulated exactly and rounded once at the end, so the order of the rows cannot change a bit, and a column with a large common offset does not lose its variance to cancellation. *Scope:* this is a statement about the arithmetic. A correctly computed p-value says nothing about whether the model fits, the assumptions hold, how the sample was drawn, how many questions were asked, or what the result means; the [stories](docs/stories.html) are about those questions.
-* **Same bytes everywhere.** One committed fingerprint ([`docs/xplat_fp.txt`](docs/xplat_fp.txt)) is checked on every push on three platforms (Linux x86-64, Linux aarch64, macOS arm64) and at 1 to 16 threads; no platform maths library is in a result. The S0 accuracy sweeps also agreed on five machines ([docs/numerics.md](docs/numerics.md)).
-* **Refusals are data.** An input that cannot be answered gets a rule tag (`stats.<name>`), an exit code and, where one can exist, a repair; never a trap, a hang or an invented number. The same JSON line, schema `stats.v1`, carries answers and refusals.
-* **A bound written first.** Every function has a relative error bound committed before its code and a high-precision reference that tries to break it; when one broke, the bound was corrected in the open ([docs/numerics.md](docs/numerics.md)).
-* **What it can reach is a fact.** The authority row, derived by `cancho authority` and committed as [`manifests/stats.authority.json`](manifests/stats.authority.json), lists what the program can do; CI fails if the binary differs from it.
+| | what | evidence | what it does not cover |
+|---|---|---|---|
+| **Exact** | sums, squares and products are exact and rounded once; the order of the rows cannot change a bit | gates against `Fraction` and 60-digit references ([numerics](docs/numerics.md)) | the model, the assumptions, the sample, the question: see the [stories](docs/stories.html) |
+| **Same bytes** | the same answer on Linux x86-64, Linux aarch64 and macOS arm64, at 1 to 16 threads | a committed fingerprint, [`docs/xplat_fp.txt`](docs/xplat_fp.txt), checked on every push | only what is built is fingerprinted |
+| **Refusals are data** | a rule tag, an exit code and a repair, never a trap or an invented number | `stats.v1`, one JSON line; a test per rule | |
+| **Bounds first** | every function has an error bound committed before its code | the bound, a reference that tries to break it, and the correction when one broke | the functions of S0; the rest have their own sections |
+| **Authority is a fact** | no network, no clock, no write by path | [`manifests/stats.authority.json`](manifests/stats.authority.json), checked in CI | |
+
+![Box plots of the baking time of two ovens: B is faster, with a long tail of slow batches.](docs/figures/ovens-boxes.svg)
 
 ## For humans, for agents
 
@@ -120,7 +124,13 @@ tests[0].statistic = 1.9775000000000005
 ```
 <!--/run-->
 
-Longer cases, with data and figures, in the [stories](docs/stories.html): a bakery; biology, medicine, chemistry, physics, a social survey; marketing incrementality (a randomized holdout, the dashboard that lies, a regional experiment); finance (heavy tails, six backtests and one winner). A case can span packages: the marketing case uses `cancho-table` for the ledger and `cancho-ml` for the uplift.
+Longer cases, with data, in the [stories](docs/stories.html), by topic. Two of them, as a picture:
+
+![Conversion lift of an ad: the dashboard's 5.3 points against the randomized holdout's 1.4, with quiet and busy users in between; only the holdout excludes the selection.](docs/figures/dashboard-vs-holdout.svg)
+
+![Three endpoints of a drug trial, raw and Holm-adjusted p-values: the diastolic result is below 0.05 alone and above it after the correction.](docs/figures/holm-pvalues.svg)
+
+A case can span packages: the marketing case uses `cancho-table` for the ledger and `cancho-ml` for the uplift.
 
 ## Use it with an AI agent
 

@@ -2,7 +2,7 @@
 import math
 import random
 
-from storylib import claim, pretty, esc, axis, svg, term, story
+from storylib import export, claim, pretty, esc, axis, svg, term, story
 from stories_marketing import fig_rows, num, shown
 
 
@@ -111,7 +111,7 @@ def stories(R, folder, files):
          '<div class="read"><b>Reading it.</b> The drug lowers the systolic pressure by %s mmHg more than the placebo (95%% interval %s to %s; Welch&#8217;s t test p = %s). That is the pre-specified answer, and it does not need a correction: it is one question.</div>' % (num(-c2["estimate"], 1), num(-c2["interval"]["high"], 1), num(-c2["interval"]["low"], 1), num(t1["p_value"], 4)),
          "<p>The two other measurements are another matter. Three questions asked of the same patients, at the 5% level each, and the chance that at least one comes out significant by luck alone is about one in seven. Holm&#8217;s correction keeps that chance at 5% for the family: the smallest p-value is multiplied by the number of tests, the next by one fewer, and so on.</p>",
          term(shown(a3, "trial.csv"), pretty({"tests": [{"column": x["column"], "p_value": x["p_value"]} for x in d3["tests"]], "family": d3["family"]})),
-         fig_pvalues([("systolic", ep[0][1], ep[0][2]), ("diastolic", ep[1][1], ep[1][2]), ("heart rate", ep[2][1], ep[2][2])]),
+         export("holm-pvalues", fig_pvalues([("systolic", ep[0][1], ep[0][2]), ("diastolic", ep[1][1], ep[1][2]), ("heart rate", ep[2][1], ep[2][2])])),
          '<div class="read"><b>Reading it.</b> The systolic result stands after the correction (p = %s). The diastolic pressure has p = %s on its own, which would pass 0.05, and %s after Holm, which does not: with three endpoints looked at, that result is what a family of tests would produce by chance one time in several, and the report should call it suggestive, not shown. The heart rate shows nothing (p = %s). Which questions were pre-specified, and how many were asked, is part of the result.</div>' % (num(ep[0][2], 4), num(ep[1][1], 3), num(ep[1][2], 3), num(ep[2][1], 2))]))
     # 16 ----------------------------------------------------------------------------------------------------
     events = make_events()
