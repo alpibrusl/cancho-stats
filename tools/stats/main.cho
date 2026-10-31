@@ -377,7 +377,11 @@ fn level_pass[&h, &f, &s, &c, &k, &x](heap: &!h Heap, file: &!f File, shown: &s 
             going = false;
         } else {
             borrow r as &rr in {
-                let line = lines.text(rr);
+                var line = lines.text(rr);
+                // RFC 4180 ends a record with CRLF: the carriage return is not part of the last cell.
+                if len(line) > 0 && int_of(line[len(line) - 1]) == 13 {
+                    line = line[0..len(line) - 1];
+                }
                 if !seen_header {
                     seen_header = true;
                 } else if len(line) > 0 || ncols == 1 {
