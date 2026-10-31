@@ -19,7 +19,7 @@ step "domain and fuzz"; $PY scripts/gate_domain.py --fuzz 50000 | grep -v "first
 step "quantile properties"; $PY scripts/gate_qprops.py --n 2000
 step "big integers"; $PY scripts/gate_bigint.py --n 3000
 step "quantiles"; $PY scripts/gate_quantile.py --cases 3000
-step "stats describe"; $PY scripts/gate_describe.py --files 200; $PY scripts/gate_describe_refusals.py --fuzz 1000; $PY scripts/manifest.py --check; $PY scripts/update_replay.py --check
+step "stats describe"; $PY scripts/gate_crlf.py; $PY scripts/gate_describe.py --files 200; $PY scripts/gate_describe_refusals.py --fuzz 1000; $PY scripts/manifest.py --check; $PY scripts/update_replay.py --check
 step "power sums"; $PY scripts/gate_psum.py --vectors 300; $PY scripts/gate_xsum.py --vectors 300
 step "stats corr"; $PY scripts/gate_corr.py --files 200 --scipy; $PY scripts/gate_corr.py --files 200 --scipy --method spearman; $PY scripts/gate_corr.py --files 200 --scipy --method kendall; $PY scripts/gate_corr_calibration.py; $PY scripts/gate_corr_calibration.py --method spearman; $PY scripts/gate_corr_calibration.py --method kendall
 step "stats test"; $PY scripts/gate_test.py --files 200 --scipy; $PY scripts/gate_test_calibration.py
