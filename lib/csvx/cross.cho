@@ -96,7 +96,11 @@ pub fn cross[&h, &f, &s, &a, &b](heap: &!h Heap, file: &!f File, shown: &s [byte
             number = number + 1;
             var stop = false;
             borrow r as &rr in {
-                let line = lines.text(rr);
+                var line = lines.text(rr);
+                // RFC 4180 ends a record with CRLF: the carriage return is not part of the last cell.
+                if len(line) > 0 && int_of(line[len(line) - 1]) == 13 {
+                    line = line[0..len(line) - 1];
+                }
                 if !have_header {
                     let (open, seps, badq) = reader.scan(line, delim, false, 0);
                     if open {
