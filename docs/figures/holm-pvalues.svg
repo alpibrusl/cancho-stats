@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 194" width="640" height="194" role="img" aria-label="Raw and Holm-adjusted p-values against the 0.05 level">
+<style>
+:root { --bg: #fbfcfd; --fg: #14181a; --muted: #55606a; --line: #dfe5e7; --surface: #ffffff; --soft: #eff4f4; --accent: #1f5fa6; --good: #0f7b5f; --bad: #b42d27; --warn: #92400e; --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+@media (prefers-color-scheme: dark) { :root { --bg: #0b0f14; --fg: #e7ebec; --muted: #9aa8ae; --line: #212a2d; --surface: #131a1c; --soft: #172022; --accent: #8ec0ff; --good: #4fd1a5; --bad: #ff7b73; --warn: #f3c77a; } }
+.fig .ax { stroke: var(--muted); stroke-width: 1; }
+.fig .tk { fill: var(--muted); font: 12px var(--font); }
+.fig .lb { fill: var(--muted); font: 13px var(--font); }
+.fig .nm { fill: var(--fg); font: 600 13px var(--font); }
+.fig .wh { stroke-width: 2; } .fig .wh.pa, .fig .bx.pa { stroke: var(--accent); } .fig .wh.pb, .fig .bx.pb { stroke: var(--good); }
+.fig .bx { fill: var(--soft); stroke-width: 2; }
+.fig .md { stroke: var(--fg); stroke-width: 3; }
+.fig .mn { fill: var(--warn); }
+.fig .zero { stroke: var(--bad); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.fig .ciline { stroke: var(--accent); stroke-width: 3; }
+.fig .pt { fill: var(--accent); }
+.fig .band { stroke: var(--line); stroke-width: 1; }
+.fig .dot.pa { fill: var(--accent); opacity: .8; } .fig .dot.pb { fill: var(--good); opacity: .8; }
+.fig .ring { fill: none; stroke: var(--bad); stroke-width: 2; }
+.fig .pbar.pa { fill: var(--accent); } .fig .pbar.pb { fill: var(--good); } .fig .pbar.warn { fill: var(--warn); }
+.fig .link { stroke: var(--muted); stroke-width: 1.5; }
+.fig .raw { fill: var(--surface); stroke: var(--accent); stroke-width: 2.5; } .fig .adj { fill: var(--accent); }
+.fig .cell { fill: var(--soft); stroke: var(--line); } .fig .cell.hit { fill: var(--bad); stroke: var(--bad); }
+.fig .seg { fill: var(--good); } .fig .seg.bad { fill: var(--bad); }
+.fig .hash { fill: var(--soft); stroke: var(--good); stroke-width: 1.5; }
+.fig .hx { fill: var(--fg); font: 12px var(--mono); }
+.fig .bandci { fill: var(--accent); opacity: .18; }
+.fig .ecdfa { fill: none; stroke: var(--accent); stroke-width: 2.5; } .fig .ecdfb { fill: none; stroke: var(--good); stroke-width: 2.5; }
+.fig .gap { stroke: var(--bad); stroke-width: 3; }
+.fig .lk1 { fill: #b42d27; } .fig .lk2 { fill: #d97a52; } .fig .lk3 { fill: #c9c9c9; } .fig .lk4 { fill: #5a9bd4; } .fig .lk5 { fill: #1f5fa6; }
+.fig .lk { fill: #fff; font: 600 12px var(--font); }
+</style>
+<rect width="640" height="194" rx="10" fill="var(--surface)" stroke="var(--line)"/>
+<g class="fig"><line class="ax" x1="190" y1="142" x2="610" y2="142"/>
+<line class="ax" x1="190" y1="142" x2="190" y2="147"/><text class="tk" x="190" y="161" text-anchor="middle">0</text>
+<line class="ax" x1="211" y1="142" x2="211" y2="147"/><text class="tk" x="211" y="161" text-anchor="middle">0.05</text>
+<line class="ax" x1="295" y1="142" x2="295" y2="147"/><text class="tk" x="295" y="161" text-anchor="middle">0.25</text>
+<line class="ax" x1="400" y1="142" x2="400" y2="147"/><text class="tk" x="400" y="161" text-anchor="middle">0.5</text>
+<line class="ax" x1="505" y1="142" x2="505" y2="147"/><text class="tk" x="505" y="161" text-anchor="middle">0.75</text>
+<line class="ax" x1="610" y1="142" x2="610" y2="147"/><text class="tk" x="610" y="161" text-anchor="middle">1</text>
+<text class="lb" x="400" y="180" text-anchor="middle">p-value (raw: hollow, after Holm: filled)</text>
+<line class="zero" x1="211" y1="20" x2="211" y2="142"/>
+<text class="nm" x="182" y="30" text-anchor="end">systolic</text>
+<line class="band" x1="190.67" y1="26" x2="192.01" y2="26"/>
+<circle cx="190.67" cy="26" r="5" fill="none" stroke="currentColor" style="stroke:var(--accent);stroke-width:2"/>
+<circle class="pt" cx="192.01" cy="26" r="5"/>
+<text class="nm" x="182" y="64" text-anchor="end">diastolic</text>
+<line class="band" x1="208.453" y1="60" x2="226.906" y2="60"/>
+<circle cx="208.453" cy="60" r="5" fill="none" stroke="currentColor" style="stroke:var(--accent);stroke-width:2"/>
+<circle class="pt" cx="226.906" cy="60" r="5"/>
+<text class="nm" x="182" y="98" text-anchor="end">heart rate</text>
+<line class="band" x1="549.815" y1="94" x2="549.815" y2="94"/>
+<circle cx="549.815" cy="94" r="5" fill="none" stroke="currentColor" style="stroke:var(--accent);stroke-width:2"/>
+<circle class="pt" cx="549.815" cy="94" r="5"/></g>
+</svg>

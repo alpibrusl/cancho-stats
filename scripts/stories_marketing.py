@@ -2,7 +2,7 @@
 would have said otherwise, and a geo experiment. As in gen_stories.py, every number is drawn from a real run, and `claim` stops the build when the narration stops matching them."""
 import random
 
-from storylib import claim, pretty, esc, axis, svg, term, story
+from storylib import export, claim, pretty, esc, axis, svg, term, story
 
 
 def num(x, k):
@@ -153,9 +153,9 @@ def stories(R, folder, files):
          "<p>What the data can do, with no holdout, is compare like with like: split the users into quiet (3 sessions or fewer) and busy (4 or more), and compare reached with not reached inside each band (here the split files are given; with cancho-table it is a filter):</p>",
          term(shown(o1, "observed_quiet.csv"), pretty({"intervals": [{"estimate": nq["estimate"], "interval": {k: nq["interval"][k] for k in ("low", "high")}, "n": nq["n"]}]})),
          term(shown(o1, "observed_busy.csv"), pretty({"intervals": [{"estimate": nb["estimate"], "interval": {k: nb["interval"][k] for k in ("low", "high")}, "n": nb["n"]}]})),
-         fig_rows([("everyone, exposed vs not", n1["estimate"] * 100, n1["interval"]["low"] * 100, n1["interval"]["high"] * 100), ("quiet users only", nq["estimate"] * 100, nq["interval"]["low"] * 100, nq["interval"]["high"] * 100),
-                   ("busy users only", nb["estimate"] * 100, nb["interval"]["low"] * 100, nb["interval"]["high"] * 100), ("the holdout, above", i1["estimate"] * 100, lift["low"] * 100, lift["high"] * 100)],
-                  -3, 9, [-2, 0, 2, 4, 6, 8], "difference in conversion, points (95% interval)", "no effect", "%.1f"),
+         export("dashboard-vs-holdout", fig_rows([("everyone, exposed vs not", n1["estimate"] * 100, n1["interval"]["low"] * 100, n1["interval"]["high"] * 100), ("quiet users only", nq["estimate"] * 100, nq["interval"]["low"] * 100, nq["interval"]["high"] * 100),
+                   ("busy users only", nb["estimate"] * 100, nb["interval"]["low"] * 100, nb["interval"]["high"] * 100), ("randomized holdout", i1["estimate"] * 100, lift["low"] * 100, lift["high"] * 100)],
+                  -3, 9, [-2, 0, 2, 4, 6, 8], "difference in conversion, points (95% interval)", "no effect", "%.1f")),
          '<div class="read"><b>Reading it.</b> Inside the bands the lift falls from %s points to %s (quiet users) and %s (busy users). Comparing like with like moved the answer toward the experiment, and both estimates are still above the whole interval of the holdout (%s to %s): inside a band the busier users are still the ones reached, so some of the bias stays. That is the lesson. Adjustment narrows the gap and does not close it; only the experiment closes it. A campaign worth a large budget deserves a holdout, and a small one (even 5%% of the audience) costs far less than being wrong about the return.</div>' % (
              num(n1["estimate"] * 100, 1), num(nq["estimate"] * 100, 1), num(nb["estimate"] * 100, 1), num(lift["low"] * 100, 1), num(lift["high"] * 100, 1))]))
     # 14 -------------------------------------------------------------------------------------------------------

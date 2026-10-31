@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 212" width="640" height="212" role="img" aria-label="Box plots of the baking time of each oven">
+<style>
+:root { --bg: #fbfcfd; --fg: #14181a; --muted: #55606a; --line: #dfe5e7; --surface: #ffffff; --soft: #eff4f4; --accent: #1f5fa6; --good: #0f7b5f; --bad: #b42d27; --warn: #92400e; --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+@media (prefers-color-scheme: dark) { :root { --bg: #0b0f14; --fg: #e7ebec; --muted: #9aa8ae; --line: #212a2d; --surface: #131a1c; --soft: #172022; --accent: #8ec0ff; --good: #4fd1a5; --bad: #ff7b73; --warn: #f3c77a; } }
+.fig .ax { stroke: var(--muted); stroke-width: 1; }
+.fig .tk { fill: var(--muted); font: 12px var(--font); }
+.fig .lb { fill: var(--muted); font: 13px var(--font); }
+.fig .nm { fill: var(--fg); font: 600 13px var(--font); }
+.fig .wh { stroke-width: 2; } .fig .wh.pa, .fig .bx.pa { stroke: var(--accent); } .fig .wh.pb, .fig .bx.pb { stroke: var(--good); }
+.fig .bx { fill: var(--soft); stroke-width: 2; }
+.fig .md { stroke: var(--fg); stroke-width: 3; }
+.fig .mn { fill: var(--warn); }
+.fig .zero { stroke: var(--bad); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.fig .ciline { stroke: var(--accent); stroke-width: 3; }
+.fig .pt { fill: var(--accent); }
+.fig .band { stroke: var(--line); stroke-width: 1; }
+.fig .dot.pa { fill: var(--accent); opacity: .8; } .fig .dot.pb { fill: var(--good); opacity: .8; }
+.fig .ring { fill: none; stroke: var(--bad); stroke-width: 2; }
+.fig .pbar.pa { fill: var(--accent); } .fig .pbar.pb { fill: var(--good); } .fig .pbar.warn { fill: var(--warn); }
+.fig .link { stroke: var(--muted); stroke-width: 1.5; }
+.fig .raw { fill: var(--surface); stroke: var(--accent); stroke-width: 2.5; } .fig .adj { fill: var(--accent); }
+.fig .cell { fill: var(--soft); stroke: var(--line); } .fig .cell.hit { fill: var(--bad); stroke: var(--bad); }
+.fig .seg { fill: var(--good); } .fig .seg.bad { fill: var(--bad); }
+.fig .hash { fill: var(--soft); stroke: var(--good); stroke-width: 1.5; }
+.fig .hx { fill: var(--fg); font: 12px var(--mono); }
+.fig .bandci { fill: var(--accent); opacity: .18; }
+.fig .ecdfa { fill: none; stroke: var(--accent); stroke-width: 2.5; } .fig .ecdfb { fill: none; stroke: var(--good); stroke-width: 2.5; }
+.fig .gap { stroke: var(--bad); stroke-width: 3; }
+.fig .lk1 { fill: #b42d27; } .fig .lk2 { fill: #d97a52; } .fig .lk3 { fill: #c9c9c9; } .fig .lk4 { fill: #5a9bd4; } .fig .lk5 { fill: #1f5fa6; }
+.fig .lk { fill: #fff; font: 600 12px var(--font); }
+</style>
+<rect width="640" height="212" rx="10" fill="var(--surface)" stroke="var(--line)"/>
+<g class="fig"><line class="ax" x1="60" y1="150" x2="610" y2="150"/>
+<line class="ax" x1="60" y1="150" x2="60" y2="155"/><text class="tk" x="60" y="169" text-anchor="middle">30</text>
+<line class="ax" x1="145.938" y1="150" x2="145.938" y2="155"/><text class="tk" x="145.938" y="169" text-anchor="middle">35</text>
+<line class="ax" x1="231.875" y1="150" x2="231.875" y2="155"/><text class="tk" x="231.875" y="169" text-anchor="middle">40</text>
+<line class="ax" x1="317.812" y1="150" x2="317.812" y2="155"/><text class="tk" x="317.812" y="169" text-anchor="middle">45</text>
+<line class="ax" x1="403.75" y1="150" x2="403.75" y2="155"/><text class="tk" x="403.75" y="169" text-anchor="middle">50</text>
+<line class="ax" x1="489.688" y1="150" x2="489.688" y2="155"/><text class="tk" x="489.688" y="169" text-anchor="middle">55</text>
+<line class="ax" x1="575.625" y1="150" x2="575.625" y2="155"/><text class="tk" x="575.625" y="169" text-anchor="middle">60</text>
+<text class="lb" x="335" y="188" text-anchor="middle">minutes in the oven</text>
+<text class="nm" x="52" y="45" text-anchor="end">oven A</text>
+<line class="wh pa" x1="137.344" y1="40" x2="432.969" y2="40"/>
+<line class="wh pa" x1="137.344" y1="33" x2="137.344" y2="47"/><line class="wh pa" x1="432.969" y1="33" x2="432.969" y2="47"/>
+<rect class="bx pa" x="246.914" y="29" width="76.0547" height="22" rx="3"/>
+<line class="md" x1="272.266" y1="29" x2="272.266" y2="51"/>
+<path class="mn" d="M281.891 27 l5 5 l-5 5 l-5 -5 z"/>
+<text class="tk" x="432.969" y="26" text-anchor="middle">max 51.7</text>
+<text class="nm" x="52" y="100" text-anchor="end">oven B</text>
+<line class="wh pb" x1="115" y1="95" x2="555" y2="95"/>
+<line class="wh pb" x1="115" y1="88" x2="115" y2="102"/><line class="wh pb" x1="555" y1="88" x2="555" y2="102"/>
+<rect class="bx pb" x="193.633" y="84" width="74.3359" height="22" rx="3"/>
+<line class="md" x1="228.437" y1="84" x2="228.437" y2="106"/>
+<path class="mn" d="M247.902 82 l5 5 l-5 5 l-5 -5 z"/>
+<text class="tk" x="555" y="81" text-anchor="middle">max 58.8</text>
+<text class="tk" x="610" y="14" text-anchor="end">box: quartiles &#183; bar: median &#183; diamond: mean &#183; whiskers: min and max</text></g>
+</svg>
