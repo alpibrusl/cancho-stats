@@ -62,7 +62,7 @@ M = [
     ("level-a", PE, "w = json.put_string(heap, w, key_a);", "w = json.put_string(heap, w, key_b);"),
     ("exact-name", PE, "w = json.put_string(heap, w, \"exact\");", "w = json.put_string(heap, w, \"monte-carlo\");"),
     ("group-levels", PE, "if clean && nlevels != 2 {", "if clean && nlevels != 3 {"),
-    ("main-verb", F, "!bytes.equal(cli.operand(args, parsed, 0), \"resample\") {\n        e = rule.refuse(heap, e, \"stats.bad-verb\"", "!bytes.equal(cli.operand(args, parsed, 0), \"resamplex\") {\n        e = rule.refuse(heap, e, \"stats.bad-verb\""),
+    ("main-verb", F, "\"resample\") && !bytes.equal(cli.operand(args, parsed, 0), \"did\")", "\"resamplex\") && !bytes.equal(cli.operand(args, parsed, 0), \"did\")"),
     ("main-kind", F, "} else if !bytes.equal(cli.operand(args, parsed, 1), \"perm\") {", "} else if !bytes.equal(cli.operand(args, parsed, 1), \"permx\") {"),
     ("main-operands", F, "} else if cli.operand_count(parsed) != 3 {\n            e = rule.refuse(heap, e, \"args.missing-operand\", \"resample names", "} else if cli.operand_count(parsed) > 3 {\n            e = rule.refuse(heap, e, \"args.missing-operand\", \"resample names"),
     ("main-required", F, "} else if !cli.has(parsed, table, \"cols\") || !cli.has(parsed, table, \"group\") {\n            e = rule.refuse(heap, e, \"stats.test-columns\", \"resample perm", "} else if !cli.has(parsed, table, \"cols\") && !cli.has(parsed, table, \"group\") {\n            e = rule.refuse(heap, e, \"stats.test-columns\", \"resample perm"),
