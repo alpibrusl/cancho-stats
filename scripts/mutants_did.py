@@ -51,6 +51,7 @@ M = [
     ("pivot-singular", D, "if best <= 1e-12 * scale {", "if best <= 0.0 {"),
 ]
 EXPLAINED = {
+    "units-total": "equivalent: at least 2 treated and 2 holdout units already imply 4 units, so the total can never be the test that fires",
     "pivot-singular": "a design that is singular in exact arithmetic gives a pivot that is exactly zero in the elimination of integer-valued sums",
 }
 

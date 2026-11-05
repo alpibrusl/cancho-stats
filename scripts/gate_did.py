@@ -298,6 +298,11 @@ def main():
         for name, count in differs.items():
             if bc and count * 10 < bc:
                 bad.append(("control %s left the answer on %d of %d cases" % (name, count, bc),))
+        # the ceiling of --replicates is allowed: 100000 replicates of a table of six units
+        r = run(a.bin, tmp, "arm,pre,post\n1,10,16\n1,12,19\n0,11,13\n0,9,12\n0,10,11\n1,8,13\n", ["--arm", "arm", "--pre", "pre", "--post", "post", "--replicates", "100000", "--seed", "1"])
+        ok, data, err = parse(r)
+        if not ok or data["interval"]["replicates"] != 100000:
+            bad.append(("replicates 100000 refused", err))
         # ---- G-D6: every refusal reached
         good = "arm,pre,post\n1,10,16\n1,12,19\n0,11,13\n0,9,12\n0,10,11\n1,8,13\n"
         refusals = [
@@ -313,6 +318,7 @@ def main():
             ("stats.did.no-holdout", "arm,pre,post\n1,10,16\n1,12,19\n1,11,13\n1,9,12\n", ["--arm", "arm", "--pre", "pre", "--post", "post"]),
             ("stats.did.too-few-units", "arm,pre,post\n1,10,16\n0,12,19\n0,11,13\n", ["--arm", "arm", "--pre", "pre", "--post", "post"]),
             ("stats.did.too-few-units", "arm,pre,post\n1,10,16\n1,12,19\n1,11,13\n0,9,12\n", ["--arm", "arm", "--pre", "pre", "--post", "post"]),
+            ("stats.did.too-few-units", "arm,pre,post\n1,10,16\n0,12,19\n0,11,13\n0,9,12\n0,8,10\n", ["--arm", "arm", "--pre", "pre", "--post", "post"]),
             ("stats.did.singular", "arm,pre,post\n1,5,16\n1,5,19\n0,5,13\n0,5,12\n0,5,11\n", ["--arm", "arm", "--pre", "pre", "--post", "post"]),
             ("stats.did.days-not-positive", "arm,pre,post,d0,d1\n1,10,16,0,5\n1,12,19,5,5\n0,11,13,5,5\n0,9,12,5,5\n", ["--arm", "arm", "--pre", "pre", "--post", "post", "--pre-days", "d0", "--post-days", "d1", "--min-pre-days", "0"]),
             ("stats.test-columns", good, ["--arm", "arm", "--pre", "pre", "--post", "post", "--pre-days", "pre"]),
