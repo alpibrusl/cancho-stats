@@ -226,7 +226,7 @@ fn fit[&h, &x, &y, &t, &ix, &o](heap: &!h Heap, xs: &x [float], ys: &y [float], 
 }
 
 // the 1-based position of the column named by `text` in the header, as (status, column): status is pick.select's (0 found, 1 none, 2 ambiguous, 3 empty item)
-fn column_of[&h, &nm, &en](heap: &!h Heap, names: &nm [byte], ends: &en vec.Vec[int], nc: int, text: &static [byte]) -> [heap] (int, int) {
+pub fn column_of[&h, &nm, &en](heap: &!h Heap, names: &nm [byte], ends: &en vec.Vec[int], nc: int, text: &static [byte]) -> [heap] (int, int) {
     let sel = box_slice(heap, nc + 1, 0);
     var st = 0;
     var col = 0 - 1;

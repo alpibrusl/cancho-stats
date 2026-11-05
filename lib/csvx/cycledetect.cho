@@ -1,0 +1,912 @@
+edition 5;
+
+module csvx.cycledetect;
+
+import std.math;
+import std.buffer;
+import std.bytes;
+import std.json;
+import std.map;
+import csvx.boot;
+import csvx.cyclefit;
+import csvx.rule;
+import csvx.scan;
+import flt;
+import ml.rng;
+import toolbox.cli;
+import toolbox.fail;
+import toolbox.place;
+
+// The numerical core of `stats cycle detect` (docs/estimation.md sections 1.2 and 3): one period shared by several series, each with its own polynomial level, phase and amplitude. A period is scored by the variance its sine
+// and cosine explain over the level, summed over series; the same statistic is computed on shuffles of every series' values, and the best period is real only if at most `alpha` of the shuffles do as well somewhere on the grid.
+// The projections are those onto the span of the weighted design columns, from an explicit orthonormal basis (Householder), so that a shuffle costs a dot product per column.
+
+// Orthonormal basis of the columns of the n x p matrix `a` (row major), in `q` (n x p). `a` is destroyed; vs is n x p scratch, vn p scratch. Answers 0, or 1 if the matrix is rank deficient (a diagonal of R below 1e-12 of the largest).
+fn orth[&a, &v, &w, &q](a: &!a [float], vs: &!v [float], vn: &!w [float], n: int, p: int, q: &!q [float]) -> [] int {
+    var big = 0.0;
+    var k = 0;
+    while k < p {
+        var s = 0.0;
+        var i = k;
+        while i < n {
+            s = s + a[i * p + k] * a[i * p + k];
+            i = i + 1;
+        }
+        let norm = sqrt(s);
+        if norm == 0.0 {
+            return 1;
+        }
+        var alpha = norm;
+        if a[k * p + k] > 0.0 {
+            alpha = 0.0 - norm;
+        }
+        i = k;
+        while i < n {
+            vs[k * n + i] = a[i * p + k];
+            i = i + 1;
+        }
+        vs[k * n + k] = vs[k * n + k] - alpha;
+        var vv = 0.0;
+        i = k;
+        while i < n {
+            vv = vv + vs[k * n + i] * vs[k * n + i];
+            i = i + 1;
+        }
+        vn[k] = vv;
+        if vv > 0.0 {
+            var j = k;
+            while j < p {
+                var dot = 0.0;
+                i = k;
+                while i < n {
+                    dot = dot + vs[k * n + i] * a[i * p + j];
+                    i = i + 1;
+                }
+                let f = 2.0 * dot / vv;
+                i = k;
+                while i < n {
+                    a[i * p + j] = a[i * p + j] - f * vs[k * n + i];
+                    i = i + 1;
+                }
+                j = j + 1;
+            }
+        }
+        var d = alpha;
+        if d < 0.0 {
+            d = 0.0 - d;
+        }
+        if d > big {
+            big = d;
+        }
+        k = k + 1;
+    }
+    k = 0;
+    while k < p {
+        var d = a[k * p + k];
+        if d < 0.0 {
+            d = 0.0 - d;
+        }
+        if d <= 1e-12 * big {
+            return 1;
+        }
+        k = k + 1;
+    }
+    var j = 0;
+    while j < p {
+        var i = 0;
+        while i < n {
+            q[i * p + j] = 0.0;
+            if i == j {
+                q[i * p + j] = 1.0;
+            }
+            i = i + 1;
+        }
+        j = j + 1;
+    }
+    k = p - 1;
+    while k >= 0 {
+        if vn[k] > 0.0 {
+            j = 0;
+            while j < p {
+                var dot = 0.0;
+                var i = k;
+                while i < n {
+                    dot = dot + vs[k * n + i] * q[i * p + j];
+                    i = i + 1;
+                }
+                let f = 2.0 * dot / vn[k];
+                i = k;
+                while i < n {
+                    q[i * p + j] = q[i * p + j] - f * vs[k * n + i];
+                    i = i + 1;
+                }
+                j = j + 1;
+            }
+        }
+        k = k - 1;
+    }
+    return 0;
+}
+
+// sum over the p columns of q (n x p) of (column . x)^2, x a vector of n starting at x[xo]
+fn proj2[&q, &x](q: &q [float], n: int, p: int, x: &x [float], xo: int) -> [] float {
+    var total = 0.0;
+    var j = 0;
+    while j < p {
+        var dot = 0.0;
+        var i = 0;
+        while i < n {
+            dot = dot + q[i * p + j] * x[xo + i];
+            i = i + 1;
+        }
+        total = total + dot * dot;
+        j = j + 1;
+    }
+    return total;
+}
+
+// the weighted design of one series at period `per` (0.0 for the level alone) in `a` (n x (order + 1 [+ 2])), for the shifted days t[o..o+n)
+fn build[&t, &w, &a](t: &t [float], w: &w [float], o: int, n: int, order: int, per: float, a: &!a [float]) -> [] int {
+    var tmax = t[o + n - 1];
+    var k = 0;
+    while k < n {
+        if t[o + k] > tmax {
+            tmax = t[o + k];
+        }
+        k = k + 1;
+    }
+    if tmax < 1.0 {
+        tmax = 1.0;
+    }
+    var p = order + 1;
+    if per > 0.0 {
+        p = order + 3;
+    }
+    var i = 0;
+    while i < n {
+        let sw = sqrt(w[o + i]);
+        let own = t[o + i] / tmax;
+        var pw = 1.0;
+        var c = 0;
+        while c <= order {
+            a[i * p + c] = pw * sw;
+            pw = pw * own;
+            c = c + 1;
+        }
+        if per > 0.0 {
+            let ang = 6.283185307179586 * t[o + i] / per;
+            a[i * p + order + 1] = math.sin(ang) * sw;
+            a[i * p + order + 2] = math.cos(ang) * sw;
+        }
+        i = i + 1;
+    }
+    return p;
+}
+
+// the shuffle m of series s: the values y[yo..yo+n) in out[oo..oo+n) permuted by Fisher-Yates from the end, draw j (from 0) picking r = (z >> 1) mod (i + 1) for i = n - 1 - j, z = mix(s_m + (j + 1) gold), s_m = derive(derive(derive(seed, 4), s), m)
+fn shuffle_into[&y, &o](y: &y [float], yo: int, n: int, seed: int, s: int, m: int, out: &!o [float], oo: int) -> [] int {
+    var k = 0;
+    while k < n {
+        out[oo + k] = y[yo + k];
+        k = k + 1;
+    }
+    let sm = rng.derive(rng.derive(rng.derive(seed, 4), s), m);
+    var j = 0;
+    while j < n - 1 {
+        let i = n - 1 - j;
+        let z = rng.mix(wrapping_add(sm, wrapping_mul(j + 1, rng.gold())));
+        let r = rng.uniform(z, i + 1);
+        let t = out[oo + i];
+        out[oo + i] = out[oo + r];
+        out[oo + r] = t;
+        j = j + 1;
+    }
+    return 0;
+}
+
+// One series' contribution to the sums of the statistic. Writes its weighted values to yw[o..o+n) and, in info, 0 whether it is used (1) or skipped (0), 1 the residual sum of squares of the level alone, 2 the sum of squares the level
+// explains, 3 the number of periods whose design was rank deficient. Adds to num (one per period), pnum (period x shuffle) and pss0 (one per shuffle).
+fn series_pass[&h, &t, &y, &w, &pr, &nu, &pn, &ps, &yo, &inf](heap: &!h Heap, tt: &t [float], yy: &y [float], ww: &w [float], o: int, n: int, s: int, seed: int, order: int, perms: int, periods: &pr [float], ng: int, num: &!nu [float], pnum: &!pn [float], pss0: &!ps [float], yw: &!yo [float], info: &!inf [float]) -> [heap] int {
+    info[0] = 0.0;
+    info[1] = 0.0;
+    info[2] = 0.0;
+    info[3] = 0.0;
+    let pmax = order + 3;
+    let a = box_slice(heap, n * pmax + 1, 0.0);
+    let q = box_slice(heap, n * pmax + 1, 0.0);
+    let vs = box_slice(heap, n * pmax + 1, 0.0);
+    let vn = box_slice(heap, pmax + 1, 0.0);
+    let q0 = box_slice(heap, n * pmax + 1, 0.0);
+    let pm = box_slice(heap, perms * n + 1, 0.0);
+    let basep = box_slice(heap, perms + 1, 0.0);
+    var used = 0;
+    var i = 0;
+    while i < n {
+        yw[o + i] = yy[o + i] * sqrt(ww[o + i]);
+        i = i + 1;
+    }
+    borrow mut a as &!aw in {
+        borrow mut q as &!qw in {
+            borrow mut vs as &!vw in {
+                borrow mut vn as &!nw in {
+                    borrow mut q0 as &!q0w in {
+                        borrow mut pm as &!pmw in {
+                            borrow mut basep as &!bpw in {
+                                let p0 = build(tt, ww, o, n, order, 0.0, contents(aw));
+                                let st0 = orth(contents(aw), contents(vw), contents(nw), n, p0, contents(q0w));
+                                if st0 == 0 {
+                                    // the residual of the level alone
+                                    var base = 0.0;
+                                    var bf = proj2(contents(q0w), n, p0, yw, o);
+                                    var c = 0;
+                                    var ci = box_slice(heap, p0 + 1, 0.0);
+                                    borrow mut ci as &!cw in {
+                                        c = 0;
+                                        while c < p0 {
+                                            var dot = 0.0;
+                                            i = 0;
+                                            while i < n {
+                                                dot = dot + contents(q0w)[i * p0 + c] * yw[o + i];
+                                                i = i + 1;
+                                            }
+                                            contents(cw)[c] = dot;
+                                            c = c + 1;
+                                        }
+                                        i = 0;
+                                        while i < n {
+                                            var fit = 0.0;
+                                            c = 0;
+                                            while c < p0 {
+                                                fit = fit + contents(q0w)[i * p0 + c] * contents(cw)[c];
+                                                c = c + 1;
+                                            }
+                                            let rr = yw[o + i] - fit;
+                                            base = base + rr * rr;
+                                            i = i + 1;
+                                        }
+                                    }
+                                    unbox_slice(heap, ci);
+                                    if base > 0.0 {
+                                        used = 1;
+                                        var m = 0;
+                                        while m < perms {
+                                            shuffle_into(yy, o, n, seed, s, m, contents(pmw), m * n);
+                                            i = 0;
+                                            var sq = 0.0;
+                                            while i < n {
+                                                contents(pmw)[m * n + i] = contents(pmw)[m * n + i] * sqrt(ww[o + i]);
+                                                sq = sq + contents(pmw)[m * n + i] * contents(pmw)[m * n + i];
+                                                i = i + 1;
+                                            }
+                                            let bp = proj2(contents(q0w), n, p0, contents(pmw), m * n);
+                                            contents(bpw)[m] = bp;
+                                            pss0[m] = pss0[m] + sq - bp;
+                                            m = m + 1;
+                                        }
+                                        var pi = 0;
+                                        var degenerate = 0;
+                                        while pi < ng {
+                                            let p1 = build(tt, ww, o, n, order, periods[pi], contents(aw));
+                                            let st1 = orth(contents(aw), contents(vw), contents(nw), n, p1, contents(qw));
+                                            if st1 == 0 {
+                                                num[pi] = num[pi] + proj2(contents(qw), n, p1, yw, o) - bf;
+                                                m = 0;
+                                                while m < perms {
+                                                    pnum[pi * perms + m] = pnum[pi * perms + m] + proj2(contents(qw), n, p1, contents(pmw), m * n) - contents(bpw)[m];
+                                                    m = m + 1;
+                                                }
+                                            } else {
+                                                degenerate = degenerate + 1;
+                                            }
+                                            pi = pi + 1;
+                                        }
+                                        info[1] = base;
+                                        info[2] = bf;
+                                        info[3] = float_of(degenerate);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    unbox_slice(heap, a);
+    unbox_slice(heap, q);
+    unbox_slice(heap, vs);
+    unbox_slice(heap, vn);
+    unbox_slice(heap, q0);
+    unbox_slice(heap, pm);
+    unbox_slice(heap, basep);
+    if used == 1 {
+        info[0] = 1.0;
+    }
+    return used;
+}
+
+// The pooled gain at period `per`: sum over the used series of (explained sum of squares of the level and the cycle) - (that of the level alone), over ss0.
+fn gain_at[&h, &t, &w, &yo, &u, &ub, &fb](heap: &!h Heap, tt: &t [float], ww: &w [float], yw: &yo [float], off: &u [int], ns: int, used: &ub [int], bfs: &fb [float], order: int, per: float, ss0: float) -> [heap] float {
+    var total = 0.0;
+    var s = 0;
+    while s < ns {
+        if used[s] == 1 {
+            let o = off[s];
+            let n = off[s + 1] - o;
+            let pmax = order + 3;
+            let a = box_slice(heap, n * pmax + 1, 0.0);
+            let q = box_slice(heap, n * pmax + 1, 0.0);
+            let vs = box_slice(heap, n * pmax + 1, 0.0);
+            let vn = box_slice(heap, pmax + 1, 0.0);
+            borrow mut a as &!aw in {
+                borrow mut q as &!qw in {
+                    borrow mut vs as &!vw in {
+                        borrow mut vn as &!nw in {
+                            let p1 = build(tt, ww, o, n, order, per, contents(aw));
+                            let st = orth(contents(aw), contents(vw), contents(nw), n, p1, contents(qw));
+                            if st == 0 {
+                                total = total + proj2(contents(qw), n, p1, yw, o) - bfs[s];
+                            }
+                        }
+                    }
+                }
+            }
+            unbox_slice(heap, a);
+            unbox_slice(heap, q);
+            unbox_slice(heap, vs);
+            unbox_slice(heap, vn);
+        }
+        s = s + 1;
+    }
+    return total / ss0;
+}
+
+// The detection on the `ns` series held flat: shifted days tt, values yy, weights ww, series s on [off[s], off[s + 1]). rv: 0 code (0 found, 1 too short, 2 p above alpha, 3 edge), 1 period, 2 amplitude, 3 p, 4 gain, 5 best period on the grid,
+// 6 its gain, 7 the number of periods on the grid, 8 the shortest period, 9 the longest, 10 the number of (series, period) designs that were rank deficient, 11 the number of series skipped. gains_out receives the gain of every period
+// of the grid (it must have room for the grid; `grid_size` gives the size).
+pub fn grid_size(span: float, minp: float, minc: float, over: int) -> [] int {
+    let start = 1.0 / (span / minc);
+    let step = 1.0 / (float_of(over) * span);
+    let stop = 1.0 / minp + 1e-12;
+    if stop <= start {
+        return 0;
+    }
+    let q = (stop - start) / step;
+    var n = truncate(q);
+    if float_of(n) < q {
+        n = n + 1;
+    }
+    return n;
+}
+
+pub fn detect_core[&h, &t, &y, &w, &o, &r, &g](heap: &!h Heap, tt: &t [float], yy: &y [float], ww: &w [float], off: &o [int], ns: int, span: float, seed: int, order: int, minp: float, minc: float, over: int, perms: int, alpha: float, edge: float, rv: &!r [float], gains_out: &!g [float]) -> [heap] int {
+    var k = 0;
+    while k < 12 {
+        rv[k] = 0.0;
+        k = k + 1;
+    }
+    let ng = grid_size(span, minp, minc, over);
+    rv[7] = float_of(ng);
+    if ng == 0 || span / minc < minp {
+        rv[0] = 1.0;
+        return 0;
+    }
+    let start = 1.0 / (span / minc);
+    let step = 1.0 / (float_of(over) * span);
+    let periods = box_slice(heap, ng + 1, 0.0);
+    let num = box_slice(heap, ng + 1, 0.0);
+    let pnum = box_slice(heap, ng * perms + 1, 0.0);
+    let pss0 = box_slice(heap, perms + 1, 0.0);
+    let used = box_slice(heap, ns + 1, 0);
+    let bfs = box_slice(heap, ns + 1, 0.0);
+    let total = off[ns];
+    let yw = box_slice(heap, total + 1, 0.0);
+    let info = box_slice(heap, 4, 0.0);
+    var ss0 = 0.0;
+    var degenerate = 0.0;
+    var skipped = 0;
+    var code = 0;
+    var best = 0;
+    var p = 0.0;
+    var period = 0.0;
+    var amp = 0.0;
+    var gbest = 0.0;
+    borrow mut periods as &!prw in {
+        k = 0;
+        while k < ng {
+            contents(prw)[k] = 1.0 / (start + float_of(k) * step);
+            k = k + 1;
+        }
+    }
+    borrow periods as &pr in {
+        borrow mut num as &!nuw in {
+            borrow mut pnum as &!pnw in {
+                borrow mut pss0 as &!psw in {
+                    borrow mut used as &!uw in {
+                        borrow mut bfs as &!bfw in {
+                            borrow mut yw as &!ywm in {
+                                borrow mut info as &!inw in {
+                                    var s = 0;
+                                    while s < ns {
+                                        let o0 = off[s];
+                                        let n0 = off[s + 1] - o0;
+                                        let u = series_pass(heap, tt, yy, ww, o0, n0, s, seed, order, perms, contents(pr), ng, contents(nuw), contents(pnw), contents(psw), contents(ywm), contents(inw));
+                                        contents(uw)[s] = u;
+                                        if u == 1 {
+                                            ss0 = ss0 + contents(inw)[1];
+                                            contents(bfw)[s] = contents(inw)[2];
+                                            degenerate = degenerate + contents(inw)[3];
+                                        } else {
+                                            skipped = skipped + 1;
+                                        }
+                                        s = s + 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    rv[10] = degenerate;
+    rv[11] = float_of(skipped);
+    if ss0 <= 0.0 {
+        rv[0] = 1.0;
+    } else {
+        borrow num as &nur in {
+            borrow pnum as &pnr in {
+                borrow pss0 as &psr in {
+                    borrow periods as &pr2 in {
+                        if true {
+                            // the gain of every period, the best one (the first of equals)
+                            k = 0;
+                            while k < ng {
+                                gains_out[k] = contents(nur)[k] / ss0;
+                                if gains_out[k] > gains_out[best] {
+                                    best = k;
+                                }
+                                k = k + 1;
+                            }
+                            gbest = gains_out[best];
+                            // the best statistic of every shuffle over the grid
+                            var count = 0;
+                            var m = 0;
+                            while m < perms {
+                                var top = 0.0 - 1e300;
+                                var pd = contents(psr)[m];
+                                if pd < 1e-300 {
+                                    pd = 1e-300;
+                                }
+                                k = 0;
+                                while k < ng {
+                                    let v = contents(pnr)[k * perms + m] / pd;
+                                    if v > top {
+                                        top = v;
+                                    }
+                                    k = k + 1;
+                                }
+                                if top >= gbest {
+                                    count = count + 1;
+                                }
+                                m = m + 1;
+                            }
+                            p = float_of(1 + count) / float_of(perms + 1);
+                            rv[3] = p;
+                            rv[5] = contents(pr2)[best];
+                            rv[6] = gbest;
+                            rv[8] = contents(pr2)[ng - 1];
+                            rv[9] = contents(pr2)[0];
+                            if p > alpha {
+                                code = 2;
+                            } else if contents(pr2)[best] > edge * contents(pr2)[0] {
+                                code = 3;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if code == 0 {
+            var ib = best + 1;
+            if ib > ng - 1 {
+                ib = ng - 1;
+            }
+            var ia = best - 1;
+            if ia < 0 {
+                ia = 0;
+            }
+            var lo_p = 0.0;
+            var hi_p = 0.0;
+            borrow periods as &pr3 in {
+                lo_p = contents(pr3)[ib];
+                hi_p = contents(pr3)[ia];
+            }
+            var it = 0;
+            while it < 30 {
+                let m1 = lo_p + (hi_p - lo_p) / 3.0;
+                let m2 = hi_p - (hi_p - lo_p) / 3.0;
+                var g1 = 0.0;
+                var g2 = 0.0;
+                borrow used as &ur in {
+                    borrow bfs as &br in {
+                        borrow yw as &yr in {
+                            g1 = gain_at(heap, tt, ww, contents(yr), off, ns, contents(ur), contents(br), order, m1, ss0);
+                            g2 = gain_at(heap, tt, ww, contents(yr), off, ns, contents(ur), contents(br), order, m2, ss0);
+                        }
+                    }
+                }
+                if g1 < g2 {
+                    lo_p = m1;
+                } else {
+                    hi_p = m2;
+                }
+                it = it + 1;
+            }
+            period = 0.5 * (lo_p + hi_p);
+            // the amplitude: the root mean square over the used series of hypot(sin coefficient, cos coefficient)
+            var sumsq = 0.0;
+            var nused = 0;
+            var s2 = 0;
+            while s2 < ns {
+                var is_used = 0;
+                borrow used as &ur2 in {
+                    is_used = contents(ur2)[s2];
+                }
+                if is_used == 1 {
+                    let o1 = off[s2];
+                    let n1 = off[s2 + 1] - o1;
+                    let pmax = order + 3;
+                    let a = box_slice(heap, n1 * pmax + 1, 0.0);
+                    let yv = box_slice(heap, n1 + 1, 0.0);
+                    let vv = box_slice(heap, n1 + 1, 0.0);
+                    let coef = box_slice(heap, pmax + 1, 0.0);
+                    let inv = box_slice(heap, pmax * pmax + 1, 0.0);
+                    var c1 = 0.0;
+                    var c2 = 0.0;
+                    var stq = 0;
+                    borrow mut a as &!aw in {
+                        borrow mut yv as &!yvw in {
+                            borrow mut vv as &!vvw in {
+                                borrow mut coef as &!cow in {
+                                    borrow mut inv as &!inw2 in {
+                                        borrow yw as &yr2 in {
+                                            var i = 0;
+                                            while i < n1 {
+                                                contents(yvw)[i] = contents(yr2)[o1 + i];
+                                                i = i + 1;
+                                            }
+                                        }
+                                        let p1 = build(tt, ww, o1, n1, order, period, contents(aw));
+                                        stq = cyclefit.qr(contents(aw), contents(yvw), contents(vvw), n1, p1, contents(cow), contents(inw2));
+                                        if stq == 0 {
+                                            c1 = contents(cow)[p1 - 2];
+                                            c2 = contents(cow)[p1 - 1];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    unbox_slice(heap, a);
+                    unbox_slice(heap, yv);
+                    unbox_slice(heap, vv);
+                    unbox_slice(heap, coef);
+                    unbox_slice(heap, inv);
+                    sumsq = sumsq + c1 * c1 + c2 * c2;
+                    nused = nused + 1;
+                }
+                s2 = s2 + 1;
+            }
+            if nused > 0 {
+                amp = sqrt(sumsq / float_of(nused));
+            }
+            rv[1] = period;
+            rv[2] = amp;
+            rv[4] = gbest;
+        }
+        rv[0] = float_of(code);
+    }
+    unbox_slice(heap, periods);
+    unbox_slice(heap, num);
+    unbox_slice(heap, pnum);
+    unbox_slice(heap, pss0);
+    unbox_slice(heap, used);
+    unbox_slice(heap, bfs);
+    unbox_slice(heap, yw);
+    unbox_slice(heap, info);
+    return 0;
+}
+
+
+fn parse_num[&t](text: &t [byte]) -> [] (float, bool) {
+    let (key, st) = flt.parse_float(text);
+    if st != 0 {
+        return (0.0, false);
+    }
+    return (flt.float_of_key(key), true);
+}
+
+// The flags of `cycle detect` that need no file. Answers (errors, seed, min period, min cycles, alpha, edge).
+pub fn check_flags[&h, &g, &p](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, table: &static [byte], errs: fail.Errors) -> [heap, args] (fail.Errors, int, float, float, float, float) {
+    var e = errs;
+    var seed = 0;
+    if !cli.has(parsed, table, "day") || !cli.has(parsed, table, "y") || !cli.has(parsed, table, "series") {
+        e = rule.refuse(heap, e, "stats.test-columns", "cycle detect needs --day, --y and --series", "stats cycle detect --day day --y y --series key --seed 1 FILE", "flag", "--day");
+    }
+    if !cli.has(parsed, table, "seed") {
+        e = rule.refuse(heap, e, "stats.seed-required", "cycle detect needs --seed: an unseeded shuffle is not reproducible", "stats cycle detect --day day --y y --series key --seed 1 FILE", "flag", "--seed");
+    } else {
+        let (v, ok) = boot.parse_seed(cli.text(args, parsed, table, "seed"));
+        seed = v;
+        if !ok {
+            e = rule.refuse(heap, e, "args.bad-value", "--seed is an integer from 0 to 4611686018427387903", "--seed 20240229", "flag", "--seed");
+        }
+    }
+    let (minp, ok1) = parse_num(cli.text(args, parsed, table, "min-period"));
+    let (minc, ok2) = parse_num(cli.text(args, parsed, table, "min-cycles"));
+    let (alpha, ok3) = parse_num(cli.text(args, parsed, table, "alpha"));
+    let (edge, ok4) = parse_num(cli.text(args, parsed, table, "edge"));
+    if !ok1 || !(minp >= 2.0) || minp > 1e6 {
+        e = rule.refuse(heap, e, "args.bad-value", "--min-period is a number of days from 2 to 1000000", "--min-period 21", "flag", "--min-period");
+    }
+    if !ok2 || !(minc >= 1.0) || minc > 1000.0 {
+        e = rule.refuse(heap, e, "args.bad-value", "--min-cycles is a number from 1 to 1000", "--min-cycles 2", "flag", "--min-cycles");
+    }
+    if !ok3 || !(alpha > 0.0) || alpha >= 1.0 {
+        e = rule.refuse(heap, e, "args.bad-value", "--alpha is a number strictly between 0 and 1", "--alpha 0.004", "flag", "--alpha");
+    }
+    if !ok4 || !(edge > 0.0) || edge > 1.0 {
+        e = rule.refuse(heap, e, "args.bad-value", "--edge is a number above 0 and at most 1", "--edge 0.8", "flag", "--edge");
+    }
+    if cli.nat(args, parsed, table, "order") > 3 {
+        e = rule.refuse(heap, e, "args.bad-value", "--order is 0 to 3: the degree of the polynomial level", "--order 2", "flag", "--order");
+    }
+    let perms = cli.nat(args, parsed, table, "shuffles");
+    if perms < 99 || perms > 9999 {
+        e = rule.refuse(heap, e, "args.bad-value", "--shuffles is outside 99 to 9999", "499 is the default", "flag", "--shuffles");
+    }
+    let over = cli.nat(args, parsed, table, "oversample");
+    if over < 1 || over > 16 {
+        e = rule.refuse(heap, e, "args.bad-value", "--oversample is outside 1 to 16", "4 is the default", "flag", "--oversample");
+    }
+    return (e, seed, minp, minc, alpha, edge);
+}
+
+pub fn cycle_detect[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], table: &static [byte], seed: int, minp: float, minc: float, alpha: float, edge: float, w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
+    var w = w0;
+    var e = errs;
+    let order = cli.nat(args, parsed, table, "order");
+    let perms = cli.nat(args, parsed, table, "shuffles");
+    let over = cli.nat(args, parsed, table, "oversample");
+    let show_grid = bytes.equal(cli.text(args, parsed, table, "grid"), "yes");
+    let need = 3 * (order + 3);
+    match place.open_operand(fs, root, rel, full) {
+        Opened::Failed(reason) => {
+            e = fail.io_error(heap, e, reason, false, rel);
+        }
+        Opened::Ok(opened) => {
+            var file = opened;
+            borrow mut file as &!handle in {
+                let (groups, by, e5) = scan.discover(heap, handle, rel, cli.text(args, parsed, table, "series"), int_of(cli.text(args, parsed, table, "delim")[0]), cli.nat(args, parsed, table, "max-line-bytes"), cli.nat(args, parsed, table, "max-rows"), cli.nat(args, parsed, table, "max-cols"), cli.nat(args, parsed, table, "max-groups"), e);
+                e = e5;
+                var clean = false;
+                borrow e as &er0 in {
+                    clean = fail.count(er0) == 0;
+                }
+                if clean {
+                    var used = 0;
+                    var dropped = 0;
+                    var total = 0;
+                    var lo = 1e300;
+                    var hi = 0.0 - 1e300;
+                    var ok = true;
+                    var nkeys = 0;
+                    borrow groups as &gr in {
+                        nkeys = map.size(gr.m);
+                        var gi = 0;
+                        while gi < nkeys && ok {
+                            let (e1, kept, ts, ys, ws) = cyclefit.load_series(heap, args, parsed, fs, root, rel, full, table, by, map.key_at(gr.m, contents(gr.order)[gi]), e);
+                            e = e1;
+                            if kept < 0 {
+                                ok = false;
+                            } else if kept >= need {
+                                used = used + 1;
+                                total = total + kept;
+                                borrow ts as &tr in {
+                                    if contents(tr)[0] < lo {
+                                        lo = contents(tr)[0];
+                                    }
+                                    if contents(tr)[kept - 1] > hi {
+                                        hi = contents(tr)[kept - 1];
+                                    }
+                                }
+                            } else {
+                                dropped = dropped + 1;
+                            }
+                            unbox_slice(heap, ts);
+                            unbox_slice(heap, ys);
+                            unbox_slice(heap, ws);
+                            gi = gi + 1;
+                        }
+                    }
+                    var span = 2.0;
+                    var ngr = 0;
+                    if ok && used > 0 {
+                        span = hi - lo + 1.0;
+                        ngr = grid_size(span, minp, minc, over);
+                        if ngr * perms > 20000000 {
+                            ok = false;
+                            e = rule.refuse_int(heap, e, "limit.too-much-work", "the grid of periods times the shuffles is above 20000000", "lower --shuffles or --oversample, or use a shorter series", "limit", 20000000, "work", ngr * perms);
+                        }
+                    }
+                    if ok {
+                        let tt = box_slice(heap, total + 1, 0.0);
+                        let yy = box_slice(heap, total + 1, 0.0);
+                        let ww = box_slice(heap, total + 1, 0.0);
+                        let off = box_slice(heap, used + 2, 0);
+                        var s = 0;
+                        var at = 0;
+                        borrow mut tt as &!ttw in {
+                            borrow mut yy as &!yyw in {
+                                borrow mut ww as &!www in {
+                                    borrow mut off as &!ofw in {
+                                        borrow groups as &gr2 in {
+                                            var gi = 0;
+                                            while gi < nkeys && ok {
+                                                let (e1, kept, ts, ys, ws) = cyclefit.load_series(heap, args, parsed, fs, root, rel, full, table, by, map.key_at(gr2.m, contents(gr2.order)[gi]), e);
+                                                e = e1;
+                                                if kept < 0 {
+                                                    ok = false;
+                                                } else if kept >= need {
+                                                    contents(ofw)[s] = at;
+                                                    borrow ts as &tr2 in {
+                                                        borrow ys as &yr2 in {
+                                                            borrow ws as &wr2 in {
+                                                                var i = 0;
+                                                                while i < kept {
+                                                                    contents(ttw)[at + i] = contents(tr2)[i] - lo;
+                                                                    contents(yyw)[at + i] = contents(yr2)[i];
+                                                                    contents(www)[at + i] = contents(wr2)[i];
+                                                                    i = i + 1;
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    at = at + kept;
+                                                    s = s + 1;
+                                                }
+                                                unbox_slice(heap, ts);
+                                                unbox_slice(heap, ys);
+                                                unbox_slice(heap, ws);
+                                                gi = gi + 1;
+                                            }
+                                        }
+                                        contents(ofw)[used] = at;
+                                    }
+                                }
+                            }
+                        }
+                        if ok {
+                            let rv = box_slice(heap, 16, 0.0);
+                            let gains = box_slice(heap, ngr + 2, 0.0);
+                            if used > 0 {
+                                borrow tt as &ttr in {
+                                    borrow yy as &yyr in {
+                                        borrow ww as &wwr in {
+                                            borrow off as &ofr in {
+                                                borrow mut rv as &!rvw in {
+                                                    borrow mut gains as &!gnw in {
+                                                        detect_core(heap, contents(ttr), contents(yyr), contents(wwr), contents(ofr), used, span, seed, order, minp, minc, over, perms, alpha, edge, contents(rvw), contents(gnw));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                borrow mut rv as &!rvw2 in {
+                                    contents(rvw2)[0] = 1.0;
+                                }
+                            }
+                            borrow rv as &rr in {
+                                let code = truncate(contents(rr)[0]);
+                                w = json.put_key(heap, w, "cycle");
+                                w = json.put_string(heap, w, "detect");
+                                w = json.put_key(heap, w, "found");
+                                w = json.put_bool(heap, w, code == 0);
+                                if code != 0 {
+                                    w = json.put_key(heap, w, "reason");
+                                    if code == 1 {
+                                        w = json.put_string(heap, w, "too-short");
+                                    } else if code == 2 {
+                                        w = json.put_string(heap, w, "p-above-alpha");
+                                    } else {
+                                        w = json.put_string(heap, w, "edge");
+                                    }
+                                } else {
+                                    w = json.put_key(heap, w, "period");
+                                    w = json.put_float(heap, w, contents(rr)[1]);
+                                    w = json.put_key(heap, w, "amplitude");
+                                    w = json.put_float(heap, w, contents(rr)[2]);
+                                    w = json.put_key(heap, w, "gain");
+                                    w = json.put_float(heap, w, contents(rr)[4]);
+                                }
+                                if code != 1 {
+                                    w = json.put_key(heap, w, "p");
+                                    w = json.put_float(heap, w, contents(rr)[3]);
+                                    w = json.put_key(heap, w, "best_on_grid");
+                                    w = json.begin_object(heap, w);
+                                    w = json.put_key(heap, w, "period");
+                                    w = json.put_float(heap, w, contents(rr)[5]);
+                                    w = json.put_key(heap, w, "gain");
+                                    w = json.put_float(heap, w, contents(rr)[6]);
+                                    w = json.end_object(heap, w);
+                                }
+                                w = json.put_key(heap, w, "grid");
+                                w = json.begin_object(heap, w);
+                                w = json.put_key(heap, w, "periods");
+                                w = json.put_int(heap, w, ngr);
+                                if code != 1 {
+                                    w = json.put_key(heap, w, "shortest");
+                                    w = json.put_float(heap, w, contents(rr)[8]);
+                                    w = json.put_key(heap, w, "longest");
+                                    w = json.put_float(heap, w, contents(rr)[9]);
+                                }
+                                w = json.end_object(heap, w);
+                                w = json.put_key(heap, w, "edge_refused");
+                                w = json.put_bool(heap, w, code == 3);
+                                w = json.put_key(heap, w, "series_used");
+                                w = json.put_int(heap, w, used);
+                                w = json.put_key(heap, w, "series_dropped");
+                                w = json.put_int(heap, w, dropped);
+                                w = json.put_key(heap, w, "degenerate_designs");
+                                w = json.put_int(heap, w, truncate(contents(rr)[10]));
+                                w = json.put_key(heap, w, "settings");
+                                w = json.begin_object(heap, w);
+                                w = json.put_key(heap, w, "order");
+                                w = json.put_int(heap, w, order);
+                                w = json.put_key(heap, w, "shuffles");
+                                w = json.put_int(heap, w, perms);
+                                w = json.put_key(heap, w, "oversample");
+                                w = json.put_int(heap, w, over);
+                                w = json.put_key(heap, w, "alpha");
+                                w = json.put_float(heap, w, alpha);
+                                w = json.put_key(heap, w, "edge");
+                                w = json.put_float(heap, w, edge);
+                                w = json.put_key(heap, w, "min_period");
+                                w = json.put_float(heap, w, minp);
+                                w = json.put_key(heap, w, "min_cycles");
+                                w = json.put_float(heap, w, minc);
+                                w = json.put_key(heap, w, "seed");
+                                w = json.put_int(heap, w, seed);
+                                w = json.end_object(heap, w);
+                                if show_grid && code != 1 {
+                                    w = json.put_key(heap, w, "gains");
+                                    w = json.begin_array(heap, w);
+                                    borrow gains as &gnr in {
+                                        var k = 0;
+                                        while k < ngr {
+                                            w = json.put_float(heap, w, contents(gnr)[k]);
+                                            k = k + 1;
+                                        }
+                                    }
+                                    w = json.end_array(heap, w);
+                                }
+                            }
+                            unbox_slice(heap, rv);
+                            unbox_slice(heap, gains);
+                        }
+                        unbox_slice(heap, tt);
+                        unbox_slice(heap, yy);
+                        unbox_slice(heap, ww);
+                        unbox_slice(heap, off);
+                    }
+                }
+                scan.drop_groups(heap, groups);
+            }
+            file_close(file);
+        }
+    }
+    return (w, e);
+}
