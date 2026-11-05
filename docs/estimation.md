@@ -1,6 +1,6 @@
 # `stats did` and `stats cycle`: a regression-adjusted difference, and a cycle found with no period given (milestone S6)
 
-**Status: designed before any code of S6. Nothing here is built.** Tags: **[measured]** printed by a script on the machine named in section 9; **[read]** read from a file of this repository or of the user (the file is named); **[choice]** a decision the maintainer can overturn; **[open]** not decided and not measured.
+**Status: designed before any code of S6. `stats did` (S6.1) is built, section 12 says where the build differs from this design and what it measured; `stats cycle` (S6.2, S6.3) is not built.** Tags: **[measured]** printed by a script on the machine named in section 9; **[read]** read from a file of this repository or of the user (the file is named); **[choice]** a decision the maintainer can overturn; **[open]** not decided and not measured.
 
 ## 0. Where this comes from, and why it is here
 
@@ -40,17 +40,17 @@ On an Apple M4 Max, Python 3.14, numpy 2.4.6, one run each (not a benchmark): `d
 ## 2. `stats did`
 
 ```
-stats did --unit U --arm A --pre P --post Q [--pre-days D0 --post-days D1] [--min-pre-days 14]
-          [--boot R --seed S] [--level 0.95] FILE
+stats did --arm A --pre P --post Q [--pre-days D0 --post-days D1] [--min-pre-days 14] [--treated-value 1]
+          [--replicates R --seed S] [--level 0.95] FILE
 ```
 
-One row per unit. `A` is a column of 0 and 1 (1 = treated; **[choice]** the Python's `arm == 0` means treated and `arm == 1` the holdout; the verb takes `--treated-value V` so a client's own coding is not renamed). `P` and `Q` are the unit's pre and post sums; `D0` and `D1` the days they cover. When the day columns are absent the levels are `P` and `Q` as they are. The levels are `P / D0` and `Q / D1` **correctly rounded once** from decimal text, which is what `table --agg sum:` and a division would give **[choice]**.
+*(Corrected by the build, section 12: no `--unit`; `--replicates` and `--seed` replace `--boot`; `--treated-value` is 0 or 1.)* One row per unit. `A` is a column of 0 and 1 (1 = treated; **[choice]** the Python's `arm == 0` means treated and `arm == 1` the holdout; the verb takes `--treated-value V`, 0 or 1, so a client's own coding is not renamed). `P` and `Q` are the unit's pre and post sums; `D0` and `D1` the days they cover. When the day columns are absent the levels are `P` and `Q` as they are. The levels are `P / D0` and `Q / D1` **correctly rounded once** from decimal text, which is what `table --agg sum:` and a division would give **[choice]**.
 
 The answer (`schema stats.v1`, `kind: "did"`): `n`, `n_treated`, `n_holdout`, `eligible` (units that pass `--min-pre-days`), the three coefficients `a`, `b`, `tau` with their standard errors, `effect` (`tau` over the treated units' counterfactual mean, absent with a reason when that mean is not positive), `naive`, and with `--boot` the percentile interval of both `effect` and `tau`, `replicates`, `replicates_defined`, and `mc_error` as `resample` reports it.
 
 ### 2.1 Arithmetic
 
-`X'X` and `X'y` for the three-column design `[1, x, treated]` are sums of products of doubles: **[choice]** they are accumulated exactly (`acc.psum`) and rounded once, so they do not depend on the order of the rows; the 3x3 system is then solved with the Cholesky routine of `linalg` **[read]** (positive definite whenever the design has full rank; a singular design is refused, section 2.3). The coefficients are therefore a function of the multiset of rows, as the means of `describe` are. This is stronger than numpy's `lstsq` (SVD), whose result depends on its own order of operations; it is **not claimed to equal it**. The bound of the oracle gate (G-D2) is fixed in section 7 before the code is written.
+`X'X` and `X'y` for the three-column design `[1, x, treated]` are sums of products of doubles: **[choice]** they are accumulated exactly (`acc.psum` for sums and squares, `acc.xsum` for the cross sum) and rounded once, so they do not depend on the order of the rows; the 3x3 system is then solved **by elimination with partial pivoting in doubles** *(corrected by the build: the design said the Cholesky routine of `linalg`; a 3x3 system does not need a new pinned store, and question 1 of section 11 is answered: no new store for `did`)*; a pivot below 1e-12 of the largest entry is `stats.did.singular`, section 2.3). The coefficients are therefore a function of the multiset of rows, as the means of `describe` are. This is stronger than numpy's `lstsq` (SVD), whose result depends on its own order of operations; it is **not claimed to equal it**. The bound of the oracle gate (G-D2) is fixed in section 7 before the code is written.
 
 ### 2.2 The bootstrap
 
@@ -150,7 +150,28 @@ Machine for every **[measured]** here: Apple M4 Max, macOS, Python 3.14, numpy 2
 
 ## 10. Hand-worked fixture for G-D1
 
-*To be written with S6.1 and before its code: eight units, their `x`, `y`, `treated`, the normal equations, `tau`, `effect`, `naive`.* **[open]**
+Eight units, no day columns (so `x = pre`, `y = post`):
+
+| unit | arm | pre | post |
+|---|---|---|---|
+| a | 1 | 10 | 16 |
+| b | 1 | 12 | 19 |
+| c | 1 | 8 | 13 |
+| d | 1 | 15 | 22 |
+| e | 0 | 11 | 13 |
+| f | 0 | 9 | 12 |
+| g | 0 | 14 | 15 |
+| h | 0 | 10 | 12 |
+
+By hand: `n = 8`, `n1 = 4`; `Sx = 89`, `Sy = 122`, `Sxx = 1031`, `Sxy = 1403`; over the treated units `Sxt = 45`, `Syt = 70`. The normal equations are
+
+```
+ 8 a +   89 b + 4 tau = 122
+89 a + 1031 b + 45 tau = 1403
+ 4 a +   45 b + 4 tau = 70
+```
+
+whose exact solution (fractions, eliminated on paper and checked by `scripts/gate_did.py`) is `a = 205/163`, `b = 174/163`, `tau = 690/163`. The treated units' mean `y` is `70/4 = 35/2`, the counterfactual `35/2 - 690/163 = 4325/326`, so `effect = tau / counterfactual = 276/865` and `naive = Syt / Sxt - 1 = 70/45 - 1 = 5/9`. The program prints `tau = 4.233128834355829`, `effect = 0.3190751445086705` (both the correctly rounded value of the exact fraction), `naive = 0.5555555555555556`, `a = 1.2576687116564766` (the exact value rounded is `1.2576687116564418`: a relative gap of 2.8e-14, inside the bound of G-D2) and `b = 1.067484662576684`.
 
 ## 11. Open questions for the maintainer
 
