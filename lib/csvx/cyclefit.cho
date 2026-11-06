@@ -1,0 +1,591 @@
+edition 5;
+
+module csvx.cyclefit;
+
+import std.buffer;
+import std.bytes;
+import std.json;
+import std.map;
+import std.math;
+import std.vec;
+import csvx.did;
+import csvx.pick;
+import csvx.rule;
+import csvx.scan;
+import flt;
+import metrics.rank;
+import toolbox.cli;
+import toolbox.fail;
+import toolbox.place;
+
+// `stats cycle fit` (docs/estimation.md section 4): for each series (the key of --series) a cycle at a KNOWN period: the level (a polynomial of --order in the series' own scaled time) plus a sin + b cos of the absolute day, by
+// weighted least squares, the two cycle coefficients shrunk towards zero by the positive-part James-Stein factor max(0, 1 - 2 / F), F the Wald chi-square of the two. The days of a series are sorted before the fit, so the answer does not
+// depend on the order of the rows. The least squares is a Householder QR of the weighted design in doubles; the sine and cosine are those of std.math (fdlibm in cancho, not the platform's libm).
+
+// the QR of the n x p matrix `a` (row major) and the vector `y`, in place. coef gets the p coefficients, inv the p x p inverse of R (row major, upper). Answers 0, or 1 if the matrix is rank deficient
+pub fn qr[&a, &y, &v, &c, &iv](a: &!a [float], y: &!y [float], v: &!v [float], n: int, p: int, coef: &!c [float], inv: &!iv [float]) -> [] int {
+    var k = 0;
+    while k < p {
+        var s = 0.0;
+        var i = k;
+        while i < n {
+            s = s + a[i * p + k] * a[i * p + k];
+            i = i + 1;
+        }
+        let norm = sqrt(s);
+        if norm == 0.0 {
+            return 1;
+        }
+        var alpha = norm;
+        if a[k * p + k] > 0.0 {
+            alpha = 0.0 - norm;
+        }
+        i = k;
+        while i < n {
+            v[i] = a[i * p + k];
+            i = i + 1;
+        }
+        v[k] = v[k] - alpha;
+        var vv = 0.0;
+        i = k;
+        while i < n {
+            vv = vv + v[i] * v[i];
+            i = i + 1;
+        }
+        if vv > 0.0 {
+            var j = k;
+            while j < p {
+                var dot = 0.0;
+                i = k;
+                while i < n {
+                    dot = dot + v[i] * a[i * p + j];
+                    i = i + 1;
+                }
+                let f = 2.0 * dot / vv;
+                i = k;
+                while i < n {
+                    a[i * p + j] = a[i * p + j] - f * v[i];
+                    i = i + 1;
+                }
+                j = j + 1;
+            }
+            var dy = 0.0;
+            i = k;
+            while i < n {
+                dy = dy + v[i] * y[i];
+                i = i + 1;
+            }
+            let fy = 2.0 * dy / vv;
+            i = k;
+            while i < n {
+                y[i] = y[i] - fy * v[i];
+                i = i + 1;
+            }
+        }
+        k = k + 1;
+    }
+    var big = 0.0;
+    k = 0;
+    while k < p {
+        var d = a[k * p + k];
+        if d < 0.0 {
+            d = 0.0 - d;
+        }
+        if d > big {
+            big = d;
+        }
+        k = k + 1;
+    }
+    k = 0;
+    while k < p {
+        var d = a[k * p + k];
+        if d < 0.0 {
+            d = 0.0 - d;
+        }
+        if d <= 1e-6 * big {
+            return 1;
+        }
+        k = k + 1;
+    }
+    k = p - 1;
+    while k >= 0 {
+        var s = y[k];
+        var j = k + 1;
+        while j < p {
+            s = s - a[k * p + j] * coef[j];
+            j = j + 1;
+        }
+        coef[k] = s / a[k * p + k];
+        k = k - 1;
+    }
+    var jc = 0;
+    while jc < p {
+        var kk = jc;
+        while kk >= 0 {
+            var s = 0.0;
+            if kk == jc {
+                s = 1.0;
+            }
+            var m = kk + 1;
+            while m <= jc {
+                s = s - a[kk * p + m] * inv[m * p + jc];
+                m = m + 1;
+            }
+            inv[kk * p + jc] = s / a[kk * p + kk];
+            kk = kk - 1;
+        }
+        jc = jc + 1;
+    }
+    return 0;
+}
+
+// One series: the sorted days t[0..n), values y, weights w. Answers (status, a_raw, b_raw, f, shrink): status 0 fitted, 1 too short, 2 degenerate (rank deficient).
+fn fit_series[&h, &t, &yv, &wv](heap: &!h Heap, t: &t [float], y: &yv [float], w: &wv [float], n: int, period: float, order: int, james_stein: bool) -> [heap] (int, float, float, float, float, float, float) {
+    let p = order + 3;
+    if n < 3 * (order + 3) {
+        return (1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    }
+    let a = box_slice(heap, n * p + 1, 0.0);
+    let yy = box_slice(heap, n + 1, 0.0);
+    let v = box_slice(heap, n + 1, 0.0);
+    let coef = box_slice(heap, p + 1, 0.0);
+    let inv = box_slice(heap, p * p + 1, 0.0);
+    var status = 0;
+    var ar = 0.0;
+    var br = 0.0;
+    var f = 0.0;
+    var shrink = 1.0;
+    var rss = 0.0;
+    var cov = 0.0;
+    let span0 = t[0];
+    var span = t[n - 1] - span0;
+    if span < 1.0 {
+        span = 1.0;
+    }
+    borrow mut a as &!aw in {
+        borrow mut yy as &!yw in {
+            borrow mut v as &!vw in {
+                borrow mut coef as &!cw in {
+                    borrow mut inv as &!iw in {
+                        var i = 0;
+                        while i < n {
+                            let sw = sqrt(w[i]);
+                            let own = (t[i] - span0) / span;
+                            var pw = 1.0;
+                            var k = 0;
+                            while k <= order {
+                                contents(aw)[i * p + k] = pw * sw;
+                                pw = pw * own;
+                                k = k + 1;
+                            }
+                            let ang = 6.283185307179586 * t[i] / period;
+                            contents(aw)[i * p + order + 1] = math.sin(ang) * sw;
+                            contents(aw)[i * p + order + 2] = math.cos(ang) * sw;
+                            contents(yw)[i] = y[i] * sw;
+                            i = i + 1;
+                        }
+                        status = qr(contents(aw), contents(yw), contents(vw), n, p, contents(cw), contents(iw));
+                        if status == 0 {
+                            status = 0;
+                            ar = contents(cw)[p - 2];
+                            br = contents(cw)[p - 1];
+                            var j = p;
+                            while j < n {
+                                rss = rss + contents(yw)[j] * contents(yw)[j];
+                                j = j + 1;
+                            }
+                            var dof = n - p;
+                            if dof < 1 {
+                                dof = 1;
+                            }
+                            let s2 = rss / float_of(dof);
+                            // the 2 x 2 block of (X'X)^-1 = R^-1 R^-T for the last two coefficients
+                            let q = contents(iw);
+                            var c00 = 0.0;
+                            var c01 = 0.0;
+                            var c11 = 0.0;
+                            var kk = p - 2;
+                            while kk < p {
+                                c00 = c00 + q[(p - 2) * p + kk] * q[(p - 2) * p + kk];
+                                c01 = c01 + q[(p - 2) * p + kk] * q[(p - 1) * p + kk];
+                                c11 = c11 + q[(p - 1) * p + kk] * q[(p - 1) * p + kk];
+                                kk = kk + 1;
+                            }
+                            // F = c' (S + 1e-18 I)^-1 c with S = s2 * block
+                            let m00 = s2 * c00 + 1e-18;
+                            let m01 = s2 * c01;
+                            let m11 = s2 * c11 + 1e-18;
+                            let det = m00 * m11 - m01 * m01;
+                            if det != 0.0 {
+                                f = (ar * (m11 * ar - m01 * br) + br * (m00 * br - m01 * ar)) / det;
+                            }
+                            cov = s2;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    unbox_slice(heap, a);
+    unbox_slice(heap, yy);
+    unbox_slice(heap, v);
+    unbox_slice(heap, coef);
+    unbox_slice(heap, inv);
+    if status != 0 {
+        return (2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    }
+    var sh = 1.0;
+    if james_stein {
+        sh = 0.0;
+        if f > 0.0 {
+            sh = 1.0 - 2.0 / f;
+            if sh < 0.0 {
+                sh = 0.0;
+            }
+        }
+    }
+    return (0, ar, br, f, sh, sh * ar, sh * br);
+}
+
+pub fn check_flags[&h, &g, &p](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, table: &static [byte], errs: fail.Errors) -> [heap, args] (fail.Errors, float) {
+    var e = errs;
+    var period = 0.0;
+    if !cli.has(parsed, table, "day") || !cli.has(parsed, table, "y") || !cli.has(parsed, table, "series") || !cli.has(parsed, table, "period") {
+        e = rule.refuse(heap, e, "stats.test-columns", "cycle fit needs --day, --y, --series and --period", "stats cycle fit --day day --y y --series key --period 90 FILE", "flag", "--day");
+    } else {
+        let (key, st) = flt.parse_float(cli.text(args, parsed, table, "period"));
+        if st != 0 {
+            e = rule.refuse(heap, e, "args.bad-value", "--period is a number of days, above 0", "--period 90", "flag", "--period");
+        } else {
+            period = flt.float_of_key(key);
+            if !(period > 0.0) || period > 1e9 {
+                e = rule.refuse(heap, e, "args.bad-value", "--period is a number of days, above 0 and at most 1e9", "--period 90", "flag", "--period");
+            }
+        }
+    }
+    if cli.nat(args, parsed, table, "order") > 3 {
+        e = rule.refuse(heap, e, "args.bad-value", "--order is 0 to 3: the degree of the polynomial level", "--order 2", "flag", "--order");
+    }
+    return (e, period);
+}
+
+pub fn cycle_fit[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], table: &static [byte], period: float, w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
+    var w = w0;
+    var e = errs;
+    let order = cli.nat(args, parsed, table, "order");
+    let js = !bytes.equal(cli.text(args, parsed, table, "shrink"), "none");
+    var open_failed = false;
+    match place.open_operand(fs, root, rel, full) {
+        Opened::Failed(reason) => {
+            e = fail.io_error(heap, e, reason, false, rel);
+            open_failed = true;
+        }
+        Opened::Ok(opened) => {
+            var file = opened;
+            borrow mut file as &!handle in {
+                let (groups, by, e5) = scan.discover(heap, handle, rel, cli.text(args, parsed, table, "series"), int_of(cli.text(args, parsed, table, "delim")[0]), cli.nat(args, parsed, table, "max-line-bytes"), cli.nat(args, parsed, table, "max-rows"), cli.nat(args, parsed, table, "max-cols"), cli.nat(args, parsed, table, "max-groups"), e);
+                e = e5;
+                var clean = false;
+                borrow e as &er0 in {
+                    clean = fail.count(er0) == 0;
+                }
+                if clean {
+                    w = json.put_key(heap, w, "cycle");
+                    w = json.put_string(heap, w, "fit");
+                    w = json.put_key(heap, w, "period");
+                    w = json.put_float(heap, w, period);
+                    w = json.put_key(heap, w, "order");
+                    w = json.put_int(heap, w, order);
+                    w = json.put_key(heap, w, "shrink");
+                    if js {
+                        w = json.put_string(heap, w, "james-stein");
+                    } else {
+                        w = json.put_string(heap, w, "none");
+                    }
+                    borrow groups as &gn in {
+                        w = json.put_key(heap, w, "series_missing");
+                        w = json.put_int(heap, w, gn.nulls);
+                    }
+                    w = json.put_key(heap, w, "series");
+                    w = json.begin_array(heap, w);
+                    borrow groups as &gr in {
+                        let ng = map.size(gr.m);
+                        var gi = 0;
+                        while gi < ng {
+                            var go = false;
+                            borrow e as &er1 in {
+                                go = fail.count(er1) == 0;
+                            }
+                            if go {
+                                let (w3, e3) = one_series(heap, args, parsed, fs, root, rel, full, table, by, map.key_at(gr.m, contents(gr.order)[gi]), period, order, js, w, e);
+                                w = w3;
+                                e = e3;
+                            }
+                            gi = gi + 1;
+                        }
+                    }
+                    w = json.end_array(heap, w);
+                }
+                scan.drop_groups(heap, groups);
+            }
+            file_close(file);
+        }
+    }
+    return (w, e);
+}
+
+// The rows of one series (`by` >= 0 with its `key`, or the whole file with by = -1): days sorted ascending, values and weights of the rows that count (a missing day, value or weight leaves a row out, a zero weight too).
+// Answers (errors, kept, days, values, weights): kept is -1 when a refusal was recorded; the three boxes are always for the caller to unbox.
+pub fn load_series[&h, &g, &p, &f, &r, &sh, &fu, &k](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], table: &static [byte], by: int, key: &k [byte], errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (fail.Errors, int, Box[[float]], Box[[float]], Box[[float]]) {
+    var e = errs;
+    var out_kept = 0 - 1;
+    var out_t = box_slice(heap, 1, 0.0);
+    var out_y = box_slice(heap, 1, 0.0);
+    var out_w = box_slice(heap, 1, 0.0);
+    match place.open_operand(fs, root, rel, full) {
+        Opened::Failed(reason) => {
+            e = fail.io_error(heap, e, reason, false, rel);
+        }
+        Opened::Ok(opened) => {
+            var file = opened;
+            borrow mut file as &!handle in {
+                let (names, ends, cols, store, info, e2) = scan.read_file(heap, cli.nat(args, parsed, table, "max-line-bytes"), int_of(cli.text(args, parsed, table, "delim")[0]), cli.nat(args, parsed, table, "max-rows"), cli.nat(args, parsed, table, "max-cols"), cli.nat(args, parsed, table, "max-cells"), handle, rel, by, key, false, e);
+                e = e2;
+                var clean = false;
+                borrow e as &er2 in {
+                    clean = fail.count(er2) == 0;
+                }
+                if clean {
+                    let nc = info.ncols;
+                    let want = box_slice(heap, 4, 0 - 1);
+                    var ok = true;
+                    borrow names as &nb0 in {
+                        borrow ends as &eb0 in {
+                            borrow mut want as &!wb in {
+                                var which = 0;
+                                while which < 3 && ok {
+                                    var flag = "day";
+                                    if which == 1 {
+                                        flag = "y";
+                                    } else if which == 2 {
+                                        flag = "weight";
+                                    }
+                                    if which < 2 || cli.has(parsed, table, flag) {
+                                        let (st, col) = did.column_of(heap, buffer.bytes(nb0), eb0, nc, cli.text(args, parsed, table, flag));
+                                        if st != 0 {
+                                            ok = false;
+                                            e = rule.refuse_pick(heap, e, st, cli.text(args, parsed, table, flag), false);
+                                        } else {
+                                            contents(wb)[which] = col;
+                                        }
+                                    }
+                                    which = which + 1;
+                                }
+                            }
+                        }
+                    }
+                    if ok {
+                        let chosen = box_slice(heap, nc + 1, 0);
+                        borrow want as &wr in {
+                            borrow mut chosen as &!cw in {
+                                var q = 0;
+                                while q < 3 {
+                                    if contents(wr)[q] >= 0 {
+                                        contents(cw)[contents(wr)[q]] = 1;
+                                    }
+                                    q = q + 1;
+                                }
+                            }
+                            borrow cols as &c0 in {
+                                borrow chosen as &cr in {
+                                    borrow names as &nb1 in {
+                                        borrow ends as &eb1 in {
+                                            e = pick.check_numeric(heap, nb1, eb1, contents(cr), nc, contents(c0.numeric), contents(c0.bad), contents(c0.numeric), contents(c0.bad), e);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        unbox_slice(heap, chosen);
+                        borrow e as &er3 in {
+                            if fail.count(er3) != 0 {
+                                ok = false;
+                            }
+                        }
+                    }
+                    if ok {
+                        let rows = info.rows;
+                        let ord = box_slice(heap, rows + 1, 0);
+                        let dayv = box_slice(heap, rows + 1, 0.0);
+                        let yv = box_slice(heap, rows + 1, 0.0);
+                        let wv = box_slice(heap, rows + 1, 0.0);
+                        var kept = 0;
+                        var bad_day = 0;
+                        var neg_w = 0;
+                        borrow want as &wr2 in {
+                            borrow store as &sb in {
+                                borrow mut dayv as &!dw in {
+                                    borrow mut yv as &!yw in {
+                                        borrow mut wv as &!ww in {
+                                            borrow mut ord as &!ow in {
+                                                let jd = contents(wr2)[0];
+                                                let jy = contents(wr2)[1];
+                                                let jw = contents(wr2)[2];
+                                                var i = 0;
+                                                while i < rows {
+                                                    let kd = vec.get(sb, i * nc + jd);
+                                                    let ky = vec.get(sb, i * nc + jy);
+                                                    var absent = kd == rank.min_int() || ky == rank.min_int();
+                                                    var wt = 1.0;
+                                                    if jw >= 0 {
+                                                        let kw = vec.get(sb, i * nc + jw);
+                                                        if kw == rank.min_int() {
+                                                            absent = true;
+                                                        } else {
+                                                            wt = flt.float_of_key(kw);
+                                                        }
+                                                    }
+                                                    if !absent {
+                                                        let d = flt.float_of_key(kd);
+                                                        if wt < 0.0 {
+                                                            neg_w = neg_w + 1;
+                                                        } else if d < 0.0 || d >= 1099511627776.0 || d != float_of(truncate(d)) {
+                                                            bad_day = bad_day + 1;
+                                                        } else if wt > 0.0 {
+                                                            contents(dw)[kept] = d;
+                                                            contents(yw)[kept] = flt.float_of_key(ky);
+                                                            contents(ww)[kept] = wt;
+                                                            contents(ow)[kept] = truncate(d) * 4194304 + kept;
+                                                            kept = kept + 1;
+                                                        }
+                                                    }
+                                                    i = i + 1;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if neg_w > 0 {
+                            ok = false;
+                            e = rule.refuse_int(heap, e, "stats.cycle.weight-negative", "a weight is below zero", "weights are the inverse variance of a day: zero or above", "cells", neg_w, "line", 0);
+                        } else if bad_day > 0 {
+                            ok = false;
+                            e = rule.refuse_int(heap, e, "stats.cycle.day-not-integer", "a day is not a whole number from 0 to 2^40", "days are integers: 0, 1, 2, ...", "cells", bad_day, "line", 0);
+                        } else if kept > 4194303 {
+                            ok = false;
+                            e = rule.refuse_int(heap, e, "limit.series-too-long", "a series has more than 4194303 rows", "split the series", "rows", kept, "line", 0);
+                        }
+                        if ok {
+                            let tmp = box_slice(heap, rows + 1, 0);
+                            let cnt = box_slice(heap, 256, 0);
+                            borrow mut ord as &!ow2 in {
+                                borrow mut tmp as &!tw in {
+                                    borrow mut cnt as &!cnw in {
+                                        rank.sort_range(contents(ow2), contents(tw), contents(cnw), 0, kept);
+                                    }
+                                }
+                            }
+                            unbox_slice(heap, tmp);
+                            unbox_slice(heap, cnt);
+                            unbox_slice(heap, out_t);
+                            unbox_slice(heap, out_y);
+                            unbox_slice(heap, out_w);
+                            out_t = box_slice(heap, kept + 1, 0.0);
+                            out_y = box_slice(heap, kept + 1, 0.0);
+                            out_w = box_slice(heap, kept + 1, 0.0);
+                            var dup = false;
+                            borrow ord as &or in {
+                                borrow dayv as &dr in {
+                                    borrow yv as &yr in {
+                                        borrow wv as &wr3 in {
+                                            borrow mut out_t as &!tsw in {
+                                                borrow mut out_y as &!ysw in {
+                                                    borrow mut out_w as &!wsw in {
+                                                        var i = 0;
+                                                        while i < kept {
+                                                            let src = contents(or)[i] % 4194304;
+                                                            contents(tsw)[i] = contents(dr)[src];
+                                                            contents(ysw)[i] = contents(yr)[src];
+                                                            contents(wsw)[i] = contents(wr3)[src];
+                                                            if i > 0 && contents(tsw)[i] == contents(tsw)[i - 1] {
+                                                                dup = true;
+                                                            }
+                                                            i = i + 1;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if dup {
+                                e = rule.refuse(heap, e, "stats.cycle.duplicate-day", "a series has two rows for the same day", "one row per series and day", "series", key);
+                            } else {
+                                out_kept = kept;
+                            }
+                        }
+                        unbox_slice(heap, ord);
+                        unbox_slice(heap, dayv);
+                        unbox_slice(heap, yv);
+                        unbox_slice(heap, wv);
+                    }
+                    unbox_slice(heap, want);
+                }
+                buffer.drop(heap, names);
+                vec.drop(heap, ends);
+                scan.drop_cols(heap, cols);
+                vec.drop(heap, store);
+            }
+            file_close(file);
+        }
+    }
+    return (e, out_kept, out_t, out_y, out_w);
+}
+
+
+fn one_series[&h, &g, &p, &f, &r, &sh, &fu, &k](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], table: &static [byte], by: int, key: &k [byte], period: float, order: int, js: bool, w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
+    var w = w0;
+    let (e1, kept, ts, ys, ws) = load_series(heap, args, parsed, fs, root, rel, full, table, by, key, errs);
+    if kept >= 0 {
+        borrow ts as &tsr in {
+            borrow ys as &ysr in {
+                borrow ws as &wsr in {
+                    let (st, ar, br, fv, sh, a, b) = fit_series(heap, contents(tsr), contents(ysr), contents(wsr), kept, period, order, js);
+                    w = json.begin_object(heap, w);
+                    w = json.put_key(heap, w, "series");
+                    w = json.put_string(heap, w, key);
+                    w = json.put_key(heap, w, "days");
+                    w = json.put_int(heap, w, kept);
+                    w = json.put_key(heap, w, "status");
+                    if st == 0 {
+                        w = json.put_string(heap, w, "fitted");
+                    } else if st == 1 {
+                        w = json.put_string(heap, w, "too-short");
+                    } else {
+                        w = json.put_string(heap, w, "degenerate");
+                    }
+                    w = json.put_key(heap, w, "a");
+                    w = json.put_float(heap, w, a);
+                    w = json.put_key(heap, w, "b");
+                    w = json.put_float(heap, w, b);
+                    w = json.put_key(heap, w, "a_raw");
+                    w = json.put_float(heap, w, ar);
+                    w = json.put_key(heap, w, "b_raw");
+                    w = json.put_float(heap, w, br);
+                    w = json.put_key(heap, w, "f");
+                    w = json.put_float(heap, w, fv);
+                    w = json.put_key(heap, w, "shrink");
+                    w = json.put_float(heap, w, sh);
+                    w = json.end_object(heap, w);
+                }
+            }
+        }
+    }
+    unbox_slice(heap, ts);
+    unbox_slice(heap, ys);
+    unbox_slice(heap, ws);
+    return (w, e1);
+}

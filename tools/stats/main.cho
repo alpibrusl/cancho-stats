@@ -36,6 +36,9 @@ import stest.fisher;
 import stest.answer10;
 import csvx.cat;
 import csvx.boot;
+import csvx.did;
+import csvx.cyclefit;
+import csvx.cycledetect;
 import csvx.ci;
 import csvx.perm;
 import csvx.cross;
@@ -55,7 +58,7 @@ import toolbox.place;
 import toolbox.text;
 
 fn flag_table() -> [] &static [byte] {
-    return "root||path|root||resolve FILE relative to this directory and refuse paths outside it;delim|d|text|none|,|the one byte that separates fields (default comma);ddof||nat|none|1|the divisor of the variance is n minus this (1 is the sample variance, 0 the population variance);max-rows||nat|none|1000000|the most data rows read, one more is limit.too-many-rows (ceiling 10000000);max-cols||nat|none|256|the most columns, more is limit.too-many-columns (ceiling 4096);max-line-bytes||nat|none|1048576|the longest line read, a longer one is limit.line-too-long (ceiling 16777216);max-cells||nat|none|20000000|the most cells (rows times columns) held for the quantiles, more is limit.too-many-cells (ceiling 100000000);quantiles||text|none|0,0.25,0.5,0.75,1|the probabilities of the quantiles, comma separated decimals from 0 to 1 with at most 9 decimals (at most 99 of them);quantile-type||nat|none|7|which of the nine Hyndman-Fan definitions, 1 to 9 (7 is the default of R and numpy);bins||nat|none|10|the number of equal-width histogram bins over [min, max], 0 for none (ceiling 1000);levels||nat|none|10|how many of the most frequent levels of a text column to print, 0 for none and no second pass (ceiling 100);max-levels||nat|none|100000|the most distinct (column, level) pairs held for all text columns together, a column that would need one more is levels_capped (ceiling 1000000);by||text|none||the header name of a column: describe each group of rows that have the same value in it, one after the other;max-groups||nat|none|50|the most groups with --by, one more is limit.too-many-groups (ceiling 1000);cols||text|none||the columns to describe, correlate or test: header names separated by commas, printed in the order of the file;format||choice:json/text|none|json|json for a program, text (one line per value, path = value) for a person;method||choice:pearson/spearman/kendall/wilson/clopper-pearson/newcombe/percentile/bca|none|pearson|ci boot: percentile (default) or bca; corr: the coefficient: pearson, spearman (the Pearson coefficient of the average ranks) or kendall (tau-b); ci prop: wilson (default), clopper-pearson, or newcombe (the difference, with --group);missing||choice:pairwise/listwise|none|pairwise|corr: pairwise uses, for each pair, the rows where both cells are numbers, listwise only the rows where every chosen column has a number;max-pairs||nat|none|1000|corr: the most pairs of columns, more is limit.too-many-pairs (ceiling 32640);mu0||text|none|0|test t1: the mean under the null hypothesis, a number;level||text|none|0.95|test: the confidence level of the interval, a decimal strictly between 0 and 1 with at most 9 decimals;group||text|none||test t2, prop, anova, kruskal, mannwhitney or ks: the header name of the column that has the groups (t2, prop, mannwhitney and ks: exactly two levels, the level that is first by bytes is the group a; anova and kruskal: two or more levels, at most --max-groups);vs||text|none||test chisq and fisher: the header name of the column to test the others against (independence);expected||text|none||test chisq: the proportions the column is tested against (goodness of fit), k decimals with at most 9 decimals that add up to 1, in the order of the levels by their bytes;correct||choice:none/bonferroni/holm/bh|none|none|test: the correction of the p-values of the call as a family of tests (none, bonferroni, holm or bh), written as family.p_adjusted after the tests;max-tests||nat|none|1000|test with --correct: the most tests (columns or pairs) in the family, more is limit.too-many-tests (ceiling 32640);success||text|none||test prop: the cell value that counts as a success;p0||text|none|0.5|test prop: the proportion under the null hypothesis, a decimal strictly between 0 and 1 with at most 9 decimals (one sample; not with --group);zeros||choice:wilcox/pratt/zsplit|none|wilcox|test wilcoxon: wilcox drops the zero differences before ranking (the default of R and scipy), pratt ranks them with the others and drops them from the sums, zsplit ranks them and shares their ranks between the two sums;exact||choice:auto/yes/no|none|auto|test mannwhitney, wilcoxon or ks: auto uses the exact p-value when no two values are equal and there are at most 60 values, yes refuses (stats.exact-unavailable) where it is not available, no always uses the normal approximation;continuity||choice:auto/none|none|auto|test mannwhitney or wilcoxon: auto applies the continuity correction of 0.5 to the normal approximation, none does not;variance||choice:welch/pooled|none|welch|test t2 or anova: welch (the default, the variances may differ) or pooled (the variances are equal);pairs||text|none||test paired: the columns to compare, A:B,C:D, the differences are A minus B over the rows where both are numbers;statistic||choice:mean/median/variance/sd/skewness/kurtosis/quantile/trimmed-mean/mean-diff|none|mean|ci boot: the statistic of each resample; resample perm: mean-diff;permutations||text|none|9999|resample perm: the number of shuffles, 100 to 1000000, or all for every arrangement of the labels (at most 1048576);prob||text|none||ci boot with quantile: the probability, a decimal from 0 to 1 with at most 9 decimals (the type is --quantile-type);trim||text|none|0.1|ci boot with trimmed-mean: the fraction dropped at each end, a decimal from 0 up to but not including 0.5 with at most 9 decimals;replicates||nat|none|2000|ci boot: the number of resamples, 100 to 100000;seed||text|none||ci boot: the seed of the draws, an integer from 0 to 4611686018427387903 (required: an unseeded draw is not reproducible);max-work||nat|none|2147483648|ci boot: the most draws (replicates times rows), more is limit.too-much-work";
+    return "root||path|root||resolve FILE relative to this directory and refuse paths outside it;delim|d|text|none|,|the one byte that separates fields (default comma);ddof||nat|none|1|the divisor of the variance is n minus this (1 is the sample variance, 0 the population variance);max-rows||nat|none|1000000|the most data rows read, one more is limit.too-many-rows (ceiling 10000000);max-cols||nat|none|256|the most columns, more is limit.too-many-columns (ceiling 4096);max-line-bytes||nat|none|1048576|the longest line read, a longer one is limit.line-too-long (ceiling 16777216);max-cells||nat|none|20000000|the most cells (rows times columns) held for the quantiles, more is limit.too-many-cells (ceiling 100000000);quantiles||text|none|0,0.25,0.5,0.75,1|the probabilities of the quantiles, comma separated decimals from 0 to 1 with at most 9 decimals (at most 99 of them);quantile-type||nat|none|7|which of the nine Hyndman-Fan definitions, 1 to 9 (7 is the default of R and numpy);bins||nat|none|10|the number of equal-width histogram bins over [min, max], 0 for none (ceiling 1000);levels||nat|none|10|how many of the most frequent levels of a text column to print, 0 for none and no second pass (ceiling 100);max-levels||nat|none|100000|the most distinct (column, level) pairs held for all text columns together, a column that would need one more is levels_capped (ceiling 1000000);by||text|none||the header name of a column: describe each group of rows that have the same value in it, one after the other;max-groups||nat|none|50|the most groups with --by, one more is limit.too-many-groups (ceiling 1000);cols||text|none||the columns to describe, correlate or test: header names separated by commas, printed in the order of the file;format||choice:json/text|none|json|json for a program, text (one line per value, path = value) for a person;method||choice:pearson/spearman/kendall/wilson/clopper-pearson/newcombe/percentile/bca|none|pearson|ci boot: percentile (default) or bca; corr: the coefficient: pearson, spearman (the Pearson coefficient of the average ranks) or kendall (tau-b); ci prop: wilson (default), clopper-pearson, or newcombe (the difference, with --group);missing||choice:pairwise/listwise|none|pairwise|corr: pairwise uses, for each pair, the rows where both cells are numbers, listwise only the rows where every chosen column has a number;max-pairs||nat|none|1000|corr: the most pairs of columns, more is limit.too-many-pairs (ceiling 32640);mu0||text|none|0|test t1: the mean under the null hypothesis, a number;level||text|none|0.95|test: the confidence level of the interval, a decimal strictly between 0 and 1 with at most 9 decimals;group||text|none||test t2, prop, anova, kruskal, mannwhitney or ks: the header name of the column that has the groups (t2, prop, mannwhitney and ks: exactly two levels, the level that is first by bytes is the group a; anova and kruskal: two or more levels, at most --max-groups);vs||text|none||test chisq and fisher: the header name of the column to test the others against (independence);expected||text|none||test chisq: the proportions the column is tested against (goodness of fit), k decimals with at most 9 decimals that add up to 1, in the order of the levels by their bytes;correct||choice:none/bonferroni/holm/bh|none|none|test: the correction of the p-values of the call as a family of tests (none, bonferroni, holm or bh), written as family.p_adjusted after the tests;max-tests||nat|none|1000|test with --correct: the most tests (columns or pairs) in the family, more is limit.too-many-tests (ceiling 32640);success||text|none||test prop: the cell value that counts as a success;p0||text|none|0.5|test prop: the proportion under the null hypothesis, a decimal strictly between 0 and 1 with at most 9 decimals (one sample; not with --group);zeros||choice:wilcox/pratt/zsplit|none|wilcox|test wilcoxon: wilcox drops the zero differences before ranking (the default of R and scipy), pratt ranks them with the others and drops them from the sums, zsplit ranks them and shares their ranks between the two sums;exact||choice:auto/yes/no|none|auto|test mannwhitney, wilcoxon or ks: auto uses the exact p-value when no two values are equal and there are at most 60 values, yes refuses (stats.exact-unavailable) where it is not available, no always uses the normal approximation;continuity||choice:auto/none|none|auto|test mannwhitney or wilcoxon: auto applies the continuity correction of 0.5 to the normal approximation, none does not;variance||choice:welch/pooled|none|welch|test t2 or anova: welch (the default, the variances may differ) or pooled (the variances are equal);pairs||text|none||test paired: the columns to compare, A:B,C:D, the differences are A minus B over the rows where both are numbers;statistic||choice:mean/median/variance/sd/skewness/kurtosis/quantile/trimmed-mean/mean-diff|none|mean|ci boot: the statistic of each resample; resample perm: mean-diff;permutations||text|none|9999|resample perm: the number of shuffles, 100 to 1000000, or all for every arrangement of the labels (at most 1048576);prob||text|none||ci boot with quantile: the probability, a decimal from 0 to 1 with at most 9 decimals (the type is --quantile-type);trim||text|none|0.1|ci boot with trimmed-mean: the fraction dropped at each end, a decimal from 0 up to but not including 0.5 with at most 9 decimals;replicates||nat|none|2000|ci boot: the number of resamples, 100 to 100000;seed||text|none||ci boot: the seed of the draws, an integer from 0 to 4611686018427387903 (required: an unseeded draw is not reproducible);max-work||nat|none|2147483648|ci boot: the most draws (replicates times rows), more is limit.too-much-work;arm||text|none||did: the header name of the column that holds the arm of each unit, 0 or 1 (1 = treated unless --treated-value says otherwise);pre||text|none||did: the column of the pre-period sums;post||text|none||did: the column of the post-period sums;pre-days||text|none||did: the column of the number of days the pre sum covers (levels are sums over days; give both day columns or neither);post-days||text|none||did: the column of the number of days the post sum covers;min-pre-days||nat|none|14|did: a unit with fewer pre days than this is left out (only with --pre-days);treated-value||nat|none|1|did: the value of the arm column that marks the treated units, 0 or 1;day||text|none||cycle: the header name of the column of day numbers (whole numbers from 0);y||text|none||cycle: the header name of the column of values;weight||text|none||cycle: the column of weights (the inverse variance of a row; zero rows are left out); absent means 1;series||text|none||cycle: the column whose values name the series, one fit for each;period||text|none||cycle fit: the period in days, a number above 0;order||nat|none|2|cycle: the degree of the polynomial level under the cycle, 0 to 3;shrink||choice:james-stein/none|none|james-stein|cycle fit: shrink the two cycle coefficients by max(0, 1 - 2/F), or give the raw fit;min-period||text|none|21|cycle detect: the shortest period looked for, in days, 2 to 1000000;min-cycles||text|none|2|cycle detect: the series must hold this many cycles of a period to look for it, 1 to 1000;oversample||nat|none|4|cycle detect: the grid of frequencies is finer than one over the span by this factor, 1 to 16;shuffles||nat|none|499|cycle detect: the number of shuffles of the permutation test, 99 to 9999;alpha||text|none|0.004|cycle detect: a cycle is real if at most this share of the shuffles does as well;edge||text|none|0.8|cycle detect: a best period above this share of the longest one tried is refused;grid||choice:yes/no|none|no|cycle detect: also print the gain of every period of the grid";
 }
 
 fn tool() -> [] describe.Tool {
@@ -1344,11 +1347,12 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
     var is_test = false;
     var is_ci = false;
     var is_resample = false;
+    var is_cycle = false;
     var fidx = 1;
     if cli.operand_count(parsed) == 0 {
         e = rule.refuse(heap, e, "args.missing-operand", "no verb: the first operand names what to do", "stats describe FILE", "", "");
-    } else if !bytes.equal(cli.operand(args, parsed, 0), "describe") && !bytes.equal(cli.operand(args, parsed, 0), "corr") && !bytes.equal(cli.operand(args, parsed, 0), "test") && !bytes.equal(cli.operand(args, parsed, 0), "ci") && !bytes.equal(cli.operand(args, parsed, 0), "resample") {
-        e = rule.refuse(heap, e, "stats.bad-verb", "the first operand is not a verb this tool has", "the verbs are: describe, corr, test, ci, resample", "verb", cli.operand(args, parsed, 0));
+    } else if !bytes.equal(cli.operand(args, parsed, 0), "describe") && !bytes.equal(cli.operand(args, parsed, 0), "corr") && !bytes.equal(cli.operand(args, parsed, 0), "test") && !bytes.equal(cli.operand(args, parsed, 0), "ci") && !bytes.equal(cli.operand(args, parsed, 0), "resample") && !bytes.equal(cli.operand(args, parsed, 0), "did") && !bytes.equal(cli.operand(args, parsed, 0), "cycle") {
+        e = rule.refuse(heap, e, "stats.bad-verb", "the first operand is not a verb this tool has", "the verbs are: describe, corr, test, ci, resample, did, cycle", "verb", cli.operand(args, parsed, 0));
     } else if bytes.equal(cli.operand(args, parsed, 0), "ci") {
         is_ci = true;
         fidx = 2;
@@ -1367,6 +1371,16 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
             e = rule.refuse(heap, e, "stats.test-columns", "ci diff needs --cols and --group", "stats ci diff --cols A,B --group G FILE", "flag", "--cols");
         } else if cli.operand_count(parsed) >= 2 && bytes.equal(cli.operand(args, parsed, 1), "boot") && !cli.has(parsed, table, "cols") {
             e = rule.refuse(heap, e, "stats.test-columns", "ci boot needs --cols and --seed", "stats ci boot --cols A,B --seed 1 FILE", "flag", "--cols");
+        }
+    } else if bytes.equal(cli.operand(args, parsed, 0), "cycle") {
+        is_cycle = true;
+        fidx = 2;
+        if cli.operand_count(parsed) < 2 {
+            e = rule.refuse(heap, e, "args.missing-operand", "no kind of cycle work: the second operand names it", "stats cycle fit --day day --y y --series key --period 90 FILE", "", "");
+        } else if !bytes.equal(cli.operand(args, parsed, 1), "fit") && !bytes.equal(cli.operand(args, parsed, 1), "detect") {
+            e = rule.refuse(heap, e, "args.bad-value", "the kind of cycle work is not one this tool has", "the kinds so far are: fit, detect", "kind", cli.operand(args, parsed, 1));
+        } else if cli.operand_count(parsed) != 3 {
+            e = rule.refuse(heap, e, "args.missing-operand", "cycle names one kind and one FILE", "stats cycle fit --day day --y y --series key --period 90 FILE", "", "");
         }
     } else if bytes.equal(cli.operand(args, parsed, 0), "resample") {
         is_resample = true;
@@ -1470,6 +1484,36 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
         boot_pn = pn5;
         boot_pk = pk5;
         boot_meth = mt5;
+    }
+    var cycle_period = 0.0;
+    if is_cycle && cli.operand_count(parsed) >= 2 && bytes.equal(cli.operand(args, parsed, 1), "fit") {
+        let (e8, pd8) = cyclefit.check_flags(heap, args, parsed, table, e);
+        e = e8;
+        cycle_period = pd8;
+    }
+    var cd_seed = 0;
+    var cd_minp = 21.0;
+    var cd_minc = 2.0;
+    var cd_alpha = 0.004;
+    var cd_edge = 0.8;
+    if is_cycle && cli.operand_count(parsed) >= 2 && bytes.equal(cli.operand(args, parsed, 1), "detect") {
+        let (e9, sd9, mp9, mc9, al9, ed9) = cycledetect.check_flags(heap, args, parsed, table, e);
+        e = e9;
+        cd_seed = sd9;
+        cd_minp = mp9;
+        cd_minc = mc9;
+        cd_alpha = al9;
+        cd_edge = ed9;
+    }
+    var did_seed = 0;
+    var did_reps = 0;
+    var did_on = 0;
+    if cli.operand_count(parsed) >= 1 && bytes.equal(cli.operand(args, parsed, 0), "did") {
+        let (e7, sd7, rp7, on7) = did.check_flags(heap, args, parsed, table, e);
+        e = e7;
+        did_seed = sd7;
+        did_reps = rp7;
+        did_on = on7;
     }
     let (lv_num, lv_k, lv_ok) = cat.parse_p(cli.text(args, parsed, table, "level"));
     if !lv_ok || lv_num == 0 || lv_num >= quantile.pow10(lv_k) {
@@ -1615,6 +1659,18 @@ fn body[&h, &g, &p, &f, &i](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed
                         e = e2;
                     } else if is_test {
                         let (w2, e2) = test_one(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), bytes.equal(cli.operand(args, parsed, 1), "paired") || (bytes.equal(cli.operand(args, parsed, 1), "wilcoxon") && cli.has(parsed, table, "pairs")), bytes.equal(cli.operand(args, parsed, 1), "wilcoxon"), false, w, e);
+                        w = w2;
+                        e = e2;
+                    } else if is_cycle && bytes.equal(cli.operand(args, parsed, 1), "detect") {
+                        let (w2, e2) = cycledetect.cycle_detect(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), table, cd_seed, cd_minp, cd_minc, cd_alpha, cd_edge, w, e);
+                        w = w2;
+                        e = e2;
+                    } else if is_cycle {
+                        let (w2, e2) = cyclefit.cycle_fit(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), table, cycle_period, w, e);
+                        w = w2;
+                        e = e2;
+                    } else if bytes.equal(cli.operand(args, parsed, 0), "did") {
+                        let (w2, e2) = did.did(heap, args, parsed, fs, buffer.bytes(rr), path.shown(tp), path.full(tp), table, did_seed, did_reps, did_on, lv_num, lv_k, float_of(lv_num) / float_of(quantile.pow10(lv_k)), w, e);
                         w = w2;
                         e = e2;
                     } else if bytes.equal(cli.operand(args, parsed, 0), "corr") {

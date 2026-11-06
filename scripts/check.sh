@@ -29,13 +29,15 @@ step "stats test prop"; $PY scripts/gate_test4.py --files 300; $PY scripts/gate_
 step "stats test --correct"; $PY scripts/gate_test5.py --files 100; $PY scripts/gate_test5_calibration.py --replicates 1000
 step "stats test anova"; $PY scripts/gate_anova.py --files 200 --scipy; $PY scripts/gate_anova_calibration.py --replicates 1000
 step "stats test kruskal"; $PY scripts/gate_kruskal.py --files 200 --scipy; $PY scripts/gate_kruskal_calibration.py --replicates 1000
+step "stats did"; $PY scripts/gate_did.py --cases 300 --boot-cases 40
+step "stats cycle"; $PY scripts/gate_cyclefit.py --cases 120; $PY scripts/gate_cycledetect.py --cases 30
 step "stats ci prop"; $PY scripts/gate_ci_prop.py --files 200; $PY scripts/gate_ci_prop_coverage.py; $PY scripts/gate_ci_mean.py --files 200; $PY scripts/gate_ci_corr.py --files 200; $PY scripts/gate_ci_boot.py --files 100; $PY scripts/gate_resample_perm.py --files 100; $PY scripts/gen_stories.py --check
 step "stats corr --exact"; $PY scripts/gate_corr_exact.py --files 200 --scipy
 step "stats test fisher"; $PY scripts/gate_fisher.py --files 200 --scipy
 step "stats test ks"; $PY scripts/gate_ks.py --files 200 --scipy; $PY scripts/gate_ks_calibration.py --replicates 1000
 step "stats test mannwhitney"; $PY scripts/gate_mannwhitney.py --files 200 --scipy; $PY scripts/gate_mannwhitney_calibration.py --replicates 1000
 step "stats test wilcoxon"; $PY scripts/gate_wilcoxon.py --files 200 --scipy; $PY scripts/gate_wilcoxon_calibration.py --replicates 1000
-step "mutant patterns"; for m in bigint psum xsum stats central quantile histogram levels by cols corr test test2 test3 test4 test5 anova kruskal mannwhitney wilcoxon ks fisher corrx ci special; do $PY scripts/mutants_$m.py --check; done
+step "mutant patterns"; for m in bigint psum xsum stats central quantile histogram levels by cols corr test test2 test3 test4 test5 anova kruskal mannwhitney wilcoxon ks fisher corrx ci special did cyclefit cycledetect; do $PY scripts/mutants_$m.py --check; done
 step "exact accumulation"; $PY scripts/measure_acc.py | tail -3
 step "accuracy sweeps (fast)"; $PY scripts/gate_special.py --fast
 step "independence"; $PY scripts/gate_independence.py --fast

@@ -40,6 +40,9 @@ import gate_ci_prop  # noqa: E402
 import gate_ci_corr  # noqa: E402
 import gate_ci_boot  # noqa: E402
 import gate_resample_perm  # noqa: E402
+import gate_did  # noqa: E402
+import gate_cyclefit  # noqa: E402
+import gate_cycledetect  # noqa: E402
 import gate_test2  # noqa: E402
 import gate_test  # noqa: E402
 import gate_wilcoxon  # noqa: E402
@@ -582,6 +585,54 @@ def resample_perm_lines(stats):
     return out
 
 
+def did_lines(stats):
+    """`stats did` on 6 seeded tables of scripts/gate_did.py (day columns or not, a missing cell sometimes), the point estimate and a stratified bootstrap with a seed across the range: the SHA-256 of the exit status and the
+    bytes of both answers. The sums are exact integers, the draws SplitMix64; the floating-point steps are divisions, products and subtractions of the elimination, all IEEE operations, no libm."""
+    out = []
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        r = gate_special.SM64(171)
+        done = 0
+        while done < 6:
+            units, days = gate_did.make_case(r, big=False)
+            rows = gate_did.levels(units, days, 14)
+            n1 = sum(1 for x in rows if x[2] == 1)
+            if len(rows) < 6 or n1 < 3 or len(rows) - n1 < 3:
+                continue
+            extra = ["--pre-days", "d0", "--post-days", "d1", "--min-pre-days", "14"] if days else []
+            seed = [0, 1, 7, 20240229, 4611686018427387903, 2 ** 40 + 5][int(r.next() % 6)]
+            h = hashlib.sha256()
+            for argv in (["--arm", "arm", "--pre", "pre", "--post", "post"] + extra,
+                         ["--arm", "arm", "--pre", "pre", "--post", "post", "--seed", str(seed), "--replicates", "200"] + extra):
+                p = gate_did.run(stats, tmp, gate_did.table(units, days), argv)
+                h.update(("exit %d %s" % (p.returncode, p.stdout)).encode())
+            out.append("did\tfile%02d\t%d\t%s" % (done, len(units), h.hexdigest()))
+            done += 1
+    return out
+
+
+def cycle_lines(stats):
+    """`stats cycle fit` on 4 and `stats cycle detect` on 4 seeded long-format files of scripts/gate_cyclefit.py and scripts/gate_cycledetect.py: the SHA-256 of the exit status and the bytes of the answer. The sine and the cosine are
+    those of std.math (fdlibm written in cancho, not the platform's libm), the shuffles SplitMix64, the least squares a Householder QR: IEEE operations only."""
+    out = []
+    with tempfile.TemporaryDirectory() as t:
+        tmp = pathlib.Path(t)
+        r = gate_special.SM64(181)
+        for done in range(4):
+            series, rows, use_w = gate_cyclefit.make_file(r, r.pick([2, 3]))
+            order = r.pick([1, 2, 3])
+            period = r.pick([30.5, 60.0, 91.25])
+            argv = ["--day", "day", "--y", "y", "--series", "k", "--period", repr(period), "--order", str(order)] + (["--weight", "w"] if use_w else [])
+            p = gate_cyclefit.run(stats, tmp, gate_cyclefit.text_of(rows, use_w), argv)
+            out.append("cycle-fit\tfile%02d\t%d\t%s" % (done, len(rows), hashlib.sha256(("exit %d %s" % (p.returncode, p.stdout)).encode()).hexdigest()))
+        for done in range(4):
+            series, use_w = gate_cycledetect.make(r)
+            argv = ["--day", "day", "--y", "y", "--series", "k", "--seed", str(r.pick([1, 7, 20240229])), "--shuffles", "99", "--grid", "yes"] + (["--weight", "w"] if use_w else [])
+            p = gate_cycledetect.run(stats, tmp, gate_cycledetect.text_of(series, use_w), argv)
+            out.append("cycle-detect\tfile%02d\t%d\t%s" % (done, sum(len(v[0]) for v in series.values()), hashlib.sha256(("exit %d %s" % (p.returncode, p.stdout)).encode()).hexdigest()))
+    return out
+
+
 def wilcoxon_lines(stats):
     """`stats test wilcoxon` on 8 seeded CSV files (pairs of columns with zero differences and heavy ties, sizes up to 200, the shapes of scripts/gate_wilcoxon.py), with the three methods for zeros, `--exact no` and
     `--continuity none`, and the one-sample form: the hash of the bytes of the answers."""
@@ -648,6 +699,8 @@ def fingerprint(driver, acc, threads_check=True, stats=None):
         lines += ci_boot_lines(stats)
         lines += ci_bca_lines(stats)
         lines += resample_perm_lines(stats)
+        lines += did_lines(stats)
+        lines += cycle_lines(stats)
     return lines, bad
 
 

@@ -1,0 +1,702 @@
+edition 5;
+
+module csvx.did;
+
+import std.buffer;
+import std.bytes;
+import std.json;
+import std.vec;
+import acc.psum;
+import acc.quantile;
+import acc.xsum;
+import csvx.boot;
+import csvx.cat;
+import csvx.pick;
+import csvx.rule;
+import csvx.scan;
+import flt;
+import metrics.rank;
+import ml.rng;
+import toolbox.cli;
+import toolbox.fail;
+import toolbox.place;
+
+// `stats did` (docs/estimation.md section 2): the regression-adjusted difference between treated and holdout units. One row per unit with its arm (0 or 1), its pre and post sums and, optionally, the days they cover.
+// The levels are x = pre / pre-days and y = post / post-days (one correctly rounded division each); the fit is y = a + b x + tau treated by least squares, whose normal equations are built from EXACT sums (acc.psum, acc.xsum)
+// rounded once, so the coefficients are a function of the multiset of rows and not of their order. The effect is tau over the treated units' counterfactual mean (their mean y minus tau), absent when that is not positive.
+// The interval is the percentile interval of the replicates of a stratified bootstrap over units (treated and holdout drawn separately), replicate b with the stream derive(derive(seed, 3), b).
+
+fn float_of_bits(bits: int) -> [] float {
+    var key = bits;
+    if bits < 0 {
+        key = bits ^ 0x7fffffffffffffff;
+    }
+    return flt.float_of_key(key);
+}
+
+fn rounded_float[&a, &o](acc: &a [int], k: int, out: &!o [int]) -> [] float {
+    let (b, over) = psum.rounded(acc, k, out);
+    return float_of_bits(b);
+}
+
+// Solve the 3 x 3 system in `m` (row major, 9) and `r` (3) by elimination with partial pivoting; the solution is left in r. Answers 1 if a pivot is negligible against the largest entry (singular), else 0.
+fn solve3[&m, &r](m: &!m [float], r: &!r [float]) -> [] int {
+    var scale = 0.0;
+    var i = 0;
+    while i < 9 {
+        var v = m[i];
+        if v < 0.0 {
+            v = 0.0 - v;
+        }
+        if v > scale {
+            scale = v;
+        }
+        i = i + 1;
+    }
+    if scale == 0.0 {
+        return 1;
+    }
+    var c = 0;
+    while c < 3 {
+        var p = c;
+        var best = m[c * 3 + c];
+        if best < 0.0 {
+            best = 0.0 - best;
+        }
+        var k = c + 1;
+        while k < 3 {
+            var v = m[k * 3 + c];
+            if v < 0.0 {
+                v = 0.0 - v;
+            }
+            if v > best {
+                best = v;
+                p = k;
+            }
+            k = k + 1;
+        }
+        if best <= 1e-12 * scale {
+            return 1;
+        }
+        if p != c {
+            var j = 0;
+            while j < 3 {
+                let t = m[c * 3 + j];
+                m[c * 3 + j] = m[p * 3 + j];
+                m[p * 3 + j] = t;
+                j = j + 1;
+            }
+            let tr = r[c];
+            r[c] = r[p];
+            r[p] = tr;
+        }
+        var rr = c + 1;
+        while rr < 3 {
+            let f = m[rr * 3 + c] / m[c * 3 + c];
+            var j = c;
+            while j < 3 {
+                m[rr * 3 + j] = m[rr * 3 + j] - f * m[c * 3 + j];
+                j = j + 1;
+            }
+            r[rr] = r[rr] - f * r[c];
+            rr = rr + 1;
+        }
+        c = c + 1;
+    }
+    var back = 2;
+    while back >= 0 {
+        var s = r[back];
+        var j = back + 1;
+        while j < 3 {
+            s = s - m[back * 3 + j] * r[j];
+            j = j + 1;
+        }
+        r[back] = s / m[back * 3 + back];
+        back = back - 1;
+    }
+    return 0;
+}
+
+// The fit on the n rows named by `idx` (row numbers into xs, ys, ts, repeats allowed). out: 0 a, 1 b, 2 tau, 3 effect, 4 1.0 if the effect exists, 5 naive, 6 1.0 if the naive exists, 7 the treated units' mean y.
+// Answers 0, or 1 if the system is singular, or 2 if there is no treated unit or no holdout unit among the rows.
+fn fit[&h, &x, &y, &t, &ix, &o](heap: &!h Heap, xs: &x [float], ys: &y [float], ts: &t [int], idx: &ix [int], n: int, out: &!o [float]) -> [heap] int {
+    let s1 = psum.size(1);
+    let s2 = psum.size(2);
+    let ox = 0;
+    let oy = s1;
+    let oxt = 2 * s1;
+    let oyt = 3 * s1;
+    let oxx = 4 * s1;
+    let oxy = 4 * s1 + s2;
+    let acc = box_slice(heap, 4 * s1 + 2 * s2 + 1, 0);
+    let work = box_slice(heap, psum.scratch() + 1, 0);
+    let scr = box_slice(heap, psum.limbs(2) + 1, 0);
+    var n1 = 0;
+    var status = 0;
+    let mat = box_slice(heap, 10, 0.0);
+    let rhs = box_slice(heap, 4, 0.0);
+    var sx = 0.0;
+    var sy = 0.0;
+    var sxt = 0.0;
+    var syt = 0.0;
+    var sxx = 0.0;
+    var sxy = 0.0;
+    borrow mut acc as &!aw in {
+        borrow mut work as &!ww in {
+            borrow mut scr as &!sw in {
+                let a = contents(aw);
+                let wk = contents(ww);
+                var i = 0;
+                while i < n {
+                    let r = idx[i];
+                    let xb = bits_of(xs[r]);
+                    let yb = bits_of(ys[r]);
+                    psum.add(a[ox..ox + s1], 1, xb, wk);
+                    psum.add(a[oy..oy + s1], 1, yb, wk);
+                    psum.add(a[oxx..oxx + s2], 2, xb, wk);
+                    xsum.add(a[oxy..oxy + s2], xb, yb, wk);
+                    if ts[r] == 1 {
+                        psum.add(a[oxt..oxt + s1], 1, xb, wk);
+                        psum.add(a[oyt..oyt + s1], 1, yb, wk);
+                        n1 = n1 + 1;
+                    }
+                    i = i + 1;
+                }
+                let sc = contents(sw);
+                sx = rounded_float(a[ox..ox + s1], 1, sc);
+                sy = rounded_float(a[oy..oy + s1], 1, sc);
+                sxt = rounded_float(a[oxt..oxt + s1], 1, sc);
+                syt = rounded_float(a[oyt..oyt + s1], 1, sc);
+                sxx = rounded_float(a[oxx..oxx + s2], 2, sc);
+                sxy = rounded_float(a[oxy..oxy + s2], 2, sc);
+            }
+        }
+    }
+    unbox_slice(heap, acc);
+    unbox_slice(heap, work);
+    unbox_slice(heap, scr);
+    if n1 == 0 || n1 == n {
+        status = 2;
+    } else {
+        let fn_ = float_of(n);
+        let f1 = float_of(n1);
+        borrow mut mat as &!mw in {
+            borrow mut rhs as &!rw in {
+                let m = contents(mw);
+                let r = contents(rw);
+                m[0] = fn_;
+                m[1] = sx;
+                m[2] = f1;
+                m[3] = sx;
+                m[4] = sxx;
+                m[5] = sxt;
+                m[6] = f1;
+                m[7] = sxt;
+                m[8] = f1;
+                r[0] = sy;
+                r[1] = sxy;
+                r[2] = syt;
+                status = solve3(m, r);
+                if status == 0 {
+                    out[0] = r[0];
+                    out[1] = r[1];
+                    out[2] = r[2];
+                    let mean_t = syt / f1;
+                    out[7] = mean_t;
+                    let base = mean_t - r[2];
+                    out[4] = 0.0;
+                    out[3] = 0.0;
+                    if base > 0.0 {
+                        out[3] = r[2] / base;
+                        out[4] = 1.0;
+                    }
+                    out[6] = 0.0;
+                    out[5] = 0.0;
+                    if sxt > 0.0 {
+                        out[5] = syt / sxt - 1.0;
+                        out[6] = 1.0;
+                    }
+                }
+            }
+        }
+    }
+    unbox_slice(heap, mat);
+    unbox_slice(heap, rhs);
+    return status;
+}
+
+// the 1-based position of the column named by `text` in the header, as (status, column): status is pick.select's (0 found, 1 none, 2 ambiguous, 3 empty item)
+pub fn column_of[&h, &nm, &en](heap: &!h Heap, names: &nm [byte], ends: &en vec.Vec[int], nc: int, text: &static [byte]) -> [heap] (int, int) {
+    let sel = box_slice(heap, nc + 1, 0);
+    var st = 0;
+    var col = 0 - 1;
+    borrow mut sel as &!sw in {
+        let (s1, i1) = pick.select(names, ends, nc, text, contents(sw));
+        st = s1;
+        if st == 0 {
+            var j = 0;
+            while j < nc {
+                if contents(sw)[j] == 1 {
+                    col = j;
+                }
+                j = j + 1;
+            }
+        }
+    }
+    unbox_slice(heap, sel);
+    return (st, col);
+}
+
+fn put_pair[&h](heap: &!h Heap, w0: json.Writer, key: &static [byte], lo: float, hi: float, lo_pos: int, hi_pos: int, defined: int) -> [heap] json.Writer {
+    var w = w0;
+    w = json.put_key(heap, w, key);
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "low");
+    w = json.put_float(heap, w, lo);
+    w = json.put_key(heap, w, "high");
+    w = json.put_float(heap, w, hi);
+    w = json.put_key(heap, w, "positions");
+    w = json.begin_object(heap, w);
+    w = json.put_key(heap, w, "low");
+    w = json.put_int(heap, w, lo_pos);
+    w = json.put_key(heap, w, "high");
+    w = json.put_int(heap, w, hi_pos);
+    w = json.end_object(heap, w);
+    w = json.put_key(heap, w, "replicates_defined");
+    w = json.put_int(heap, w, defined);
+    w = json.end_object(heap, w);
+    return w;
+}
+
+// The flags of `did` that need no file. Answers (errors, seed, replicates, boot) where boot is 1 when the bootstrap was asked for (--seed or --replicates given).
+pub fn check_flags[&h, &g, &p](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, table: &static [byte], errs: fail.Errors) -> [heap, args] (fail.Errors, int, int, int) {
+    var e = errs;
+    if !cli.has(parsed, table, "arm") || !cli.has(parsed, table, "pre") || !cli.has(parsed, table, "post") {
+        e = rule.refuse(heap, e, "stats.test-columns", "did needs --arm, --pre and --post", "stats did --arm arm --pre pre --post post FILE", "flag", "--arm");
+    }
+    if cli.has(parsed, table, "pre-days") != cli.has(parsed, table, "post-days") {
+        e = rule.refuse(heap, e, "stats.test-columns", "--pre-days and --post-days go together", "name both day columns, or neither", "flag", "--pre-days");
+    }
+    if cli.nat(args, parsed, table, "treated-value") > 1 {
+        e = rule.refuse(heap, e, "args.bad-value", "--treated-value is 0 or 1: the value of the arm column that marks the treated units", "--treated-value 1", "flag", "--treated-value");
+    }
+    var seed = 0;
+    var reps = 0;
+    var boot_on = 0;
+    if cli.has(parsed, table, "seed") || cli.has(parsed, table, "replicates") {
+        boot_on = 1;
+        reps = cli.nat(args, parsed, table, "replicates");
+        if !cli.has(parsed, table, "seed") {
+            e = rule.refuse(heap, e, "stats.seed-required", "did with --replicates needs --seed: an unseeded draw is not reproducible", "stats did --arm A --pre P --post Q --seed 1 FILE", "flag", "--seed");
+        } else {
+            let (v, ok) = boot.parse_seed(cli.text(args, parsed, table, "seed"));
+            seed = v;
+            if !ok {
+                e = rule.refuse(heap, e, "args.bad-value", "--seed is an integer from 0 to 4611686018427387903", "--seed 20240229", "flag", "--seed");
+            }
+        }
+        if reps < 100 || reps > 100000 {
+            e = rule.refuse(heap, e, "args.bad-value", "--replicates is outside 100 to 100000", "2000 is the default", "flag", "--replicates");
+        }
+    }
+    return (e, seed, reps, boot_on);
+}
+
+pub fn did[&h, &g, &p, &f, &r, &sh, &fu](heap: &!h Heap, args: &g Args, parsed: &p cli.Parsed, fs: &f Fs(""), root: &r [byte], rel: &sh [byte], full: &fu [byte], table: &static [byte], seed: int, reps: int, boot_on: int, lnum: int, lk: int, level: float, w0: json.Writer, errs: fail.Errors) -> [heap, args, fs_read(""), dir_read, file_read] (json.Writer, fail.Errors) {
+    var w = w0;
+    var e = errs;
+    match place.open_operand(fs, root, rel, full) {
+        Opened::Failed(reason) => {
+            e = fail.io_error(heap, e, reason, false, rel);
+        }
+        Opened::Ok(opened) => {
+            var file = opened;
+            borrow mut file as &!handle in {
+                let (names, ends, cols, store, info, e2) = scan.read_file(heap, cli.nat(args, parsed, table, "max-line-bytes"), int_of(cli.text(args, parsed, table, "delim")[0]), cli.nat(args, parsed, table, "max-rows"), cli.nat(args, parsed, table, "max-cols"), cli.nat(args, parsed, table, "max-cells"), handle, rel, 0 - 1, "", false, e);
+                e = e2;
+                var clean = false;
+                borrow e as &er2 in {
+                    clean = fail.count(er2) == 0;
+                }
+                if clean {
+                    let nc = info.ncols;
+                    let want = box_slice(heap, 6, 0 - 1);
+                    var ok = true;
+                    borrow names as &nb0 in {
+                        borrow ends as &eb0 in {
+                            borrow mut want as &!wb in {
+                                var which = 0;
+                                while which < 5 && ok {
+                                    var flag = "arm";
+                                    if which == 1 {
+                                        flag = "pre";
+                                    } else if which == 2 {
+                                        flag = "post";
+                                    } else if which == 3 {
+                                        flag = "pre-days";
+                                    } else if which == 4 {
+                                        flag = "post-days";
+                                    }
+                                    if which < 3 || cli.has(parsed, table, flag) {
+                                        let (st, col) = column_of(heap, buffer.bytes(nb0), eb0, nc, cli.text(args, parsed, table, flag));
+                                        if st != 0 {
+                                            ok = false;
+                                            e = rule.refuse_pick(heap, e, st, cli.text(args, parsed, table, flag), false);
+                                        } else {
+                                            contents(wb)[which] = col;
+                                        }
+                                    }
+                                    which = which + 1;
+                                }
+                            }
+                        }
+                    }
+                    if ok {
+                        // the named columns must be numeric
+                        let chosen = box_slice(heap, nc + 1, 0);
+                        borrow want as &wr in {
+                            borrow mut chosen as &!cw in {
+                                var q = 0;
+                                while q < 5 {
+                                    if contents(wr)[q] >= 0 {
+                                        contents(cw)[contents(wr)[q]] = 1;
+                                    }
+                                    q = q + 1;
+                                }
+                            }
+                            borrow cols as &c0 in {
+                                borrow chosen as &cr in {
+                                    borrow names as &nb1 in {
+                                        borrow ends as &eb1 in {
+                                            e = pick.check_numeric(heap, nb1, eb1, contents(cr), nc, contents(c0.numeric), contents(c0.bad), contents(c0.numeric), contents(c0.bad), e);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        unbox_slice(heap, chosen);
+                        borrow e as &er3 in {
+                            if fail.count(er3) != 0 {
+                                ok = false;
+                            }
+                        }
+                    }
+                    if ok {
+                        let rows = info.rows;
+                        let xs = box_slice(heap, rows + 1, 0.0);
+                        let ys = box_slice(heap, rows + 1, 0.0);
+                        let ts = box_slice(heap, rows + 1, 0);
+                        var kept = 0;
+                        var missing = 0;
+                        var bad_arm = 0;
+                        var bad_days = 0;
+                        var ineligible = 0;
+                        let flip = cli.nat(args, parsed, table, "treated-value") == 0;
+                        let minpre = float_of(cli.nat(args, parsed, table, "min-pre-days"));
+                        borrow want as &wr2 in {
+                            borrow store as &sb in {
+                                borrow mut xs as &!xw in {
+                                    borrow mut ys as &!yw in {
+                                        borrow mut ts as &!tw in {
+                                            let ja = contents(wr2)[0];
+                                            let jp = contents(wr2)[1];
+                                            let jq = contents(wr2)[2];
+                                            let jd = contents(wr2)[3];
+                                            let je = contents(wr2)[4];
+                                            var i = 0;
+                                            while i < rows {
+                                                let ka = vec.get(sb, i * nc + ja);
+                                                let kp = vec.get(sb, i * nc + jp);
+                                                let kq = vec.get(sb, i * nc + jq);
+                                                var absent = ka == rank.min_int() || kp == rank.min_int() || kq == rank.min_int();
+                                                if jd >= 0 {
+                                                    if vec.get(sb, i * nc + jd) == rank.min_int() || vec.get(sb, i * nc + je) == rank.min_int() {
+                                                        absent = true;
+                                                    }
+                                                }
+                                                if absent {
+                                                    missing = missing + 1;
+                                                } else {
+                                                    let a = flt.float_of_key(ka);
+                                                    var x = flt.float_of_key(kp);
+                                                    var y = flt.float_of_key(kq);
+                                                    var eligible = true;
+                                                    if jd >= 0 {
+                                                        let d0 = flt.float_of_key(vec.get(sb, i * nc + jd));
+                                                        let d1 = flt.float_of_key(vec.get(sb, i * nc + je));
+                                                        if d0 <= 0.0 || d1 <= 0.0 {
+                                                            bad_days = bad_days + 1;
+                                                        } else {
+                                                            x = x / d0;
+                                                            y = y / d1;
+                                                            if d0 < minpre {
+                                                                eligible = false;
+                                                            }
+                                                        }
+                                                    }
+                                                    if a != 0.0 && a != 1.0 {
+                                                        bad_arm = bad_arm + 1;
+                                                    } else if !eligible {
+                                                        ineligible = ineligible + 1;
+                                                    } else {
+                                                        contents(xw)[kept] = x;
+                                                        contents(yw)[kept] = y;
+                                                        var treated = a == 1.0;
+                                                        if flip {
+                                                            treated = a == 0.0;
+                                                        }
+                                                        if treated {
+                                                            contents(tw)[kept] = 1;
+                                                        }
+                                                        kept = kept + 1;
+                                                    }
+                                                }
+                                                i = i + 1;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        var n1 = 0;
+                        borrow ts as &tr0 in {
+                            var i = 0;
+                            while i < kept {
+                                n1 = n1 + contents(tr0)[i];
+                                i = i + 1;
+                            }
+                        }
+                        let n0 = kept - n1;
+                        if bad_arm > 0 {
+                            ok = false;
+                            e = rule.refuse_int(heap, e, "stats.did.arm-not-binary", "the arm column has a value that is neither 0 nor 1", "recode the arm to 0 and 1, and name the treated one with --treated-value", "cells", bad_arm, "line", 0);
+                        } else if bad_days > 0 {
+                            ok = false;
+                            e = rule.refuse_int(heap, e, "stats.did.days-not-positive", "a day count is zero or negative", "the day columns hold the number of days each sum covers, above zero", "cells", bad_days, "line", 0);
+                        } else if n1 == 0 {
+                            ok = false;
+                            e = rule.refuse_int(heap, e, "stats.did.no-treated", "no treated unit among the eligible rows", "check --treated-value and --min-pre-days", "units", kept, "line", 0);
+                        } else if n0 == 0 {
+                            ok = false;
+                            e = rule.refuse_int(heap, e, "stats.did.no-holdout", "no holdout unit among the eligible rows", "check --treated-value and --min-pre-days", "units", kept, "line", 0);
+                        } else if kept < 4 || n1 < 2 || n0 < 2 {
+                            ok = false;
+                            e = rule.refuse_int(heap, e, "stats.did.too-few-units", "fewer than 4 eligible units, or fewer than 2 in an arm", "the fit has three coefficients and needs units in both arms", "units", kept, "line", 0);
+                        } else if boot_on == 1 && reps * kept > cli.nat(args, parsed, table, "max-work") {
+                            ok = false;
+                            e = rule.refuse_int(heap, e, "limit.too-much-work", "replicates times units is above --max-work", "raise --max-work, or lower --replicates", "limit", cli.nat(args, parsed, table, "max-work"), "work", reps * kept);
+                        }
+                        if ok {
+                            let all = box_slice(heap, kept + 1, 0);
+                            let treated_list = box_slice(heap, n1 + 1, 0);
+                            let holdout_list = box_slice(heap, n0 + 1, 0);
+                            let est = box_slice(heap, 9, 0.0);
+                            var code = 0;
+                            borrow ts as &tr1 in {
+                                borrow xs as &xr in {
+                                    borrow ys as &yr in {
+                                        borrow mut all as &!aw in {
+                                            borrow mut treated_list as &!lw in {
+                                                borrow mut holdout_list as &!hw in {
+                                                    var i = 0;
+                                                    var it = 0;
+                                                    var ih = 0;
+                                                    while i < kept {
+                                                        contents(aw)[i] = i;
+                                                        if contents(tr1)[i] == 1 {
+                                                            contents(lw)[it] = i;
+                                                            it = it + 1;
+                                                        } else {
+                                                            contents(hw)[ih] = i;
+                                                            ih = ih + 1;
+                                                        }
+                                                        i = i + 1;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        borrow all as &ar in {
+                                            borrow mut est as &!ew in {
+                                                code = fit(heap, contents(xr), contents(yr), contents(tr1), contents(ar), kept, contents(ew));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if code == 1 {
+                                ok = false;
+                                e = rule.refuse_int(heap, e, "stats.did.singular", "the design is singular: the levels of the pre period are all equal, or collinear with the arm", "check that the pre levels differ between units", "units", kept, "line", 0);
+                            }
+                            if ok {
+                                w = json.put_key(heap, w, "did");
+                                w = json.put_string(heap, w, "regression-adjusted");
+                                w = json.put_key(heap, w, "rows");
+                                w = json.put_int(heap, w, rows);
+                                w = json.put_key(heap, w, "missing");
+                                w = json.put_int(heap, w, missing);
+                                w = json.put_key(heap, w, "ineligible");
+                                w = json.put_int(heap, w, ineligible);
+                                w = json.put_key(heap, w, "eligible");
+                                w = json.put_int(heap, w, kept);
+                                w = json.put_key(heap, w, "n_treated");
+                                w = json.put_int(heap, w, n1);
+                                w = json.put_key(heap, w, "n_holdout");
+                                w = json.put_int(heap, w, n0);
+                                w = json.put_key(heap, w, "coefficients");
+                                w = json.begin_object(heap, w);
+                                borrow est as &er0 in {
+                                    w = json.put_key(heap, w, "a");
+                                    w = json.put_float(heap, w, contents(er0)[0]);
+                                    w = json.put_key(heap, w, "b");
+                                    w = json.put_float(heap, w, contents(er0)[1]);
+                                    w = json.put_key(heap, w, "tau");
+                                    w = json.put_float(heap, w, contents(er0)[2]);
+                                    w = json.end_object(heap, w);
+                                    w = json.put_key(heap, w, "effect");
+                                    if contents(er0)[4] > 0.5 {
+                                        w = json.put_float(heap, w, contents(er0)[3]);
+                                    } else {
+                                        w = json.put_null(heap, w);
+                                        w = json.put_key(heap, w, "effect_reason");
+                                        w = json.put_string(heap, w, "counterfactual-not-positive");
+                                    }
+                                    w = json.put_key(heap, w, "counterfactual");
+                                    w = json.put_float(heap, w, contents(er0)[7] - contents(er0)[2]);
+                                    w = json.put_key(heap, w, "naive");
+                                    if contents(er0)[6] > 0.5 {
+                                        w = json.put_float(heap, w, contents(er0)[5]);
+                                    } else {
+                                        w = json.put_null(heap, w);
+                                    }
+                                }
+                                w = json.put_key(heap, w, "assumptions");
+                                w = json.begin_object(heap, w);
+                                w = json.put_key(heap, w, "levels");
+                                w = json.put_string(heap, w, "x = pre / pre-days, y = post / post-days, one rounding each; without day columns, x = pre and y = post");
+                                w = json.put_key(heap, w, "sums");
+                                w = json.put_string(heap, w, "exact, rounded once; the normal equations are solved in doubles by elimination with partial pivoting");
+                                if boot_on == 1 {
+                                    w = json.put_key(heap, w, "draw");
+                                    w = json.put_string(heap, w, "unit (z >> 1) mod m of its arm, z = mix(s_b + (j + 1) gold), j from 0 over the treated units then the holdout units");
+                                    w = json.put_key(heap, w, "stream");
+                                    w = json.put_string(heap, w, "s_b = derive(derive(seed, 3), b), b from 0");
+                                }
+                                w = json.end_object(heap, w);
+                                if boot_on == 1 {
+                                    let taus = box_slice(heap, reps + 1, 0);
+                                    let effs = box_slice(heap, reps + 1, 0);
+                                    let pick_idx = box_slice(heap, kept + 1, 0);
+                                    let rest = box_slice(heap, 9, 0.0);
+                                    var nt = 0;
+                                    var ne = 0;
+                                    borrow ts as &tr2 in {
+                                        borrow xs as &xr2 in {
+                                            borrow ys as &yr2 in {
+                                                borrow treated_list as &lr in {
+                                                    borrow holdout_list as &hr in {
+                                                        borrow mut pick_idx as &!pw in {
+                                                            borrow mut taus as &!tkw in {
+                                                                borrow mut effs as &!ekw in {
+                                                                    borrow mut rest as &!rsw in {
+                                                                        var b = 0;
+                                                                        while b < reps {
+                                                                            let sb2 = rng.derive(rng.derive(seed, 3), b);
+                                                                            var j = 0;
+                                                                            while j < kept {
+                                                                                let z = rng.mix(wrapping_add(sb2, wrapping_mul(j + 1, rng.gold())));
+                                                                                if j < n1 {
+                                                                                    contents(pw)[j] = contents(lr)[rng.uniform(z, n1)];
+                                                                                } else {
+                                                                                    contents(pw)[j] = contents(hr)[rng.uniform(z, n0)];
+                                                                                }
+                                                                                j = j + 1;
+                                                                            }
+                                                                            let c = fit(heap, contents(xr2), contents(yr2), contents(tr2), contents(pw), kept, contents(rsw));
+                                                                            if c == 0 {
+                                                                                contents(tkw)[nt] = rank.key_of(contents(rsw)[2]);
+                                                                                nt = nt + 1;
+                                                                                if contents(rsw)[4] > 0.5 {
+                                                                                    contents(ekw)[ne] = rank.key_of(contents(rsw)[3]);
+                                                                                    ne = ne + 1;
+                                                                                }
+                                                                            }
+                                                                            b = b + 1;
+                                                                        }
+                                                                        let tmp = box_slice(heap, reps + 1, 0);
+                                                                        let cnt = box_slice(heap, 256, 0);
+                                                                        borrow mut tmp as &!tmw in {
+                                                                            borrow mut cnt as &!cnw in {
+                                                                                rank.sort_range(contents(tkw), contents(tmw), contents(cnw), 0, nt);
+                                                                                rank.sort_range(contents(ekw), contents(tmw), contents(cnw), 0, ne);
+                                                                            }
+                                                                        }
+                                                                        unbox_slice(heap, tmp);
+                                                                        unbox_slice(heap, cnt);
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    w = json.put_key(heap, w, "interval");
+                                    w = json.begin_object(heap, w);
+                                    w = json.put_key(heap, w, "method");
+                                    w = json.put_string(heap, w, "bootstrap-percentile");
+                                    w = json.put_key(heap, w, "level");
+                                    w = json.put_float(heap, w, level);
+                                    w = json.put_key(heap, w, "replicates");
+                                    w = json.put_int(heap, w, reps);
+                                    w = json.put_key(heap, w, "seed");
+                                    w = json.put_int(heap, w, seed);
+                                    let scale = quantile.pow10(lk);
+                                    if nt >= 100 {
+                                        let lo_pos = nt * (scale - lnum) / (2 * scale);
+                                        let hi_pos = (nt * (scale + lnum) + 2 * scale - 1) / (2 * scale) - 1;
+                                        borrow taus as &tkr in {
+                                            w = put_pair(heap, w, "tau", flt.float_of_key(contents(tkr)[lo_pos]), flt.float_of_key(contents(tkr)[hi_pos]), lo_pos, hi_pos, nt);
+                                        }
+                                    } else {
+                                        w = json.put_key(heap, w, "tau");
+                                        w = json.put_null(heap, w);
+                                    }
+                                    if ne >= 100 {
+                                        let lo_pos2 = ne * (scale - lnum) / (2 * scale);
+                                        let hi_pos2 = (ne * (scale + lnum) + 2 * scale - 1) / (2 * scale) - 1;
+                                        borrow effs as &ekr in {
+                                            w = put_pair(heap, w, "effect", flt.float_of_key(contents(ekr)[lo_pos2]), flt.float_of_key(contents(ekr)[hi_pos2]), lo_pos2, hi_pos2, ne);
+                                        }
+                                    } else {
+                                        w = json.put_key(heap, w, "effect");
+                                        w = json.put_null(heap, w);
+                                    }
+                                    w = json.end_object(heap, w);
+                                    unbox_slice(heap, taus);
+                                    unbox_slice(heap, effs);
+                                    unbox_slice(heap, pick_idx);
+                                    unbox_slice(heap, rest);
+                                }
+                            }
+                            unbox_slice(heap, all);
+                            unbox_slice(heap, treated_list);
+                            unbox_slice(heap, holdout_list);
+                            unbox_slice(heap, est);
+                        }
+                        unbox_slice(heap, xs);
+                        unbox_slice(heap, ys);
+                        unbox_slice(heap, ts);
+                    }
+                    unbox_slice(heap, want);
+                }
+                buffer.drop(heap, names);
+                vec.drop(heap, ends);
+                scan.drop_cols(heap, cols);
+                vec.drop(heap, store);
+            }
+            file_close(file);
+        }
+    }
+    return (w, e);
+}
