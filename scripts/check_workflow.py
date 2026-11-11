@@ -14,10 +14,14 @@
   W8  the matrix of `build-test` has a Linux x86-64, a Linux aarch64 and a macOS runner
   W9  every job has `timeout-minutes`
   W10 every runner image is named: no `-latest` anywhere, and every `runs-on` is a name with a version or a matrix expression
+  W11 the compiler is built by the one written in cancho (`scripts/build-standalone.sh` of the compiler checkout, from the committed seed), never by `cargo`: no `cargo` or `rustup` in the workflow
 """
 import pathlib
 import re
 import sys
+
+# The one script the workflow runs that is a file of the compiler checkout (alpibrusl/cancho), not of this repository.
+COMPILER_SCRIPTS = {"scripts/build-standalone.sh"}
 
 try:
     import yaml
@@ -76,9 +80,11 @@ def check(text, root=ROOT):
     for m in re.finditer(r"(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])", text):
         if not re.search(r"@" + m.group(0), text):
             out.append(("W5", "a 40-hex literal that is not an action pin: %s" % m.group(0)))
+    if re.search(r"\b(cargo|rustup)\b", text):
+        out.append(("W11", "the workflow uses cargo or rustup: the compiler is the one written in cancho"))
     for s in sorted(set(re.findall(r"(?<![\w./-])((?:scripts|ci)/[\w./-]+)", text))):
         s = s.rstrip(".")
-        if not (root / s).exists():
+        if s not in COMPILER_SCRIPTS and not (root / s).exists():
             out.append(("W6", "the workflow names %s, which is not a file of the repository" % s))
     on = d.get("on") or {}
     for t in ("push", "pull_request", "workflow_dispatch"):
@@ -114,8 +120,9 @@ def mutants(text):
         ("an action pin with no version comment", rep("actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2", "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"), "W3"),
         ("pull_request_target", rep("  pull_request:\n", "  pull_request_target:\n"), "W4"),
         ("a secret", rep("persist-credentials: false", "token: ${{ secrets.DEPLOY_KEY }}"), "W4"),
-        ("the compiler revision as a literal", rep("rev=$(sed -n 's/^cancho *= *\"\\([0-9a-f]*\\)\".*/\\1/p' cancho.toml)", "rev=de4e52fd81809e6400e2c8b2f485d0b75412449c", 1), "W5"),
-        ("a revision literal in the environment", rep("concurrency:", "env:\n  CANCHO_REV: de4e52fd81809e6400e2c8b2f485d0b75412449c\n\nconcurrency:"), "W5"),
+        ("the compiler revision as a literal", rep("rev=$(sed -n 's/^cancho *= *\"\\([0-9a-f]*\\)\".*/\\1/p' cancho.toml)", "rev=51524d206283a5fec6e15e26a1b8d2825971e08a", 1), "W5"),
+        ("a revision literal in the environment", rep("concurrency:", "env:\n  CANCHO_REV: 51524d206283a5fec6e15e26a1b8d2825971e08a\n\nconcurrency:"), "W5"),
+        ("the compiler built with cargo", rep("time sh scripts/build-standalone.sh", "time cargo build --release -p cancho; true #", 1), "W11"),
         ("a script that does not exist", rep("python3 scripts/check_workflow.py\n", "python3 scripts/check_nothing.py\n"), "W6"),
         ("a requirements file that does not exist", rep("ci/requirements.txt", "ci/requirements-none.txt", 1), "W6"),
         ("workflow_dispatch removed", rep("  workflow_dispatch:\n", ""), "W7"),
