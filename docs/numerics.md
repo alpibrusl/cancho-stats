@@ -36,7 +36,7 @@ No verb is built here. The code of S0 is a library (`lib/special`) and a driver 
 |---|---|---|---|
 | `alpibrusl/cancho` | the compiler, `cancho = "<rev>"` of `[package]` | `de4e52fd81809e6400e2c8b2f485d0b75412449c` | **[read]** the rev `cancho-ml` pins at the start of S0 |
 | `alpibrusl/cancho-table` | `dec`, `facc`, `flt`, `pow5`, `reader` | `202b214372a03ec6ed8ca841357f3d2ed4de8aa0` | **[read]** merge commit of cancho-table#44, the rev `cancho-ml` pins (its `docs/reader.md` section 1.3) |
-| `alpibrusl/cancho-tools` | the contract package: `cli`, `describe`, `fail`, `limit`, `lines`, `out`, `path`, `place`, `text` (`toolbox.<name>`) | `8dab9176e521660333914dc768a80a29330a2a8e` | **[read]** the rev `cancho-ml` pins; the nine it lists |
+| `alpibrusl/cancho-tools` | the contract package: `cli`, `describe`, `fail`, `limit`, `lines`, `out`, `path`, `place`, `text` (`toolbox.<name>`) | `6085e63a2bc6d91d2f91fa4d6eb72362c4944fe9` | **[read]** the rev `cancho-ml` pins; the nine it lists |
 | `alpibrusl/cancho-ml` | the 23 numeric modules of cancho-ml#46 (`ml.refuse`, `ml.limits`, `ml.rng`, `ml.exact`, `ml.fbits`, `ml.fsq`, `ml.matrix`, `linalg.{order,tensor,dot,axpy,gemv,syrk,gemm,chol,par}`, `metrics.{rules,ratio,classify,sums,regress,rank,splits}`) | `99e9b64afb4f1ca191a4209dea1306720da43b2f` | merge commit `99e9b64` of cancho-ml PR #51 (issue #46); its `.cancho-vcs` is byte-identical to the local branch head `2de565c` the design was first measured on (`git diff` empty) |
 
 The label of a block is the module name with the dot written as a dash (`ml-rng`, `linalg-chol`), as `cancho-ml`'s `docs/stores.md` section 3 says **[read]**; the toolbox
@@ -46,7 +46,7 @@ labels are the module's short name, as in `cancho-ml`'s `cancho.toml`.
 
 cancho rev: `de4e52fd81809e6400e2c8b2f485d0b75412449c`
 cancho-table rev: `202b214372a03ec6ed8ca841357f3d2ed4de8aa0`
-cancho-tools rev: `8dab9176e521660333914dc768a80a29330a2a8e`
+cancho-tools rev: `6085e63a2bc6d91d2f91fa4d6eb72362c4944fe9`
 cancho-ml rev: `99e9b64afb4f1ca191a4209dea1306720da43b2f`
 
 <!-- pins:begin -->

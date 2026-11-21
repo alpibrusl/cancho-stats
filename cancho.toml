@@ -9,47 +9,47 @@ cancho = "de4e52fd81809e6400e2c8b2f485d0b75412449c"
 
 [dependencies.cli]
 git = "https://github.com/alpibrusl/cancho-tools"
-rev = "8dab9176e521660333914dc768a80a29330a2a8e"
+rev = "6085e63a2bc6d91d2f91fa4d6eb72362c4944fe9"
 path = ".cancho-vcs/toolbox.cli"
 
 [dependencies.describe]
 git = "https://github.com/alpibrusl/cancho-tools"
-rev = "8dab9176e521660333914dc768a80a29330a2a8e"
+rev = "6085e63a2bc6d91d2f91fa4d6eb72362c4944fe9"
 path = ".cancho-vcs/toolbox.describe"
 
 [dependencies.fail]
 git = "https://github.com/alpibrusl/cancho-tools"
-rev = "8dab9176e521660333914dc768a80a29330a2a8e"
+rev = "6085e63a2bc6d91d2f91fa4d6eb72362c4944fe9"
 path = ".cancho-vcs/toolbox.fail"
 
 [dependencies.limit]
 git = "https://github.com/alpibrusl/cancho-tools"
-rev = "8dab9176e521660333914dc768a80a29330a2a8e"
+rev = "6085e63a2bc6d91d2f91fa4d6eb72362c4944fe9"
 path = ".cancho-vcs/toolbox.limit"
 
 [dependencies.lines]
 git = "https://github.com/alpibrusl/cancho-tools"
-rev = "8dab9176e521660333914dc768a80a29330a2a8e"
+rev = "6085e63a2bc6d91d2f91fa4d6eb72362c4944fe9"
 path = ".cancho-vcs/toolbox.lines"
 
 [dependencies.out]
 git = "https://github.com/alpibrusl/cancho-tools"
-rev = "8dab9176e521660333914dc768a80a29330a2a8e"
+rev = "6085e63a2bc6d91d2f91fa4d6eb72362c4944fe9"
 path = ".cancho-vcs/toolbox.out"
 
 [dependencies.path]
 git = "https://github.com/alpibrusl/cancho-tools"
-rev = "8dab9176e521660333914dc768a80a29330a2a8e"
+rev = "6085e63a2bc6d91d2f91fa4d6eb72362c4944fe9"
 path = ".cancho-vcs/toolbox.path"
 
 [dependencies.place]
 git = "https://github.com/alpibrusl/cancho-tools"
-rev = "8dab9176e521660333914dc768a80a29330a2a8e"
+rev = "6085e63a2bc6d91d2f91fa4d6eb72362c4944fe9"
 path = ".cancho-vcs/toolbox.place"
 
 [dependencies.text]
 git = "https://github.com/alpibrusl/cancho-tools"
-rev = "8dab9176e521660333914dc768a80a29330a2a8e"
+rev = "6085e63a2bc6d91d2f91fa4d6eb72362c4944fe9"
 path = ".cancho-vcs/toolbox.text"
 
 [dependencies.dec]
