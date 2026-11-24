@@ -71,11 +71,11 @@ a=$(echo "$SET" | sort); b=$(echo "$doclist" | sort)
 [ "$a" = "$b" ] || fail PN7 "the pinned set of $DOC differs from the set of this script: $(echo "$a
 $b" | sort | uniq -u | head -3 | tr '\n' ' ')"
 
-docrev() { sed -n "s/^$1 rev: \`\([0-9a-f]*\)\`.*/\1/p" "$DOC" | head -1; }
+docrev() { sed -n "s/^$1 rev: \`\([0-9a-f.]*\)\`.*/\1/p" "$DOC" | head -1; }
 # the compiler
 ccwant=$(docrev cancho)
-[ ${#ccwant} -eq 40 ] || fail PN3 "$DOC has no line 'cancho rev: \`<40 hex digits>\`'"
-cc=$(sed -n 's/^cancho *= *"\([0-9a-f]*\)".*/\1/p' "$TOML" | head -1)
+[ -n "$ccwant" ] || fail PN3 "$DOC has no line 'cancho rev: \`<release or 40 hex digits>\`'"
+cc=$(sed -n 's/^cancho *= *"\([0-9a-f.]*\)".*/\1/p' "$TOML" | head -1)
 [ "$cc" = "$ccwant" ] || fail PN3 "[package] cancho is '$cc', not the documented $ccwant"
 
 # blocks of the toml: label|git|rev|path

@@ -6,7 +6,7 @@ module toolbox.built;
 // as `introspect` prints them (cancho docs/agent-toolbox.md D12). This module is not in cancho-tools' contract package: each tool has its own.
 
 pub fn authority() -> [] &static [byte] {
-    return "{\"bounded\":true,\"unbounded_by\":[],\"effects\":[\"args\",\"dir_read\",\"err_write\",\"file_read\",\"fs_read\",\"heap\",\"io_write\"],\"labels\":[{\"name\":\"args\",\"argument\":null,\"bounded\":true},{\"name\":\"dir_read\",\"argument\":null,\"bounded\":true},{\"name\":\"err_write\",\"argument\":null,\"bounded\":true},{\"name\":\"file_read\",\"argument\":null,\"bounded\":true},{\"name\":\"fs_read\",\"argument\":\"\",\"bounded\":true},{\"name\":\"heap\",\"argument\":null,\"bounded\":true},{\"name\":\"io_write\",\"argument\":null,\"bounded\":true}],\"foreign_symbols\":[]}";
+    return "{\"bounded\":true,\"unbounded_by\":[],\"effects\":[\"args\",\"dir_read\",\"err_write\",\"file_read\",\"fs_read\",\"heap\",\"io_write\"],\"labels\":[{\"name\":\"args\",\"argument\":null,\"bounded\":true},{\"name\":\"dir_read\",\"argument\":null,\"bounded\":true},{\"name\":\"err_write\",\"argument\":null,\"bounded\":true},{\"name\":\"file_read\",\"argument\":null,\"bounded\":true},{\"name\":\"fs_read\",\"argument\":\"\",\"bounded\":true,\"confinement\":\"lexical\"},{\"name\":\"heap\",\"argument\":null,\"bounded\":true},{\"name\":\"io_write\",\"argument\":null,\"bounded\":true}],\"foreign_symbols\":[]}";
 }
 
 pub fn schema() -> [] &static [byte] {
@@ -14,5 +14,5 @@ pub fn schema() -> [] &static [byte] {
 }
 
 pub fn compiler() -> [] &static [byte] {
-    return "de4e52fd81809e6400e2c8b2f485d0b75412449c";
+    return "0.1.1";
 }
